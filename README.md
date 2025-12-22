@@ -73,13 +73,17 @@ nico/
 │   └── visualization/       # Plotting
 │       ├── plotly_charts.py # Interactive plots
 │       └── matplotlib_charts.py  # Static plots
-├── j2_utils.py              # 📜 Legacy utilities (reference)
-├── *.nc                     # 📊 Data files (not in git)
-├── *.shp                    # 🗺️ Gate shapefiles
-└── docs/                    # 📖 Documentation
+├── data/                     # 📊 Data files (see data/README.md)
+│   ├── slcci/               # SLCCI NetCDF cycles
+│   └── geoid/               # Geoid reference files
+├── gates/                    # 🗺️ Strait gate shapefiles
+├── notebooks/                # 📓 Jupyter notebooks
+├── legacy/                   # 📜 Legacy code (j2_utils.py)
+└── docs/                     # 📖 Documentation
     ├── ARCHITECTURE.md
     ├── CONTRIBUTING.md
-    └── CHANGELOG.md
+    ├── CHANGELOG.md
+    └── CMEMS-SL-PUM-*.pdf   # CMEMS reference docs
 ```
 
 ## 📊 Data Format
