@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2024-12-22
+
+### Added
+- 🔧 **Dataset Configuration System** (`src/core/config.py`, `src/core/resolver.py`)
+  - Centralized variable mapping across different data formats
+  - Support for SLCCI (J1/J2), CMEMS (L3/L4), AVISO
+  - Auto-detection of dataset format
+  - Canonical variable names (ssh, mss, dot, etc.)
+  - `VariableResolver` class for unified data access
+
+- 📁 **Project Reorganization**
+  - `gates/` - Strait gate shapefiles
+  - `data/slcci/` - SLCCI NetCDF cycles
+  - `data/geoid/` - Geoid reference files
+  - `notebooks/` - Jupyter notebooks
+  - `legacy/` - Original j2_utils.py
+
+- 📖 **New Documentation**
+  - `DATASET_CONFIG.md` - Variable mapping system guide
+  - README files for each directory
+
+### Changed
+- Files reorganized from root into proper directories
+- Updated main README with new structure
+
 ## [1.0.0] - 2024-12-22
 
 ### Added
