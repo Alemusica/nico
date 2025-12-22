@@ -4,11 +4,19 @@ Main Streamlit Application
 Entry point for the SLCCI Satellite Altimetry Dashboard.
 """
 
+import sys
+from pathlib import Path
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 import streamlit as st
-from .components.sidebar import render_sidebar
-from .components.tabs import render_tabs
-from .state import init_session_state
-from .styles import apply_custom_css
+from app.components.sidebar import render_sidebar
+from app.components.tabs import render_tabs
+from app.state import init_session_state
+from app.styles import apply_custom_css
 
 
 def run_app():
@@ -58,3 +66,7 @@ def render_welcome_message():
     </ul>
     </div>
     """, unsafe_allow_html=True)
+
+
+# Run the app
+run_app()

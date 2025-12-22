@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2024-12-22
+
+### Added
+- 🗺️ **Ocean Gate Selection System**
+  - Interactive gate selector in sidebar
+  - 8 pre-configured Arctic gates (Fram, Bering, Davis, Denmark, Nares, etc.)
+  - Visual gate info cards with region/description
+  - Buffer slider for gate area selection
+  - Gate geometry overlay on spatial map
+  - Shapefile loading with SHAPE_RESTORE_SHX support
+
+- ⚡ **Performance Optimizations**
+  - Data sampling slider (1-100%, default 10%)
+  - Progress bar during cycle analysis
+  - Minimum 1000 points guarantee for statistics
+  - Fixed seed for reproducibility
+
+- 🐛 **Bug Fixes**
+  - Fixed datetime64 handling in analysis_tab.py and monthly_tab.py
+  - Fixed relative imports in main.py for Streamlit compatibility
+  - Fixed path resolution for data directory
+  - Added pandas import for Timestamp conversion
+
+- 🧪 **Test Suite**
+  - `tests/test_loaders.py` - 25+ data loading tests
+  - `tests/test_analysis.py` - 21 analysis function tests
+  - `tests/conftest.py` - Pytest configuration and fixtures
+  - `tests/test_resolver.py` - VariableResolver tests
+
+- 🎨 **UI Improvements**
+  - Spatial View with cycle/variable/sample controls in columns
+  - Gate info display on spatial map
+  - Better metric formatting in stats rows
+  - Error handling with user-friendly messages
+
+### Changed
+- Spatial tab completely refactored for better UX
+- AppConfig extended with gate_geometry, sample_fraction, gate_buffer_km
+- Sidebar now shows gate selection at top priority
+
 ## [1.1.0] - 2024-12-22
 
 ### Added

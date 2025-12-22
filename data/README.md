@@ -12,7 +12,43 @@ data/
 │   └── ...
 ├── geoid/          # Dati geoide per calcolo DOT
 │   └── TUM_ogmoc.nc
-└── cmems/          # (futuro) Dati CMEMS
+├── cmems/          # Copernicus Marine Service (CMEMS)
+│   ├── cmems_l4_test.nc  # Gridded L4 products
+│   └── cmems_l3_test.nc  # Along-track L3 products
+└── aviso/          # AVISO/DUACS products
+    └── aviso_test.nc
+```
+
+## Formati Supportati
+
+### SLCCI (Sea Level CCI)
+- **Format**: `SLCCI_ALTDB_{SATELLITE}_Cycle{NNN}_V2.nc`
+- **Variables**: `corssh`, `mean_sea_surface`, `swh`, `bathymetry`
+- **Coordinates**: `latitude`, `longitude`, `TimeDay`
+
+### CMEMS L4 (Gridded)
+- **Variables**: `sla`, `adt`, `ugos`, `vgos`
+- **Coordinates**: `latitude`, `longitude`, `time`
+- **Grid**: 0.25° resolution
+
+### CMEMS L3 (Along-track)
+- **Variables**: `sla_filtered`, `sla_unfiltered`, `adt`, `mdt`
+- **Coordinates**: `latitude`, `longitude` as variables, `time`
+
+### AVISO
+- **Variables**: `sla`, `adt`
+- **Coordinates**: `lat`, `lon` (nota: nomi abbreviati!)
+
+## Accesso Unificato
+
+Usa il `VariableResolver` per accedere ai dati con nomi canonici:
+
+```python
+from src.core import VariableResolver
+
+resolver = VariableResolver.from_file("data/cmems/cmems_l4_test.nc")
+ssh = resolver.get("ssh")  # Mappa automaticamente a "sla"
+lat, lon = resolver.get_coordinates()
 ```
 
 ## SLCCI Data

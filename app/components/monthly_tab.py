@@ -60,9 +60,31 @@ def _build_combined_dataframe(
         # Get time
         if "TimeDay" in ds.data_vars:
             time_vals = ds["TimeDay"].values.flatten()
-            ref_date = datetime(2000, 1, 1)
-            dates = [ref_date + timedelta(days=float(t)) if not np.isnan(t) else None 
-                    for t in time_vals]
+            
+            # Handle both datetime64 and numeric (days since epoch) formats
+            if np.issubdtype(time_vals.dtype, np.datetime64):
+                # datetime64 format - convert directly
+                dates = []
+                for t in time_vals:
+                    if pd.isna(t) or (hasattr(t, 'year') and pd.isna(t)):
+                        dates.append(None)
+                    else:
+                        try:
+                            dates.append(pd.Timestamp(t).to_pydatetime())
+                        except:
+                            dates.append(None)
+            else:
+                # Numeric: days since 2000-01-01
+                ref_date = datetime(2000, 1, 1)
+                dates = []
+                for t in time_vals:
+                    if np.isnan(t) or abs(t) > 100000:  # Sanity check
+                        dates.append(None)
+                    else:
+                        try:
+                            dates.append(ref_date + timedelta(days=float(t)))
+                        except:
+                            dates.append(None)
         else:
             dates = [None] * len(dot)
         
