@@ -1,0 +1,19 @@
+# Core dependencies
+numpy>=1.24.0
+pandas>=2.0.0
+xarray>=2023.1.0
+netCDF4>=1.6.0
+scipy>=1.10.0
+plotly>=5.15.0
+streamlit>=1.28.0
+
+# Geographic/mapping
+geopandas>=0.14.0
+cartopy>=0.22.0
+shapely>=2.0.0
+
+# Large datasets
+dask>=2023.1.0
+
+# Plotting
+matplotlib>=3.7.0
