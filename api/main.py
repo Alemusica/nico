@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
+from datetime import datetime
 import pandas as pd
 import json
 import io
@@ -21,6 +22,13 @@ from api.services.causal_service import (
     DiscoveryConfig,
 )
 from api.services.data_service import get_data_service, DataService
+from api.services.knowledge_service import (
+    create_knowledge_service,
+    Paper,
+    HistoricalEvent,
+    ClimateIndex,
+    CausalPattern,
+)
 
 # Initialize FastAPI
 app = FastAPI(
@@ -434,3 +442,737 @@ async def generate_hypotheses(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+# ============== KNOWLEDGE BASE ENDPOINTS ==============
+
+# Knowledge service instances (lazy initialization)
+_knowledge_services: Dict[str, Any] = {}
+
+
+async def get_knowledge_service(backend: str = "neo4j"):
+    """Get or create knowledge service instance."""
+    if backend not in _knowledge_services:
+        service = create_knowledge_service(backend)
+        await service.connect()
+        _knowledge_services[backend] = service
+    return _knowledge_services[backend]
+
+
+# ----- Pydantic Models for Knowledge API -----
+
+class PaperCreate(BaseModel):
+    title: str
+    authors: List[str]
+    abstract: str
+    doi: Optional[str] = None
+    year: int
+    journal: Optional[str] = None
+    keywords: List[str] = []
+    embedding: Optional[List[float]] = None
+
+
+class EventCreate(BaseModel):
+    name: str
+    description: str
+    event_type: str
+    start_date: str
+    end_date: Optional[str] = None
+    location: Optional[Dict[str, Any]] = None
+    severity: Optional[float] = None
+    source: Optional[str] = None
+
+
+class ClimateIndexCreate(BaseModel):
+    name: str
+    abbreviation: str
+    description: str
+    source_url: Optional[str] = None
+    time_series: Optional[List[Dict[str, Any]]] = None
+
+
+class PatternCreate(BaseModel):
+    name: str
+    description: str
+    pattern_type: str
+    variables: List[str]
+    lag_days: Optional[int] = None
+    strength: Optional[float] = None
+    confidence: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ValidationCreate(BaseModel):
+    pattern_id: str
+    paper_id: str
+    validation_type: str
+    confidence: float
+    notes: Optional[str] = None
+
+
+class LinkPatternEvent(BaseModel):
+    pattern_id: str
+    event_id: str
+    correlation: Optional[float] = None
+    lag_observed: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class LinkPatternCausal(BaseModel):
+    cause_pattern_id: str
+    effect_pattern_id: str
+    strength: float
+    mechanism: Optional[str] = None
+    lag_days: Optional[int] = None
+    evidence: Optional[List[str]] = None
+
+
+class LinkIndexPattern(BaseModel):
+    index_id: str
+    pattern_id: str
+    correlation: float
+    lag_months: Optional[int] = None
+    period: Optional[str] = None
+
+
+# ----- Paper Endpoints -----
+
+@app.post("/knowledge/papers")
+async def add_paper(paper: PaperCreate, backend: str = "neo4j"):
+    """Add a research paper to the knowledge base."""
+    service = await get_knowledge_service(backend)
+    paper_obj = Paper(
+        title=paper.title,
+        authors=paper.authors,
+        abstract=paper.abstract,
+        doi=paper.doi,
+        year=paper.year,
+        journal=paper.journal,
+        keywords=paper.keywords,
+        embedding=paper.embedding,
+    )
+    paper_id = await service.add_paper(paper_obj)
+    return {"id": paper_id, "backend": backend}
+
+
+@app.get("/knowledge/papers/{paper_id}")
+async def get_paper(paper_id: str, backend: str = "neo4j"):
+    """Get a paper by ID."""
+    service = await get_knowledge_service(backend)
+    paper = await service.get_paper(paper_id)
+    if not paper:
+        raise HTTPException(404, f"Paper '{paper_id}' not found")
+    return paper.__dict__
+
+
+@app.get("/knowledge/papers/search")
+async def search_papers(
+    query: str,
+    limit: int = 10,
+    backend: str = "neo4j",
+):
+    """Search papers by text or vector similarity."""
+    service = await get_knowledge_service(backend)
+    results = await service.search_papers(query=query, limit=limit)
+    return {
+        "results": [
+            {
+                "paper": r.item.__dict__,
+                "score": r.score,
+                "source": r.source,
+            }
+            for r in results
+        ],
+        "backend": backend,
+    }
+
+
+@app.post("/knowledge/papers/bulk")
+async def bulk_add_papers(papers: List[PaperCreate], backend: str = "neo4j"):
+    """Add multiple papers at once."""
+    service = await get_knowledge_service(backend)
+    paper_objs = [
+        Paper(
+            title=p.title,
+            authors=p.authors,
+            abstract=p.abstract,
+            doi=p.doi,
+            year=p.year,
+            journal=p.journal,
+            keywords=p.keywords,
+            embedding=p.embedding,
+        )
+        for p in papers
+    ]
+    ids = await service.bulk_add_papers(paper_objs)
+    return {"ids": ids, "count": len(ids), "backend": backend}
+
+
+# ----- Event Endpoints -----
+
+@app.post("/knowledge/events")
+async def add_event(event: EventCreate, backend: str = "neo4j"):
+    """Add a historical event to the knowledge base."""
+    from datetime import datetime
+    
+    service = await get_knowledge_service(backend)
+    event_obj = HistoricalEvent(
+        name=event.name,
+        description=event.description,
+        event_type=event.event_type,
+        start_date=datetime.fromisoformat(event.start_date),
+        end_date=datetime.fromisoformat(event.end_date) if event.end_date else None,
+        location=event.location,
+        severity=event.severity,
+        source=event.source,
+    )
+    event_id = await service.add_event(event_obj)
+    return {"id": event_id, "backend": backend}
+
+
+@app.get("/knowledge/events/{event_id}")
+async def get_event(event_id: str, backend: str = "neo4j"):
+    """Get an event by ID."""
+    service = await get_knowledge_service(backend)
+    event = await service.get_event(event_id)
+    if not event:
+        raise HTTPException(404, f"Event '{event_id}' not found")
+    return {
+        **{k: v for k, v in event.__dict__.items() if not isinstance(v, datetime)},
+        "start_date": event.start_date.isoformat() if event.start_date else None,
+        "end_date": event.end_date.isoformat() if event.end_date else None,
+    }
+
+
+@app.get("/knowledge/events/search")
+async def search_events(
+    event_type: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = 50,
+    backend: str = "neo4j",
+):
+    """Search for historical events."""
+    from datetime import datetime
+    
+    service = await get_knowledge_service(backend)
+    events = await service.search_events(
+        event_type=event_type,
+        start_date=datetime.fromisoformat(start_date) if start_date else None,
+        end_date=datetime.fromisoformat(end_date) if end_date else None,
+        limit=limit,
+    )
+    return {
+        "events": [
+            {
+                **{k: v for k, v in e.__dict__.items() if not isinstance(v, datetime)},
+                "start_date": e.start_date.isoformat() if e.start_date else None,
+                "end_date": e.end_date.isoformat() if e.end_date else None,
+            }
+            for e in events
+        ],
+        "backend": backend,
+    }
+
+
+@app.post("/knowledge/events/bulk")
+async def bulk_add_events(events: List[EventCreate], backend: str = "neo4j"):
+    """Add multiple events at once."""
+    from datetime import datetime
+    
+    service = await get_knowledge_service(backend)
+    event_objs = [
+        HistoricalEvent(
+            name=e.name,
+            description=e.description,
+            event_type=e.event_type,
+            start_date=datetime.fromisoformat(e.start_date),
+            end_date=datetime.fromisoformat(e.end_date) if e.end_date else None,
+            location=e.location,
+            severity=e.severity,
+            source=e.source,
+        )
+        for e in events
+    ]
+    ids = await service.bulk_add_events(event_objs)
+    return {"ids": ids, "count": len(ids), "backend": backend}
+
+
+# ----- Climate Index Endpoints -----
+
+@app.post("/knowledge/climate-indices")
+async def add_climate_index(index: ClimateIndexCreate, backend: str = "neo4j"):
+    """Add a climate index to the knowledge base."""
+    service = await get_knowledge_service(backend)
+    index_obj = ClimateIndex(
+        name=index.name,
+        abbreviation=index.abbreviation,
+        description=index.description,
+        source_url=index.source_url,
+        time_series=index.time_series,
+    )
+    index_id = await service.add_climate_index(index_obj)
+    return {"id": index_id, "backend": backend}
+
+
+@app.get("/knowledge/climate-indices")
+async def list_climate_indices(backend: str = "neo4j"):
+    """List all climate indices."""
+    service = await get_knowledge_service(backend)
+    indices = await service.list_climate_indices()
+    return {
+        "indices": [i.__dict__ for i in indices],
+        "backend": backend,
+    }
+
+
+@app.get("/knowledge/climate-indices/{index_id}")
+async def get_climate_index(index_id: str, backend: str = "neo4j"):
+    """Get a climate index by ID or abbreviation."""
+    service = await get_knowledge_service(backend)
+    index = await service.get_climate_index(index_id)
+    if not index:
+        raise HTTPException(404, f"Climate index '{index_id}' not found")
+    return index.__dict__
+
+
+# ----- Pattern Endpoints -----
+
+@app.post("/knowledge/patterns")
+async def add_pattern(pattern: PatternCreate, backend: str = "neo4j"):
+    """Add a causal pattern to the knowledge base."""
+    service = await get_knowledge_service(backend)
+    pattern_obj = CausalPattern(
+        name=pattern.name,
+        description=pattern.description,
+        pattern_type=pattern.pattern_type,
+        variables=pattern.variables,
+        lag_days=pattern.lag_days,
+        strength=pattern.strength,
+        confidence=pattern.confidence,
+        metadata=pattern.metadata,
+    )
+    pattern_id = await service.add_pattern(pattern_obj)
+    return {"id": pattern_id, "backend": backend}
+
+
+@app.get("/knowledge/patterns/{pattern_id}")
+async def get_pattern(pattern_id: str, backend: str = "neo4j"):
+    """Get a pattern by ID."""
+    service = await get_knowledge_service(backend)
+    pattern = await service.get_pattern(pattern_id)
+    if not pattern:
+        raise HTTPException(404, f"Pattern '{pattern_id}' not found")
+    return pattern.__dict__
+
+
+@app.get("/knowledge/patterns/search")
+async def search_patterns(
+    pattern_type: Optional[str] = None,
+    variables: Optional[str] = None,
+    min_confidence: float = 0.0,
+    limit: int = 50,
+    backend: str = "neo4j",
+):
+    """Search for causal patterns."""
+    service = await get_knowledge_service(backend)
+    var_list = variables.split(",") if variables else None
+    patterns = await service.search_patterns(
+        pattern_type=pattern_type,
+        variables=var_list,
+        min_confidence=min_confidence,
+        limit=limit,
+    )
+    return {
+        "patterns": [p.__dict__ for p in patterns],
+        "backend": backend,
+    }
+
+
+@app.post("/knowledge/patterns/bulk")
+async def bulk_add_patterns(patterns: List[PatternCreate], backend: str = "neo4j"):
+    """Add multiple patterns at once."""
+    service = await get_knowledge_service(backend)
+    pattern_objs = [
+        CausalPattern(
+            name=p.name,
+            description=p.description,
+            pattern_type=p.pattern_type,
+            variables=p.variables,
+            lag_days=p.lag_days,
+            strength=p.strength,
+            confidence=p.confidence,
+            metadata=p.metadata,
+        )
+        for p in patterns
+    ]
+    ids = await service.bulk_add_patterns(pattern_objs)
+    return {"ids": ids, "count": len(ids), "backend": backend}
+
+
+# ----- Graph Traversal Endpoints -----
+
+@app.post("/knowledge/validate")
+async def validate_pattern(validation: ValidationCreate, backend: str = "neo4j"):
+    """Link a paper that validates a pattern."""
+    service = await get_knowledge_service(backend)
+    result = await service.validate_pattern(
+        pattern_id=validation.pattern_id,
+        paper_id=validation.paper_id,
+        validation_type=validation.validation_type,
+        confidence=validation.confidence,
+        notes=validation.notes,
+    )
+    return result.__dict__
+
+
+@app.get("/knowledge/patterns/{pattern_id}/causal-chain")
+async def get_causal_chain(pattern_id: str, max_depth: int = 5, backend: str = "neo4j"):
+    """Find causal chain from a pattern."""
+    service = await get_knowledge_service(backend)
+    chain = await service.find_causal_chain(pattern_id, max_depth)
+    return {"chain": chain, "backend": backend}
+
+
+@app.get("/knowledge/patterns/{pattern_id}/evidence")
+async def get_pattern_evidence(pattern_id: str, backend: str = "neo4j"):
+    """Get all evidence supporting a pattern."""
+    service = await get_knowledge_service(backend)
+    evidence = await service.find_pattern_evidence(pattern_id)
+    return evidence
+
+
+@app.get("/knowledge/climate-indices/{index_id}/teleconnections")
+async def get_teleconnections(
+    index_id: str,
+    min_correlation: float = 0.5,
+    backend: str = "neo4j",
+):
+    """Find teleconnections for a climate index."""
+    service = await get_knowledge_service(backend)
+    teleconnections = await service.find_teleconnections(index_id, min_correlation)
+    return {"teleconnections": teleconnections, "backend": backend}
+
+
+# ----- Link Endpoints -----
+
+@app.post("/knowledge/links/pattern-event")
+async def link_pattern_event(link: LinkPatternEvent, backend: str = "neo4j"):
+    """Link a pattern to a historical event."""
+    service = await get_knowledge_service(backend)
+    success = await service.link_pattern_to_event(
+        pattern_id=link.pattern_id,
+        event_id=link.event_id,
+        correlation=link.correlation,
+        lag_observed=link.lag_observed,
+        notes=link.notes,
+    )
+    return {"success": success, "backend": backend}
+
+
+@app.post("/knowledge/links/pattern-causal")
+async def link_patterns_causal(link: LinkPatternCausal, backend: str = "neo4j"):
+    """Create causal link between patterns."""
+    service = await get_knowledge_service(backend)
+    success = await service.link_patterns_causal(
+        cause_pattern_id=link.cause_pattern_id,
+        effect_pattern_id=link.effect_pattern_id,
+        strength=link.strength,
+        mechanism=link.mechanism,
+        lag_days=link.lag_days,
+        evidence=link.evidence,
+    )
+    return {"success": success, "backend": backend}
+
+
+@app.post("/knowledge/links/index-pattern")
+async def link_index_pattern(link: LinkIndexPattern, backend: str = "neo4j"):
+    """Link a climate index to a pattern."""
+    service = await get_knowledge_service(backend)
+    success = await service.link_index_to_pattern(
+        index_id=link.index_id,
+        pattern_id=link.pattern_id,
+        correlation=link.correlation,
+        lag_months=link.lag_months,
+        period=link.period,
+    )
+    return {"success": success, "backend": backend}
+
+
+# ----- Statistics Endpoint -----
+
+@app.get("/knowledge/stats")
+async def get_knowledge_stats(backend: str = "neo4j"):
+    """Get knowledge base statistics."""
+    service = await get_knowledge_service(backend)
+    stats = await service.get_statistics()
+    return {"statistics": stats, "backend": backend}
+
+
+@app.get("/knowledge/compare")
+async def compare_backends():
+    """Compare statistics across both backends."""
+    results = {}
+    
+    for backend in ["neo4j", "surrealdb"]:
+        try:
+            service = await get_knowledge_service(backend)
+            stats = await service.get_statistics()
+            results[backend] = {
+                "status": "connected",
+                "statistics": stats,
+            }
+        except Exception as e:
+            results[backend] = {
+                "status": "error",
+                "error": str(e),
+            }
+    
+    return results
+
+
+# ============== AGENT LAYER ENDPOINTS ==============
+# Intermediate actors that mediate causality (operators, infrastructure, processes)
+
+class AgentCreate(BaseModel):
+    """Request model for creating an agent."""
+    id: str
+    agent_type: str  # OPERATOR, INFRASTRUCTURE, PHYSICAL_PROCESS, CLIMATE_PATTERN
+    name: str
+    capabilities: List[Dict[str, Any]]  # What they can do
+    constraints: List[Dict[str, Any]]   # What limits them
+    operates_on: Optional[List[str]] = None  # Systems they interact with
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class AgentStateUpdate(BaseModel):
+    """Request model for updating agent state."""
+    agent_id: str
+    state_name: str  # "tired", "inefficient", "overloaded"
+    value: float     # 0-1 intensity
+    timestamp: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
+
+
+class AgentActionRecord(BaseModel):
+    """Request model for recording an agent action."""
+    agent_id: str
+    action_id: str
+    capability_used: str
+    parameters: Dict[str, Any]
+    resulted_in: Optional[str] = None  # Event or pattern this caused
+    timestamp: Optional[str] = None
+
+
+class PaperEventLink(BaseModel):
+    """Request model for Paper ↔ Event relationships."""
+    paper_id: str
+    event_id: str
+    relation_type: str  # DOCUMENTS, INSPIRES, PREDICTS, VALIDATES
+    confidence: float = 1.0
+    direction: str = "paper_to_event"  # or "event_to_paper"
+
+
+class AgentSystemLink(BaseModel):
+    """Request model for Agent-System relationships."""
+    agent_id: str
+    system_id: str
+    relationship: str = "OPERATES_ON"
+
+
+@app.post("/knowledge/agents")
+async def create_agent(agent: AgentCreate, backend: str = "neo4j"):
+    """
+    Add an intermediate agent/actor.
+    
+    Manufacturing: Operator who runs machine
+    Climate: City that emits heat, physical process that transfers energy
+    """
+    service = await get_knowledge_service(backend)
+    success = await service.add_agent(
+        agent_id=agent.id,
+        agent_type=agent.agent_type,
+        name=agent.name,
+        capabilities=agent.capabilities,
+        constraints=agent.constraints,
+        operates_on=agent.operates_on,
+        metadata=agent.metadata,
+    )
+    return {"success": success, "agent_id": agent.id, "backend": backend}
+
+
+@app.get("/knowledge/agents/{agent_id}")
+async def get_agent(agent_id: str, backend: str = "neo4j"):
+    """Get agent by ID with all relationships."""
+    service = await get_knowledge_service(backend)
+    agent = await service.get_agent(agent_id)
+    if not agent:
+        raise HTTPException(404, f"Agent '{agent_id}' not found")
+    return {"agent": agent, "backend": backend}
+
+
+@app.post("/knowledge/agents/state")
+async def update_agent_state(state: AgentStateUpdate, backend: str = "neo4j"):
+    """
+    Update agent's state at a point in time.
+    
+    Example: Operator fatigue level on Friday night shift
+    Example: City heating efficiency during cold snap
+    """
+    service = await get_knowledge_service(backend)
+    success = await service.update_agent_state(
+        agent_id=state.agent_id,
+        state_name=state.state_name,
+        value=state.value,
+        timestamp=state.timestamp,
+        context=state.context,
+    )
+    return {"success": success, "backend": backend}
+
+
+@app.post("/knowledge/agents/actions")
+async def record_agent_action(action: AgentActionRecord, backend: str = "neo4j"):
+    """
+    Record an action taken by an agent.
+    
+    Example: Operator tweaked extruder speed to 120 rpm
+    Example: City heating system emitted 500 MW thermal
+    """
+    service = await get_knowledge_service(backend)
+    success = await service.record_agent_action(
+        agent_id=action.agent_id,
+        action_id=action.action_id,
+        capability_used=action.capability_used,
+        parameters=action.parameters,
+        resulted_in=action.resulted_in,
+        timestamp=action.timestamp,
+    )
+    return {"success": success, "action_id": action.action_id, "backend": backend}
+
+
+@app.post("/knowledge/agents/links/system")
+async def link_agent_to_system(link: AgentSystemLink, backend: str = "neo4j"):
+    """Link agent to a system/machine/process they interact with."""
+    service = await get_knowledge_service(backend)
+    success = await service.link_agent_to_system(
+        agent_id=link.agent_id,
+        system_id=link.system_id,
+        relationship=link.relationship,
+    )
+    return {"success": success, "backend": backend}
+
+
+# ========== Paper ↔ Event Bidirectional Relations ==========
+
+@app.post("/knowledge/links/paper-event")
+async def link_paper_to_event(link: PaperEventLink, backend: str = "neo4j"):
+    """
+    Create bidirectional Paper ↔ Event relationship.
+    
+    - Paper -[DOCUMENTS]-> Event (paper studied the event)
+    - Event -[INSPIRES]-> Paper (event led to research)
+    - Paper -[PREDICTS]-> Event (paper predicted before event occurred)
+    - Paper -[VALIDATES]-> Event (paper confirms event's causality)
+    """
+    service = await get_knowledge_service(backend)
+    success = await service.link_paper_to_event(
+        paper_id=link.paper_id,
+        event_id=link.event_id,
+        relation_type=link.relation_type,
+        confidence=link.confidence,
+        direction=link.direction,
+    )
+    return {"success": success, "backend": backend}
+
+
+@app.get("/knowledge/events/{event_id}/papers")
+async def get_papers_for_event(
+    event_id: str, 
+    relation_types: Optional[str] = None,  # Comma-separated
+    backend: str = "neo4j"
+):
+    """Get all papers related to an event."""
+    service = await get_knowledge_service(backend)
+    types = relation_types.split(",") if relation_types else None
+    papers = await service.get_papers_for_event(event_id, relation_types=types)
+    return {"papers": papers, "event_id": event_id, "backend": backend}
+
+
+@app.get("/knowledge/papers/{paper_id}/events")
+async def get_events_for_paper(
+    paper_id: str,
+    relation_types: Optional[str] = None,  # Comma-separated
+    backend: str = "neo4j"
+):
+    """Get all events related to a paper."""
+    service = await get_knowledge_service(backend)
+    types = relation_types.split(",") if relation_types else None
+    events = await service.get_events_for_paper(paper_id, relation_types=types)
+    return {"events": events, "paper_id": paper_id, "backend": backend}
+
+
+# ========== Causal Chain with Agents ==========
+
+@app.get("/knowledge/events/{event_id}/causal-chains")
+async def find_agent_causal_chains(
+    event_id: str, 
+    max_depth: int = 4,
+    backend: str = "neo4j"
+):
+    """
+    Find full causal chains leading to an outcome including agent mediation.
+    
+    Returns chains like:
+    Pattern -> Agent(state) -> Action -> Event(outcome)
+    
+    Manufacturing: High temp pattern -> Operator(tired) -> Wrong speed -> Defect
+    Climate: NAO pattern -> City(heating) -> Thermal emission -> Local vortex
+    """
+    service = await get_knowledge_service(backend)
+    chains = await service.find_agent_causal_chains(event_id, max_depth=max_depth)
+    return {"chains": chains, "event_id": event_id, "backend": backend}
+
+
+@app.get("/knowledge/agents/{agent_id}/network")
+async def find_agent_influence_network(
+    agent_id: str,
+    max_hops: int = 3,
+    backend: str = "neo4j"
+):
+    """
+    Panama Papers-style: Find all entities connected to an agent.
+    
+    Returns network of:
+    - Systems they operate on
+    - Actions they've taken
+    - Events they've influenced
+    - Patterns they respond to
+    - Other agents they interact with
+    """
+    service = await get_knowledge_service(backend)
+    network = await service.find_agent_influence_network(agent_id, max_hops=max_hops)
+    return network
+
+
+@app.get("/knowledge/patterns/by-agent-state")
+async def find_pattern_by_agent_state(
+    agent_type: str,
+    state_name: str,
+    state_threshold: float = 0.5,
+    outcome_type: Optional[str] = None,
+    backend: str = "neo4j"
+):
+    """
+    Find patterns where agent state correlates with outcomes.
+    
+    Example: Find all cases where tired operators (fatigue > 0.7)
+             correlated with defect events
+    """
+    service = await get_knowledge_service(backend)
+    patterns = await service.find_pattern_by_agent_state(
+        agent_type=agent_type,
+        state_name=state_name,
+        state_threshold=state_threshold,
+        outcome_type=outcome_type,
+    )
+    return {"patterns": patterns, "backend": backend}

@@ -38,6 +38,10 @@ aiofiles>=23.0.0
 # LLM Integration (Ollama)
 ollama>=0.1.0
 
+# Knowledge Graph Databases
+neo4j>=5.0.0           # Neo4j driver with vector support
+surrealdb>=0.3.0       # SurrealDB Python driver
+
 # Optional: Vector DB for RAG
 # chromadb>=0.4.0
 # sentence-transformers>=2.2.0
