@@ -1,0 +1,25 @@
+{
+  "study_area": {
+    "name": "Norwegian Sea",
+    "lat_min": 62.0,
+    "lat_max": 66.0,
+    "lon_min": -5.0,
+    "lon_max": 10.0,
+    "lon_360_min": 355.0,
+    "lon_360_max": 10.0,
+    "description": "Transition zone between North Atlantic and Arctic",
+    "importance": "Key area for Atlantic water inflow to Arctic"
+  },
+  "observations": 8,
+  "time_series": {
+    "slcci_j1_sla": 8
+  },
+  "correlations": 0,
+  "results": {
+    "total_correlations": 0,
+    "physics_valid": 0,
+    "physics_invalid": 0,
+    "learned_patterns": 0,
+    "best_correlations": []
+  }
+}

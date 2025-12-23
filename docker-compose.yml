@@ -1,0 +1,104 @@
+# 🐳 Multi-Layer Causal Discovery Stack
+# ====================================
+# Neo4j + SurrealDB + API + Frontend
+#
+# Usage:
+#   docker-compose up -d
+#   open http://localhost:5173 (frontend)
+#   open http://localhost:7474 (Neo4j browser)
+#   open http://localhost:8000/docs (API docs)
+
+version: '3.8'
+
+services:
+  # ========== Neo4j (Graph Database) ==========
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: causal_neo4j
+    ports:
+      - "7474:7474"  # Browser
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/causalpass123
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=1G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - causal_network
+
+  # ========== SurrealDB (Multi-model Database) ==========
+  surrealdb:
+    image: surrealdb/surrealdb:latest
+    container_name: causal_surrealdb
+    ports:
+      - "8529:8000"
+    command: start --user root --pass surrealpass123 file:/data/causal.db
+    volumes:
+      - surrealdb_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - causal_network
+
+  # ========== FastAPI Backend ==========
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: causal_api
+    ports:
+      - "8000:8000"
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=causalpass123
+      - SURREALDB_URL=ws://surrealdb:8000/rpc
+      - SURREALDB_USER=root
+      - SURREALDB_PASSWORD=surrealpass123
+      - SURREALDB_NAMESPACE=causal
+      - SURREALDB_DATABASE=knowledge
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    volumes:
+      - ./data:/app/data:ro
+      - ./gates:/app/gates:ro
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      surrealdb:
+        condition: service_healthy
+    networks:
+      - causal_network
+
+  # ========== React Frontend ==========
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: causal_frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+    networks:
+      - causal_network
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  surrealdb_data:
+
+networks:
+  causal_network:
+    driver: bridge
