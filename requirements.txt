@@ -5,7 +5,6 @@ xarray>=2023.1.0
 netCDF4>=1.6.0
 scipy>=1.10.0
 plotly>=5.15.0
-streamlit>=1.28.0
 
 # Geographic/mapping
 geopandas>=0.14.0
@@ -26,5 +25,23 @@ pyod>=2.0.0
 imbalanced-learn>=0.11.0
 statsmodels>=0.14.0
 
-# Optional: Causal discovery
-# tigramite>=5.2.0
+# Causal Discovery
+tigramite>=5.2.0
+networkx>=3.0
+
+# API Backend
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6
+aiofiles>=23.0.0
+
+# LLM Integration (Ollama)
+ollama>=0.1.0
+
+# Optional: Vector DB for RAG
+# chromadb>=0.4.0
+# sentence-transformers>=2.2.0
+
+# Legacy UI (optional)
+streamlit>=1.28.0
+gradio>=4.0.0

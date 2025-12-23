@@ -1,201 +1,320 @@
-# 🛰️ SLCCI Satellite Altimetry Analysis
+# 🛰️ SLCCI Satellite Altimetry + Causal Discovery Platform
 
-A modular Python toolkit for analyzing satellite altimetry data from the **Sea Level CCI (SLCCI)** project, specifically Jason-1 and Jason-2 missions.
+A comprehensive Python toolkit for **satellite altimetry analysis** and **intelligent causal discovery** with LLM-powered explanations.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.x-red.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)
+![Ollama](https://img.shields.io/badge/Ollama-LLM-purple.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ## 🎯 Overview
 
-This project provides tools for:
-- **DOT Analysis** - Dynamic Ocean Topography computation (SSH - MSS/Geoid)
-- **Slope Timeline** - Monthly DOT slope evolution with error bars
-- **Monthly Analysis** - Seasonal patterns in 12-subplot format
-- **Spatial Visualization** - Interactive maps with Plotly
-- **Strait Analysis** - Gate-based analysis for ocean straits
+This project combines **oceanographic data analysis** with **AI-powered causal discovery**:
+
+### Core Features
+- 🛰️ **Satellite Altimetry** - DOT, SLA, SSH analysis from Jason/CMEMS/AVISO
+- 🔬 **Causal Discovery** - PCMCI algorithm to find cause-effect relationships with time lags
+- 🤖 **LLM Integration** - Ollama (qwen3-coder) for automatic data interpretation
+- ⚡ **Physics Validation** - Validate patterns against physical laws (wind setup, inverse barometer)
+- 📊 **Pattern Detection** - tsfresh features, association rules, anomaly detection
+
+### New: Intelligent Causal Discovery Pipeline
+
+```
+Dataset → LLM Interprets → Find Time Dimension → PCMCI Discovery → Physics Validation → LLM Explains
+```
+
+**Example**: Load flood data → LLM identifies "sea_level_anomaly" as target → PCMCI finds "precipitation → river_level (lag=2 days)" → Physics confirms wind setup mechanism → LLM explains the Atlantic storm track connection.
+
+---
 
 ## 🚀 Quick Start
 
-### Installation
+### 1. Installation
 
 ```bash
 # Clone repository
 git clone <repo-url>
 cd nico
 
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On macOS/Linux
+# Use Python 3.12 (recommended - 3.14 has compatibility issues)
+python3.12 -m venv .venv
+source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# For causal discovery features
+pip install tigramite networkx fastapi uvicorn ollama
 ```
 
-### Run the Dashboard
+### 2. Start Ollama (for LLM features)
 
 ```bash
-streamlit run streamlit_app.py
+# Install Ollama: https://ollama.ai
+ollama pull qwen3-coder:30b  # or llama3.2 for faster inference
+ollama serve
 ```
 
-Then open http://localhost:8501 in your browser.
+### 3. Run the API Server
+
+```bash
+# Start FastAPI backend
+uvicorn api.main:app --reload --port 8000
+```
+
+### 4. Run Headless Test
+
+```bash
+python test_headless.py
+```
+
+Expected output:
+```
+✅ PASS: llm (Ollama connected, data interpreted)
+✅ PASS: causal (Found precipitation→river_level, wind→surge)
+✅ PASS: satellite (Loaded AVISO/CMEMS data)
+✅ PASS: llm_explain (Physics validation: 0.95)
+```
+
+---
 
 ## 📁 Project Structure
 
 ```
 nico/
-├── streamlit_app.py          # 🚀 Main entry point
-├── app/                      # 📱 Streamlit application
-│   ├── main.py              # App orchestration
-│   ├── state.py             # Session state management
-│   ├── styles.py            # Custom CSS
-│   └── components/          # UI components
-│       ├── sidebar.py       # Data loading & config
-│       ├── tabs.py          # Tab container
-│       ├── analysis_tab.py  # Slope timeline
-│       ├── profiles_tab.py  # DOT profiles
-│       ├── monthly_tab.py   # Monthly analysis
-│       ├── spatial_tab.py   # Map visualization
-│       └── explorer_tab.py  # Data explorer
-├── src/                      # 📚 Core library
-│   ├── core/                # Base utilities
-│   │   ├── satellite.py     # Satellite detection
-│   │   ├── coordinates.py   # Geo utilities
-│   │   └── helpers.py       # General helpers
-│   ├── data/                # Data handling
-│   │   ├── loaders.py       # NetCDF loading
-│   │   ├── geoid.py         # Geoid interpolation
-│   │   └── filters.py       # Data filtering
-│   ├── analysis/            # Scientific analysis
-│   │   ├── dot.py           # DOT computation
-│   │   ├── slope.py         # Slope analysis
-│   │   └── statistics.py    # Statistical functions
-│   └── visualization/       # Plotting
-│       ├── plotly_charts.py # Interactive plots
-│       └── matplotlib_charts.py  # Static plots
-├── data/                     # 📊 Data files (see data/README.md)
-│   ├── slcci/               # SLCCI NetCDF cycles
-│   └── geoid/               # Geoid reference files
-├── gates/                    # 🗺️ Strait gate shapefiles
-├── notebooks/                # 📓 Jupyter notebooks
-├── legacy/                   # 📜 Legacy code (j2_utils.py)
-└── docs/                     # 📖 Documentation
-    ├── ARCHITECTURE.md
-    ├── CONTRIBUTING.md
-    ├── CHANGELOG.md
-    └── CMEMS-SL-PUM-*.pdf   # CMEMS reference docs
+├── api/                          # 🔌 FastAPI Backend (NEW)
+│   ├── main.py                   # REST endpoints
+│   └── services/
+│       ├── llm_service.py        # Ollama LLM integration
+│       ├── causal_service.py     # PCMCI causal discovery
+│       └── data_service.py       # Dataset loading/preprocessing
+│
+├── src/                          # 🧠 Core Analysis Modules
+│   ├── analysis/                 # DOT, slope, statistics
+│   ├── core/                     # Config, coordinates, resolvers
+│   ├── data/                     # Loaders, filters, geoid
+│   ├── visualization/            # Plotly/Matplotlib charts
+│   ├── pattern_engine/           # Pattern detection (tsfresh, mlxtend)
+│   │   ├── core/                 # Pattern dataclasses
+│   │   ├── detection/            # ML detectors, association rules
+│   │   ├── physics/              # Domain rules (flood, manufacturing)
+│   │   └── output/               # Gray zone detector
+│   └── surge_shazam/             # Physics-informed ML
+│       ├── physics/              # Shallow water equations (PyTorch)
+│       └── causal/               # PCMCI integration (stubs)
+│
+├── app/                          # 📱 Streamlit Dashboard
+│   └── components/               # UI tabs (analysis, spatial, profiles)
+│
+├── data/                         # 📂 Satellite Data
+│   ├── aviso/                    # AVISO altimetry
+│   ├── cmems/                    # CMEMS L3/L4
+│   ├── slcci/                    # SLCCI Jason-1/2
+│   └── geoid/                    # TUM geoid model
+│
+├── gates/                        # 🌊 Strait Shapefiles
+│
+├── test_headless.py              # 🧪 Integration tests
+└── gradio_app.py                 # Alternative Gradio UI
 ```
-
-## 📊 Data Format
-
-The toolkit works with **SLCCI Altimeter Database V2.0** NetCDF files:
-
-```
-SLCCI_ALTDB_J1_CycleXXX_V2.nc  # Jason-1
-SLCCI_ALTDB_J2_CycleXXX_V2.nc  # Jason-2
-```
-
-### Key Variables:
-| Variable | Description | Units |
-|----------|-------------|-------|
-| `corssh` | Corrected Sea Surface Height | m |
-| `mean_sea_surface` | Mean Sea Surface | m |
-| `latitude` | Latitude | degrees |
-| `longitude` | Longitude | degrees |
-| `TimeDay` | Days since 2000-01-01 | days |
-| `validation_flag` | Quality flag (0=valid) | - |
-
-## 🔬 Scientific Methods
-
-### DOT Computation
-```
-DOT = SSH - Reference Surface
-```
-Where Reference Surface is either Mean Sea Surface (MSS) or Geoid.
-
-### Slope Analysis
-1. **Longitude Binning** - Data binned by 0.01° longitude
-2. **Linear Regression** - `scipy.stats.linregress`
-3. **Unit Conversion** - m/deg → mm/m (latitude corrected)
-
-```python
-slope_mm_per_m = (slope_m_per_deg / meters_per_deg) * 1000
-meters_per_deg = 111320 * cos(latitude)
-```
-
-## 🖥️ Dashboard Features
-
-### 📈 Slope Timeline
-- Error bars from regression standard error
-- Trend line with rate
-- Mean ± std reference line
-
-### 🌊 DOT Profiles
-- Multi-cycle comparison
-- Longitude-binned profiles
-- Interactive selection
-
-### 📅 Monthly Analysis
-- 12-subplot grid
-- Linear fit per month
-- R² and slope statistics
-
-### 🗺️ Spatial View
-- Interactive Mapbox maps
-- Variable selection
-- Dynamic sampling for performance
-
-## 🧪 Usage Examples
-
-### Programmatic Usage
-
-```python
-from src.data.loaders import load_filtered_cycles
-from src.analysis.dot import compute_dot
-from src.analysis.slope import compute_slope_timeline
-
-# Load data
-ds = load_filtered_cycles(
-    cycles=range(1, 100),
-    base_dir="/path/to/data",
-    lat_range=(60, 80),
-)
-
-# Compute DOT
-dot = compute_dot(ds, reference_var="mean_sea_surface")
-
-# Slope analysis
-timeline = compute_slope_timeline(df, bin_size=0.01)
-```
-
-## 📦 Dependencies
-
-```
-numpy>=1.24.0
-pandas>=2.0.0
-xarray>=2023.1.0
-netCDF4>=1.6.0
-scipy>=1.10.0
-plotly>=5.14.0
-streamlit>=1.28.0
-geopandas>=0.14.0
-cartopy>=0.22.0
-```
-
-## 🤝 Contributing
-
-See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
-
-## 📄 License
-
-MIT License - See LICENSE file.
-
-## 🙏 Acknowledgments
-
-- ESA Climate Change Initiative - Sea Level CCI
-- CNES/NASA Jason-1 and Jason-2 missions
-- TUM for geoid data (TUM_ogmoc)
 
 ---
 
-**Built with ❤️ for ocean science**
+## 🔬 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Check API + Ollama status |
+| `/data/files` | GET | List available data files |
+| `/data/upload` | POST | Upload CSV/NetCDF |
+| `/data/load/{path}` | GET | Load file from data/ |
+| `/interpret` | POST | LLM interprets dataset structure |
+| `/discover` | POST | Run PCMCI causal discovery |
+| `/discover/correlations` | POST | Cross-correlation analysis |
+| `/chat` | POST | Chat with LLM about data |
+| `/hypotheses` | POST | Generate causal hypotheses |
+| `/ws/chat` | WebSocket | Stream LLM responses |
+
+### Example: Causal Discovery
+
+```bash
+curl -X POST http://localhost:8000/discover \
+  -H "Content-Type: application/json" \
+  -d '{
+    "dataset_name": "flood_data",
+    "max_lag": 7,
+    "alpha_level": 0.05,
+    "domain": "flood",
+    "use_llm": true
+  }'
+```
+
+Response:
+```json
+{
+  "variables": ["precipitation", "wind_speed", "pressure", "river_level", "flood_index"],
+  "links": [
+    {
+      "source": "precipitation",
+      "target": "river_level",
+      "lag": 2,
+      "strength": 0.95,
+      "p_value": 0.0001,
+      "explanation": "Heavy precipitation causes river levels to rise with a 2-day lag...",
+      "physics_valid": true,
+      "physics_score": 0.92
+    }
+  ]
+}
+```
+
+---
+
+## 🧠 LLM Service Features
+
+The `OllamaLLMService` provides:
+
+### 1. Data Interpretation
+```python
+result = await llm.interpret_dataset(columns_info, filename)
+# Returns: domain="flood", temporal_column="timestamp", suggested_targets=["sea_level"]
+```
+
+### 2. Causal Explanation
+```python
+explanation = await llm.explain_causal_relationship(
+    source="wind_speed", target="storm_surge", lag=1, strength=0.52
+)
+# Returns: "Wind speed causes storm surge through the wind setup mechanism (τ ∝ U²)..."
+```
+
+### 3. Physics Validation
+```python
+validation = await llm.validate_pattern_physics(
+    pattern="wind → surge", domain="flood", confidence=0.99
+)
+# Returns: {"is_valid": True, "physics_score": 0.95, "supporting_evidence": ["wind stress formula"]}
+```
+
+### 4. Hypothesis Generation
+```python
+hypotheses = await llm.generate_hypotheses(variables, domain="flood")
+# Returns: [{"source": "NAO_index", "target": "storm_surge", "expected_lag": "3-5 days"}]
+```
+
+---
+
+## ⚡ Physics Rules
+
+Built-in physics validation for multiple domains:
+
+### Flood/Storm Surge
+| Rule | Formula | Typical Lag |
+|------|---------|-------------|
+| Wind Setup | η ∝ U²·L/(g·h) | 6-24 hours |
+| Inverse Barometer | Δη ≈ -1 cm/hPa | 12-48 hours |
+| Pressure Effect | Low pressure → surge | 24-72 hours |
+
+### Manufacturing
+| Rule | Effect |
+|------|--------|
+| Temperature | Arrhenius: rate ×2 per 10°C |
+| Viscosity | Decreases with temperature |
+| Speed | Optimal range for quality |
+
+---
+
+## 🛠️ Development
+
+### Run Tests
+```bash
+# Headless integration test
+python test_headless.py
+
+# Unit tests
+pytest tests/
+```
+
+### Code Quality
+```bash
+black src/ api/
+ruff check src/ api/
+```
+
+### Known Issues
+
+⚠️ **Python 3.14 Compatibility**: NetworkX and some libraries have issues with Python 3.14. Use Python 3.12 for now.
+
+---
+
+## 🗺️ Roadmap
+
+### ✅ Completed (v1.0)
+- [x] FastAPI backend with REST endpoints
+- [x] Ollama LLM integration (qwen3-coder, llama3.2)
+- [x] PCMCI causal discovery with correlation fallback
+- [x] Physics validation rules (flood, manufacturing)
+- [x] Data interpretation and explanation generation
+- [x] NetCDF/CSV loading with auto-detection
+- [x] Headless test pipeline
+- [x] Pattern engine (tsfresh, mlxtend, pyod)
+
+### 🚧 In Progress (v1.1)
+- [ ] React frontend with PHI spacing layout
+- [ ] Interactive causal graph visualization (D3.js)
+- [ ] Real-time chat with WebSocket streaming
+- [ ] Time series explorer with lag slider
+
+### 📋 Planned (v2.0)
+- [ ] Neo4j for causal graph persistence
+- [ ] RAG with scientific papers (ChromaDB)
+- [ ] Multi-dataset correlation analysis
+- [ ] Export to standard causal formats (TETRAD, DOT)
+- [ ] Teleconnection patterns (NAO, ENSO)
+- [ ] Automated report generation
+
+---
+
+## 📚 Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     React Frontend (TODO)                        │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                │
+│  │ Causal Graph│ │ Chat (LLM)  │ │ Time Series │                │
+│  │ (D3.js)     │ │ Interface   │ │ Explorer    │                │
+│  └─────────────┘ └─────────────┘ └─────────────┘                │
+└─────────────────────────────────────────────────────────────────┘
+                           │ REST/WebSocket
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     FastAPI Backend (/api)                       │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                │
+│  │ LLM Service │ │ Causal      │ │ Data        │                │
+│  │ (Ollama)    │ │ Discovery   │ │ Service     │                │
+│  └─────────────┘ └─────────────┘ └─────────────┘                │
+└─────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Core Analysis + Pattern Engine                      │
+│  (DOT analysis, tsfresh, mlxtend, physics validation)           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📄 License
+
+MIT License
+
+---
+
+## 🤝 Contributing
+
+Key areas for contribution:
+1. **React Frontend** - Build the PHI-spaced dashboard with D3.js graphs
+2. **Physics Rules** - Add domain-specific validation rules
+3. **LLM Prompts** - Improve scientific explanation quality
+4. **Test Data** - Contribute synthetic/real datasets
