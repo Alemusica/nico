@@ -10,18 +10,20 @@ import {
   Waves,
   GitBranch,
   BookOpen,
-  Zap
+  Zap,
+  Calendar
 } from 'lucide-react'
 import clsx from 'clsx'
 
 interface SidebarProps {
   activeView: string
-  onViewChange: (view: 'graph' | 'data' | 'knowledge' | 'chat') => void
+  onViewChange: (view: 'graph' | 'data' | 'knowledge' | 'chat' | 'historical') => void
 }
 
 const navigation = [
   { id: 'graph', label: 'Causal Graph', icon: GitBranch },
   { id: 'data', label: 'Data Explorer', icon: Database },
+  { id: 'historical', label: 'Historical Analysis', icon: Calendar },
   { id: 'knowledge', label: 'Knowledge Base', icon: BookOpen },
   { id: 'chat', label: 'AI Assistant', icon: MessageSquare },
 ] as const
@@ -55,7 +57,7 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
         {navigation.map((item) => (
           <button
             key={item.id}
-            onClick={() => onViewChange(item.id as 'graph' | 'data' | 'knowledge' | 'chat')}
+            onClick={() => onViewChange(item.id as 'graph' | 'data' | 'knowledge' | 'chat' | 'historical')}
             className={clsx(
               'sidebar-item w-full text-left',
               activeView === item.id && 'sidebar-item-active'

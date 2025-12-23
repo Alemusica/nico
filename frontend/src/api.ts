@@ -252,3 +252,72 @@ export async function checkHealth() {
   const res = await fetch(`${API_BASE}/health`)
   return res.json()
 }
+
+// =========================================================================
+// Historical Analysis Endpoints
+// =========================================================================
+
+export interface HistoricalEpisode {
+  id: string
+  name: string
+  event_type: string
+  start_date: string
+  end_date: string
+  description: string
+  precursor_window_days: number
+  region: { lat: [number, number]; lon: [number, number] }
+  known_precursors: string[]
+  references: string[]
+}
+
+export interface PrecursorSignal {
+  variable: string
+  source_region: string
+  lag_days: number
+  correlation: number
+  p_value: number
+  physics_validated: boolean
+  mechanism: string
+  confidence: number
+}
+
+export interface AnalysisResult {
+  episode_id: string
+  precursors: PrecursorSignal[]
+  overall_confidence: number
+  max_lead_time: number
+  validated_count: number
+  analysis_timestamp: string
+}
+
+export async function listHistoricalEpisodes(): Promise<{ episodes: HistoricalEpisode[]; count: number }> {
+  const res = await fetch(`${API_BASE}/historical/episodes`)
+  return res.json()
+}
+
+export async function getHistoricalEpisode(episodeId: string): Promise<HistoricalEpisode> {
+  const res = await fetch(`${API_BASE}/historical/episodes/${episodeId}`)
+  return res.json()
+}
+
+export async function analyzeHistoricalEpisode(episodeId: string): Promise<AnalysisResult> {
+  const res = await fetch(`${API_BASE}/historical/analyze/${episodeId}`, {
+    method: 'POST',
+  })
+  return res.json()
+}
+
+export async function getCrossPatterns(): Promise<{
+  cross_patterns: Array<{
+    variable: string
+    appearances: string[]
+    average_lag_days: number
+    average_correlation: number
+    mechanism: string
+    predictive_reliability: string
+  }>
+  recommendation: string
+}> {
+  const res = await fetch(`${API_BASE}/historical/cross-patterns`)
+  return res.json()
+}

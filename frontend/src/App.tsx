@@ -11,6 +11,7 @@ import { CausalGraphView } from './components/CausalGraphView'
 import { DataPanel } from './components/DataPanel'
 import { ChatPanel } from './components/ChatPanel'
 import { KnowledgeSearch } from './components/KnowledgeSearch'
+import { HistoricalAnalysis } from './components/HistoricalAnalysis'
 import { useStore } from './store'
 
 const queryClient = new QueryClient({
@@ -22,7 +23,7 @@ const queryClient = new QueryClient({
   },
 })
 
-type ViewType = 'graph' | 'data' | 'knowledge' | 'chat'
+type ViewType = 'graph' | 'data' | 'knowledge' | 'chat' | 'historical'
 
 export default function App() {
   const [activeView, setActiveView] = useState<ViewType>('graph')
@@ -57,6 +58,10 @@ export default function App() {
             
             {activeView === 'knowledge' && (
               <KnowledgeSearch />
+            )}
+            
+            {activeView === 'historical' && (
+              <HistoricalAnalysis />
             )}
             
             {activeView === 'chat' && (
