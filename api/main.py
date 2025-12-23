@@ -2,6 +2,14 @@
 🚀 FastAPI Main Application
 ============================
 REST API for Causal Discovery Dashboard.
+
+Includes:
+- Data management (upload, interpret, preview)
+- Causal discovery (PCMCI, correlations)
+- LLM-powered explanations
+- Root cause analysis (Ishikawa, FMEA, 5-Why)
+- Multi-satellite data fusion
+- Hybrid scoring (physics + chain + experience)
 """
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket
@@ -30,12 +38,27 @@ from api.services.knowledge_service import (
     CausalPattern,
 )
 
+# Import routers
+from api.routers.analysis_router import router as analysis_router
+
 # Initialize FastAPI
 app = FastAPI(
     title="🔬 Causal Discovery API",
-    description="Intelligent causal discovery with LLM-powered explanations",
-    version="1.0.0",
+    description="""
+Intelligent causal discovery with LLM-powered explanations.
+
+## Features:
+- **Data Management**: Upload, interpret, and preview datasets
+- **Causal Discovery**: PCMCI and correlation-based analysis
+- **Root Cause Analysis**: Ishikawa diagrams, FMEA, 5-Why
+- **Satellite Fusion**: Multi-satellite data integration
+- **Hybrid Scoring**: Physics + Chain + Experience based validation
+    """,
+    version="1.1.0",
 )
+
+# Include routers
+app.include_router(analysis_router)
 
 # CORS for React frontend
 app.add_middleware(
@@ -1517,3 +1540,302 @@ async def find_pattern_by_agent_state(
         outcome_type=outcome_type,
     )
     return {"patterns": patterns, "backend": backend}
+
+
+# ==============================================================================
+# 🔄 DATA INTELLIGENCE PIPELINE ENDPOINTS
+# ==============================================================================
+
+@app.get("/pipeline/status")
+async def pipeline_status():
+    """Get status of the data intelligence pipeline."""
+    try:
+        from src.pipeline import Scraper, Raffinatore, Correlatore, KnowledgeScorer
+        
+        # Initialize components
+        scraper = Scraper()
+        raffinatore = Raffinatore()
+        correlatore = Correlatore()
+        scorer = KnowledgeScorer()
+        
+        return {
+            "status": "operational",
+            "stages": {
+                "scraper": {
+                    "status": "ready",
+                    "stats": scraper.get_stats() if hasattr(scraper, 'get_stats') else {}
+                },
+                "raffinatore": {
+                    "status": "ready",
+                    "stats": raffinatore.get_stats()
+                },
+                "correlatore": {
+                    "status": "ready",
+                    "stats": correlatore.get_stats()
+                },
+                "knowledge_scorer": {
+                    "status": "ready",
+                    "stats": scorer.get_stats()
+                }
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+class ScrapeRequest(BaseModel):
+    topics: Optional[List[str]] = None
+    paper_queries: Optional[List[str]] = None
+    max_per_topic: int = 5
+
+
+@app.post("/pipeline/scrape")
+async def pipeline_scrape(request: ScrapeRequest):
+    """
+    Stage 1: Scrape news articles and scientific papers.
+    
+    Returns raw items from news sites, RSS feeds, and Semantic Scholar.
+    """
+    try:
+        from src.pipeline import Scraper
+        
+        scraper = Scraper()
+        items = scraper.scrape_topics(
+            topics=request.topics,
+            max_per_topic=request.max_per_topic
+        )
+        
+        # Also search papers if queries provided
+        if request.paper_queries:
+            for query in request.paper_queries:
+                papers = scraper.search_papers(query, max_results=5)
+                items.extend(papers)
+        
+        return {
+            "status": "success",
+            "items_scraped": len(items),
+            "items": [item.to_dict() for item in items[:20]]  # Return first 20
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RefineRequest(BaseModel):
+    min_quality_score: float = 3.0
+
+
+@app.post("/pipeline/refine")
+async def pipeline_refine(request: RefineRequest):
+    """
+    Stage 2: Refine and validate scraped items.
+    
+    Extracts entities, calculates quality scores, removes duplicates.
+    """
+    try:
+        from src.pipeline import Raffinatore
+        
+        raffinatore = Raffinatore(min_quality_score=request.min_quality_score)
+        refined_items = raffinatore.refine_all()
+        
+        return {
+            "status": "success",
+            "items_refined": len(refined_items),
+            "stats": raffinatore.get_stats(),
+            "items": [item.to_dict() for item in refined_items[:20]]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class AddEventRequest(BaseModel):
+    name: str
+    event_type: str
+    start_date: str
+    end_date: Optional[str] = None
+    regions: List[str] = []
+    magnitude: Optional[float] = None
+    description: str = ""
+    measurements: Dict[str, float] = {}
+
+
+@app.post("/pipeline/events")
+async def add_pipeline_event(request: AddEventRequest):
+    """Add a new ocean event for correlation analysis."""
+    try:
+        from src.pipeline import Correlatore, OceanEvent
+        import uuid
+        
+        event = OceanEvent(
+            id=f"evt_{uuid.uuid4().hex[:8]}",
+            name=request.name,
+            event_type=request.event_type,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            regions=request.regions,
+            magnitude=request.magnitude,
+            description=request.description,
+            measurements=request.measurements,
+        )
+        
+        correlatore = Correlatore()
+        correlatore.add_event(event)
+        
+        return {
+            "status": "success",
+            "event_id": event.id,
+            "event": event.to_dict()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/pipeline/events")
+async def list_pipeline_events():
+    """List all events for correlation analysis."""
+    try:
+        from src.pipeline import Correlatore
+        import json
+        
+        correlatore = Correlatore()
+        if correlatore.events_file.exists():
+            with open(correlatore.events_file) as f:
+                events = json.load(f)
+            return {"events": events}
+        return {"events": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/pipeline/correlate")
+async def pipeline_correlate():
+    """
+    Stage 3: Correlate refined items with events.
+    
+    Calculates temporal, spatial, and topical correlations.
+    Generates causal hypotheses (precursor, concurrent, consequence).
+    """
+    try:
+        from src.pipeline import Correlatore
+        
+        correlatore = Correlatore()
+        correlations = correlatore.correlate_all()
+        
+        return {
+            "status": "success",
+            "correlations_found": len(correlations),
+            "stats": correlatore.get_stats(),
+            "correlations": [c.to_dict() for c in correlations[:50]]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/pipeline/correlations/precursors/{event_id}")
+async def get_precursors(event_id: str, max_days: int = 30):
+    """Get precursor signals for a specific event."""
+    try:
+        from src.pipeline import Correlatore
+        
+        correlatore = Correlatore()
+        precursors = correlatore.get_precursors(event_id, max_days=max_days)
+        
+        return {
+            "event_id": event_id,
+            "precursors": [p.to_dict() for p in precursors],
+            "count": len(precursors)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/pipeline/score")
+async def pipeline_score():
+    """
+    Stage 4: Score knowledge with multi-factor indices.
+    
+    Calculates:
+    - thermodynamics (0-10)
+    - anemometry (0-10)  
+    - precipitation (0-10)
+    - cryosphere (0-10)
+    - oceanography (0-10)
+    
+    Plus overall score and confidence.
+    """
+    try:
+        from src.pipeline import KnowledgeScorer
+        
+        scorer = KnowledgeScorer()
+        knowledge = scorer.score_all()
+        
+        return {
+            "status": "success",
+            "events_scored": len(knowledge),
+            "stats": scorer.get_stats(),
+            "knowledge": [k.to_dict() for k in knowledge]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/pipeline/knowledge")
+async def get_knowledge(event_id: Optional[str] = None):
+    """Get scored knowledge from the knowledge base."""
+    try:
+        from src.pipeline import KnowledgeScorer
+        
+        scorer = KnowledgeScorer()
+        knowledge = scorer.get_knowledge(event_id)
+        
+        return {
+            "knowledge": [k.to_dict() for k in knowledge],
+            "stats": scorer.get_stats()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class FullPipelineRequest(BaseModel):
+    topics: Optional[List[str]] = None
+    paper_queries: Optional[List[str]] = None
+    max_per_topic: int = 5
+
+
+@app.post("/pipeline/run")
+async def run_full_pipeline(request: FullPipelineRequest):
+    """
+    Run the complete 4-stage data intelligence pipeline.
+    
+    1. SCRAPE → 2. REFINE → 3. CORRELATE → 4. SCORE
+    
+    Returns comprehensive results including:
+    - Multi-factor indices (thermodynamics, anemometry, precipitation, etc.)
+    - Precursor signals found
+    - Confidence scores
+    """
+    try:
+        from src.pipeline import run_full_pipeline as do_pipeline
+        
+        results = do_pipeline(
+            topics=request.topics,
+            paper_queries=request.paper_queries,
+        )
+        
+        # Serialize for JSON response
+        return {
+            "status": "success",
+            "stats": results["stats"],
+            "summary": {
+                "scraped": len(results["scraped"]),
+                "refined": len(results["refined"]),
+                "correlations": len(results["correlations"]),
+                "knowledge_items": len(results["knowledge"]),
+            },
+            "knowledge": [k.to_dict() for k in results["knowledge"]]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

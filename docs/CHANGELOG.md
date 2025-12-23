@@ -5,6 +5,102 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2024-12-24
+
+### Added
+
+#### 🔬 Root Cause Analysis Module (`src/analysis/root_cause.py`)
+- **Ishikawa (Fishbone) Diagrams** - Adapted 6M for oceanography:
+  - ATMOSPHERE: Wind, pressure, precipitation
+  - OCEAN: Tides, currents, stratification
+  - CRYOSPHERE: Ice, freshwater flux
+  - MEASUREMENT: Sensor issues, calibration
+  - MODEL: Forecast errors, resolution
+  - EXTERNAL: Rivers, anthropogenic, seismic
+- **FMEA Analysis** - Failure Mode and Effects Analysis for satellite data quality
+  - Risk Priority Number (RPN) calculation
+  - Severity × Occurrence × Detection scoring
+  - Priority classification (high/medium/low)
+- **5-Why Analysis** - Root cause drilling with LLM support
+  - Physics-grounded explanations
+  - Measurability tracking
+  - Evidence linking
+- **Physics Scoring** - Storm surge validation:
+  - Wind setup: η = (CD × ρ_air × U² × L) / (ρ_water × g × h)
+  - Inverse barometer: η = -ΔP / (ρ_water × g)
+  - Validation score comparing expected vs observed
+
+#### 🛰️ Multi-Satellite Fusion Engine (`src/data/satellite_fusion.py`)
+- **Satellite Constellation Support**:
+  - Sentinel-3A/B (SAR mode, 81.5° coverage)
+  - Jason-3 (reference, 66° coverage)
+  - Sentinel-6A (reference, 66° coverage)
+  - CryoSat-2 (88° coverage, geodetic orbit)
+  - ICESat-2 (laser, 88° coverage)
+  - SWOT (Ka-band, 2D imaging)
+- **Data Fusion Features**:
+  - Query multiple satellites simultaneously
+  - Handle offline/unavailable sensors
+  - Quality weighting and proximity scoring
+  - Grid interpolation (weighted average, RBF)
+  - Uncertainty estimation
+- **Dynamic Index Calculator**:
+  - Thermodynamics from SST anomalies
+  - Oceanography from SSH/SLA patterns
+  - Cryosphere from sea ice concentration
+  - Anemometry from altimeter wind
+
+#### 🧠 Enhanced Knowledge Scorer (`src/pipeline/enhanced_scorer.py`)
+- **Hybrid Scoring** combining three engines:
+  - Physics-based validation (40% weight)
+  - Chain-based scoring (30% weight)
+  - Experience-based scoring (30% weight)
+- **Dynamic Indices** replacing static scores
+- Configurable weights for different use cases
+
+#### 🤖 LLM Root Cause Extension (`api/services/llm_root_cause.py`)
+- `generate_ishikawa_diagram()` - LLM-powered diagram generation
+- `generate_fmea_analysis()` - LLM-driven failure mode identification
+- `run_five_why_analysis()` - LLM drilling to root cause
+- `calculate_hybrid_score()` - Physics + Chain + Experience scoring
+
+#### 🌐 Analysis API Router (`api/routers/analysis_router.py`)
+- **Ishikawa Endpoints**:
+  - `POST /analysis/ishikawa` - Generate diagram
+  - `GET /analysis/ishikawa/template` - Get template
+- **FMEA Endpoints**:
+  - `POST /analysis/fmea` - Generate FMEA
+  - `GET /analysis/fmea/template` - Get template
+- **5-Why Endpoint**:
+  - `POST /analysis/5why` - Run analysis
+- **Scoring Endpoints**:
+  - `POST /analysis/score/hybrid` - Hybrid score
+  - `POST /analysis/score/physics` - Physics validation
+- **Satellite Endpoints**:
+  - `GET /analysis/satellites/status` - Constellation status
+  - `GET /analysis/satellites/{name}` - Satellite details
+  - `PUT /analysis/satellites/{name}/status` - Update status
+- **Index Endpoints**:
+  - `POST /analysis/indices/calculate` - Dynamic indices
+  - `GET /analysis/indices/weights` - Scoring weights
+- **Comprehensive**:
+  - `POST /analysis/comprehensive` - Full analysis pipeline
+
+### Changed
+- API version bumped to 1.1.0
+- Main FastAPI app now includes analysis router
+- `src/analysis/__init__.py` exports root cause classes
+- `src/data/__init__.py` exports satellite fusion classes
+- `src/pipeline/__init__.py` exports enhanced scorer
+
+### Technical Details
+- Kaizen-inspired QA methods (Toyota 5-Why, FMEA)
+- Physics constants: ρ_water=1025, ρ_air=1.225, g=9.81, CD=0.0013
+- Logarithmic experience scoring: 1 match=0.3, 10=0.7, 100=1.0
+- Ollama local LLM with cloud-ready abstraction
+
+---
+
 ## [1.4.0] - 2024-12-23
 
 ### Added
