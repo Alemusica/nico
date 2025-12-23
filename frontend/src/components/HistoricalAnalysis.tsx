@@ -20,10 +20,6 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { useStore } from '../store'
-import { useStore } from '../store'
-
 // Well-documented historical episodes for Arctic oceanography
 const HISTORICAL_EPISODES = [
   {

@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2024-12-23
+
+### Added
+- 🔮 **Historical Episode Analysis**
+  - Frontend component for analyzing well-documented Arctic events
+  - 4 historical episodes: Arctic Ice 2007, Atlantic Intrusion 2015, Fram Export 2012, Marine Heatwave 2018
+  - Precursor signal detection with physics validation
+  - Up to 147 days advance warning capability
+  - Cross-episode pattern discovery
+
+- 🔌 **New API Endpoints**
+  - `GET /historical/episodes` - List all historical episodes
+  - `GET /historical/episodes/{id}` - Get episode details
+  - `POST /historical/analyze/{id}` - Run precursor analysis
+  - `GET /historical/cross-patterns` - Cross-episode patterns
+  - Enhanced `/health` endpoint with component status
+
+- 🛡️ **System Robustness**
+  - All core packages now installed: tigramite, neo4j, surrealdb
+  - Graceful fallback when services unavailable
+  - Health endpoint shows status of all components
+  - SYSTEM_STATUS.md documentation
+
+### Fixed
+- Duplicate import in HistoricalAnalysis.tsx causing white page
+- Tigramite now properly installed and available
+
+## [1.3.0] - 2024-12-23
+
+### Added
+- 🐳 **Docker Deployment Stack**
+  - docker-compose.yml with Neo4j + SurrealDB + API + Frontend
+  - Dockerfile.api for FastAPI backend
+  - frontend/Dockerfile for React + nginx
+
+- 🌐 **Cross-Region Experiments**
+  - Teleconnection discovery between non-overlapping regions
+  - Norwegian Sea → Fram Strait propagation (63-77 day lag)
+  - Physics validation against ocean current speeds
+  - Experience engine for pattern learning
+
+- 🤖 **Agent Layer for Multi-Layer Causal Discovery**
+  - agent_layer.py with operators, infrastructure, physical processes
+  - Knowledge service extensions
+  - Neo4j agent methods
+  - React frontend base components
+
 ## [1.2.0] - 2024-12-22
 
 ### Added
