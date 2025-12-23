@@ -94,6 +94,54 @@ from .detection.unsupervised import UnsupervisedDetector
 from .causal.discovery import CausalDiscovery, CausalGraph, CausalEdge
 from .output.reporter import PatternReporter
 
+# Physics validation (new)
+from .physics.rules import (
+    PhysicsValidator,
+    PhysicsRule,
+    ValidationResult,
+    Domain,
+    create_flood_validator,
+    create_manufacturing_validator,
+    create_energy_validator,
+)
+
+# Gray zone detection (new)
+from .output.gray_zone import (
+    GrayZoneDetector,
+    GrayZoneConfig,
+    GrayZonePattern,
+    ReviewPriority,
+)
+
+# Optional: TSFresh and mlxtend (graceful fallback)
+try:
+    from .preprocessing.tsfresh_extractor import (
+        TSFreshExtractor,
+        FeatureExtractionConfig,
+        quick_extract,
+        TSFRESH_AVAILABLE,
+    )
+except ImportError:
+    TSFRESH_AVAILABLE = False
+    TSFreshExtractor = None
+    FeatureExtractionConfig = None
+    quick_extract = None
+
+try:
+    from .detection.association_rules import (
+        AssociationRuleDetector,
+        AssociationRuleConfig,
+        AssociationRule,
+        quick_association_rules,
+        MLXTEND_AVAILABLE,
+    )
+except ImportError:
+    MLXTEND_AVAILABLE = False
+    AssociationRuleDetector = None
+    AssociationRuleConfig = None
+    AssociationRule = None
+    quick_association_rules = None
+
 __all__ = [
     # Configuration
     "PatternEngineConfig",
@@ -132,4 +180,28 @@ __all__ = [
     "CausalEdge",
     # Output
     "PatternReporter",
+    # Physics validation
+    "PhysicsValidator",
+    "PhysicsRule",
+    "ValidationResult",
+    "Domain",
+    "create_flood_validator",
+    "create_manufacturing_validator",
+    "create_energy_validator",
+    # Gray zone
+    "GrayZoneDetector",
+    "GrayZoneConfig",
+    "GrayZonePattern",
+    "ReviewPriority",
+    # TSFresh (optional)
+    "TSFreshExtractor",
+    "FeatureExtractionConfig",
+    "quick_extract",
+    "TSFRESH_AVAILABLE",
+    # Association rules (optional)
+    "AssociationRuleDetector",
+    "AssociationRuleConfig",
+    "AssociationRule",
+    "quick_association_rules",
+    "MLXTEND_AVAILABLE",
 ]
