@@ -5,6 +5,8 @@
 **Status**: ✅ Ready  
 **Date**: 2024-12-24
 
+> **Note**: This repo uses `master` as the default branch (not `main`)
+
 ## Summary
 
 Complete API refactoring with 19 commits implementing professional architecture, security, observability, and documentation.

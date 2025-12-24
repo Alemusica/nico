@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2024-12-24
+
+### Added - Sprint 1.2: API Refactoring
+
+#### 🏗️ Architecture Improvements
+- **Modular Routers**: Extracted 7 routers from monolithic main.py (main.py: 2531 → 638 lines, -75%)
+- **API Versioning**: All endpoints now under `/api/v1` prefix with semantic versioning support
+- **Configuration Management**: Pydantic Settings with 80+ configurable parameters
+- **Error Handling**: 17 domain-specific custom exceptions with HTTP status mapping
+
+#### 🔧 Production Features
+- **Structured Logging**: structlog with JSON output + RequestIDMiddleware
+- **Security**: 8 security headers (CSP, HSTS, X-Frame-Options, etc.) + input validation
+- **Performance**: Caching utilities (@cached, SimpleCache), batch processing, concurrency control
+- **Rate Limiting**: slowapi integration (100 req/min default, per-IP tracking)
+
+#### 🧪 Testing Infrastructure
+- **pytest Framework**: 41 tests written (14 passing, 27 need endpoint fixes)
+- **Coverage Tools**: pytest-cov integration (40% measured, infrastructure ready for 80%+)
+- **CI/CD Pipeline**: GitHub Actions with 4 jobs (lint, test, security, docker)
+
+#### 📚 Documentation
+- docs/API_USAGE.md (574 lines, 5 workflows, 30+ examples)
+- docs/API_VERSIONING.md (versioning strategy and deprecation policy)
+- SPRINT_1.2_SUMMARY.md, MERGE_READY.md, FINAL_STATUS_REPORT.md
+
+### Changed
+- **api/main.py**: Reduced from 2531 to 638 lines (-75% code reduction)
+- **Python Version**: Downgraded to 3.12.6 (networkx 3.6 compatibility fix)
+- **Test Configuration**: Fixed pytest.ini, added tests/__init__.py for import resolution
+
+### Fixed
+- Python 3.14.1 incompatibility with networkx 3.6 (AttributeError in dataclasses)
+- pytest import resolution issues (missing tests/__init__.py)
+- Test endpoints updated for /api/v1 prefix
+
+### Breaking Changes
+⚠️ **API Endpoints Migration Required**:
+- All endpoints now require `/api/v1` prefix
+- Example: `/health` → `/api/v1/health`
+- Migration guide: See MERGE_READY.md
+
+---
+
 ## [1.7.0] - 2024-12-24
 
 ### Added
