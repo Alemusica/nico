@@ -61,6 +61,12 @@ interface AppState {
   pendingInvestigationResult: any | null
   setPendingInvestigationResult: (result: any | null) => void
   
+  // Navigation
+  activeView: 'graph' | 'data' | 'knowledge' | 'chat' | 'historical'
+  setActiveView: (view: 'graph' | 'data' | 'knowledge' | 'chat' | 'historical') => void
+  knowledgeSearchQuery: string | null
+  setKnowledgeSearchQuery: (query: string | null) => void
+  
   // UI State
   sidebarCollapsed: boolean
   toggleSidebar: () => void
@@ -104,6 +110,12 @@ export const useStore = create<AppState>((set) => ({
   // Investigation
   pendingInvestigationResult: null,
   setPendingInvestigationResult: (result) => set({ pendingInvestigationResult: result }),
+  
+  // Navigation
+  activeView: 'graph',
+  setActiveView: (view) => set({ activeView: view }),
+  knowledgeSearchQuery: null,
+  setKnowledgeSearchQuery: (query) => set({ knowledgeSearchQuery: query }),
   
   // UI
   sidebarCollapsed: false,

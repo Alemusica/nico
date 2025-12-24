@@ -42,11 +42,23 @@ const tabs = [
 ] as const
 
 export function KnowledgeSearch() {
-  const { backend } = useStore()
+  const { backend, knowledgeSearchQuery, setKnowledgeSearchQuery } = useStore()
   const [activeTab, setActiveTab] = useState<TabType>('papers')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<any>(null)
   const [showCompare, setShowCompare] = useState(false)
+  
+  // Initialize search query from store if available
+  useState(() => {
+    if (knowledgeSearchQuery) {
+      setSearchQuery(knowledgeSearchQuery)
+      setActiveTab('papers')
+      // Clear after use
+      setKnowledgeSearchQuery(null)
+      // Trigger search
+      setTimeout(() => handleSearch(), 100)
+    }
+  })
 
   // Fetch stats
   const { data: stats } = useQuery({

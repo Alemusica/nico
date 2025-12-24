@@ -212,7 +212,10 @@ function BriefingCard({
 }
 
 export function ChatPanel({ expanded = false }: ChatPanelProps) {
-  const { messages, addMessage, clearMessages, causalGraph, selectedLink, setPendingInvestigationResult } = useStore()
+  const { 
+    messages, addMessage, clearMessages, causalGraph, selectedLink, 
+    setPendingInvestigationResult, setActiveView, setKnowledgeSearchQuery 
+  } = useStore()
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isInvestigating, setIsInvestigating] = useState(false)
@@ -434,22 +437,29 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
                     onRunAnalysis={() => {
                       const result = message.metadata.investigation_result
                       setPendingInvestigationResult(result)
-                      addMessage('assistant', '🔬 Starting causal analysis on investigation data...\n\n' +
-                        'Please navigate to the **Graph** tab to configure and run PCMCI analysis on the collected data.')
+                      setActiveView('graph')
+                      addMessage('assistant', '🔬 Navigated to Graph view for causal analysis!\n\n' +
+                        `Ready to analyze ${result.data_sources_count} data sources from ${result.location}.\n` +
+                        'Configure PCMCI parameters and run discovery.')
                     }}
                     onViewData={() => {
                       const result = message.metadata.investigation_result
-                      addMessage('assistant', '📊 Investigation data has been cached and is available in the Data Explorer.\n\n' +
+                      setActiveView('knowledge')
+                      addMessage('assistant', '📊 Navigated to Data Explorer!\n\n' +
                         `Location: **${result.location}**\n` +
                         `Period: **${result.time_range}**\n` +
-                        `Sources: **${result.data_sources_count}** datasets\n\n` +
-                        'Navigate to **Knowledge → Data Explorer** to explore the cached data.')
+                        `Sources: **${result.data_sources_count}** cached datasets\n\n` +
+                        'Use the cache entries to explore your investigation data.')
                     }}
                     onViewPapers={() => {
                       const result = message.metadata.investigation_result
-                      addMessage('assistant', `📚 Found **${result.papers_found} scientific papers** related to ${result.event_type} events in ${result.location}.\n\n` +
-                        'Papers have been stored in the knowledge base.\n' +
-                        'Navigate to **Knowledge → Papers** tab to search and explore them.')
+                      const query = `${result.event_type} ${result.location}`
+                      setKnowledgeSearchQuery(query)
+                      setActiveView('knowledge')
+                      addMessage('assistant', `📚 Navigated to Knowledge Base with **${result.papers_found} papers**!\n\n` +
+                        `Search query: "${query}"\n` +
+                        `Event: ${result.event_type} in ${result.location}\n\n` +
+                        'Switch to Papers tab to explore scientific literature.')
                     }}
                   />
                 ) : (

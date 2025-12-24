@@ -57,8 +57,19 @@ function getStrengthClass(strength: number): string {
 export function CausalGraphView() {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const { setSelectedNode, setSelectedLink } = useStore()
+  const { setSelectedNode, setSelectedLink, pendingInvestigationResult } = useStore()
   const [hoveredLink, setHoveredLink] = useState<Link | null>(null)
+  const [showInvestigationHint, setShowInvestigationHint] = useState(false)
+  
+  // Check if there's a pending investigation result
+  useEffect(() => {
+    if (pendingInvestigationResult) {
+      setShowInvestigationHint(true)
+      // Auto-hide after 10 seconds
+      const timer = setTimeout(() => setShowInvestigationHint(false), 10000)
+      return () => clearTimeout(timer)
+    }
+  }, [pendingInvestigationResult])
 
   useEffect(() => {
     if (!svgRef.current || !containerRef.current) return
@@ -206,6 +217,31 @@ export function CausalGraphView() {
 
   return (
     <div className="card flex flex-col h-[600px]">
+      {/* Investigation Hint Banner */}
+      {showInvestigationHint && pendingInvestigationResult && (
+        <div className="bg-gradient-to-r from-blue-600 to-emerald-600 text-white px-phi-lg py-phi-md">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="font-semibold text-phi-base flex items-center gap-phi-sm">
+                <span className="animate-pulse">🎯</span>
+                Ready to analyze {pendingInvestigationResult.location} {pendingInvestigationResult.event_type}
+              </div>
+              <p className="text-phi-sm text-blue-100 mt-1">
+                {pendingInvestigationResult.data_sources_count} data sources cached • 
+                Suggested lag: {pendingInvestigationResult.event_type === 'flood' ? '14 days' : 
+                              pendingInvestigationResult.event_type === 'drought' ? '90 days' : '7 days'}
+              </p>
+            </div>
+            <button 
+              onClick={() => setShowInvestigationHint(false)}
+              className="text-white/80 hover:text-white transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="card-header flex items-center justify-between">
         <div>

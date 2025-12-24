@@ -26,8 +26,7 @@ const queryClient = new QueryClient({
 type ViewType = 'graph' | 'data' | 'knowledge' | 'chat' | 'historical'
 
 export default function App() {
-  const [activeView, setActiveView] = useState<ViewType>('graph')
-  const { backend, setBackend } = useStore()
+  const { backend, setBackend, activeView, setActiveView } = useStore()
 
   return (
     <QueryClientProvider client={queryClient}>
