@@ -20,7 +20,7 @@ def sample_csv():
 def test_list_datasets_empty(test_client, mock_data_service):
     """Test listing datasets when none exist."""
     with patch('api.routers.data_router.get_data_service', return_value=mock_data_service):
-        response = test_client.get("/data/files")
+        response = test_client.get("/api/v1/data/files")
         
         assert response.status_code == 200
         data = response.json()
@@ -35,7 +35,7 @@ def test_list_datasets_with_data(test_client, mock_data_service):
     ])
     
     with patch('api.routers.data_router.get_data_service', return_value=mock_data_service):
-        response = test_client.get("/data/files")
+        response = test_client.get("/api/v1/data/files")
         
         assert response.status_code == 200
         data = response.json()
@@ -48,7 +48,7 @@ def test_get_dataset_not_found(test_client, mock_data_service):
     mock_data_service.get_metadata = Mock(return_value=None)
     
     with patch('api.routers.data_router.get_data_service', return_value=mock_data_service):
-        response = test_client.get("/data/nonexistent.csv")
+        response = test_client.get("/api/v1/data/nonexistent.csv")
         
         assert response.status_code == 404
 
@@ -68,7 +68,7 @@ def test_get_dataset_success(test_client, mock_data_service):
     mock_data_service.get_metadata = Mock(return_value=mock_metadata)
     
     with patch('api.routers.data_router.get_data_service', return_value=mock_data_service):
-        response = test_client.get("/data/test.csv")
+        response = test_client.get("/api/v1/data/test.csv")
         
         assert response.status_code == 200
         data = response.json()
@@ -80,7 +80,7 @@ def test_upload_csv_file(test_client, sample_csv):
     """Test uploading CSV file."""
     files = {"file": ("test.csv", sample_csv, "text/csv")}
     
-    response = test_client.post("/data/upload", files=files)
+    response = test_client.post("/api/v1/data/upload", files=files)
     
     # Should process successfully
     assert response.status_code in [200, 500]  # May fail if data service not mocked properly
@@ -88,7 +88,7 @@ def test_upload_csv_file(test_client, sample_csv):
 
 def test_data_sources_endpoint(test_client):
     """Test getting available data sources."""
-    response = test_client.get("/data/sources")
+    response = test_client.get("/api/v1/data/sources")
     
     assert response.status_code == 200
     data = response.json()
@@ -100,7 +100,7 @@ def test_data_sources_endpoint(test_client):
 
 def test_resolutions_endpoint(test_client):
     """Test getting available resolutions."""
-    response = test_client.get("/data/resolutions")
+    response = test_client.get("/api/v1/data/resolutions")
     
     assert response.status_code == 200
     data = response.json()
@@ -110,7 +110,7 @@ def test_resolutions_endpoint(test_client):
 
 def test_cache_stats_endpoint(test_client):
     """Test cache statistics endpoint."""
-    response = test_client.get("/data/cache/stats")
+    response = test_client.get("/api/v1/data/cache/stats")
     
     assert response.status_code in [200, 500]  # May fail if cache not available
     if response.status_code == 200:

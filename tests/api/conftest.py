@@ -9,12 +9,15 @@ from fastapi.testclient import TestClient
 from unittest.mock import Mock, AsyncMock
 import sys
 from pathlib import Path
-import os
 
-# Add project root to path BEFORE any imports
-project_root = Path(__file__).parent.parent.parent
+# Ensure project root is in path for imports
+project_root = Path(__file__).parent.parent.parent.absolute()
+tests_dir = str(project_root / "tests")
+if tests_dir in sys.path:
+    sys.path.remove(tests_dir)
+if str(project_root) in sys.path:
+    sys.path.remove(str(project_root))
 sys.path.insert(0, str(project_root))
-os.chdir(str(project_root))  # Ensure we're in project root
 
 
 @pytest.fixture
@@ -57,29 +60,8 @@ def mock_knowledge_service():
 @pytest.fixture
 def test_client():
     """FastAPI test client."""
-    # Import app lazily in fixture
-    import sys
-    import os
-    from pathlib import Path
-    
-    # Get project root from conftest location
-    project_root = Path(__file__).parent.parent.parent.absolute()
-    
-    # Change to project root directory
-    old_cwd = Path.cwd()
-    os.chdir(project_root)
-    
-    # Ensure project root is in path
-    if str(project_root) not in sys.path:
-        sys.path.insert(0, str(project_root))
-    
-    try:
-        from api.main import app
-        client = TestClient(app)
-        yield client
-    finally:
-        # Restore original directory
-        os.chdir(old_cwd)
+    from api.main import app
+    return TestClient(app)
 
 
 @pytest.fixture

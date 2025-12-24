@@ -11,8 +11,16 @@ from pathlib import Path
 
 # CRITICAL: Add project root to path BEFORE pytest collects tests
 project_root = Path(__file__).parent.parent.absolute()
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+
+# Remove tests directory from sys.path if present (pytest adds it)
+tests_dir = str(project_root / "tests")
+if tests_dir in sys.path:
+    sys.path.remove(tests_dir)
+
+# Ensure project root is at position 0
+if str(project_root) in sys.path:
+    sys.path.remove(str(project_root))
+sys.path.insert(0, str(project_root))
 
 # Also ensure we're in project root
 os.chdir(project_root)

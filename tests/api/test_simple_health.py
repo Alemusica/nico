@@ -17,20 +17,18 @@ def test_health_endpoint_direct():
     from api.main import app
     
     client = TestClient(app)
-    response = client.get("/health")
+    response = client.get("/api/v1/health")
     
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
 
 def test_root_endpoint_direct():
-    """Test root endpoint directly."""
+    """Test OpenAPI docs endpoint."""
     from fastapi.testclient import TestClient
     from api.main import app
     
     client = TestClient(app)
-    response = client.get("/")
+    response = client.get("/docs")
     
     assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"

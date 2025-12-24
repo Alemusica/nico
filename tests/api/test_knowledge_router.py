@@ -14,7 +14,7 @@ def test_list_papers_empty(test_client, mock_knowledge_service):
     mock_knowledge_service.list_papers = AsyncMock(return_value=[])
     
     with patch('api.routers.knowledge_router.create_knowledge_service', return_value=mock_knowledge_service):
-        response = test_client.get("/knowledge/papers")
+        response = test_client.get("/api/v1/knowledge/papers")
         
         assert response.status_code == 200
         data = response.json()
@@ -46,7 +46,7 @@ def test_get_paper_not_found(test_client, mock_knowledge_service):
     mock_knowledge_service.get_paper = AsyncMock(return_value=None)
     
     with patch('api.routers.knowledge_router.create_knowledge_service', return_value=mock_knowledge_service):
-        response = test_client.get("/knowledge/papers/nonexistent-id")
+        response = test_client.get("/api/v1/knowledge/papers/nonexistent-id")
         
         assert response.status_code == 404
 
@@ -56,7 +56,7 @@ def test_search_papers(test_client, mock_knowledge_service):
     mock_knowledge_service.search_papers = AsyncMock(return_value=[])
     
     with patch('api.routers.knowledge_router.create_knowledge_service', return_value=mock_knowledge_service):
-        response = test_client.get("/knowledge/papers/search?query=arctic")
+        response = test_client.get("/api/v1/knowledge/papers/search?query=arctic")
         
         assert response.status_code == 200
         data = response.json()
@@ -68,7 +68,7 @@ def test_list_events_empty(test_client, mock_knowledge_service):
     mock_knowledge_service.list_events = AsyncMock(return_value=[])
     
     with patch('api.routers.knowledge_router.create_knowledge_service', return_value=mock_knowledge_service):
-        response = test_client.get("/knowledge/events")
+        response = test_client.get("/api/v1/knowledge/events")
         
         assert response.status_code == 200
         data = response.json()
@@ -101,7 +101,7 @@ def test_list_patterns_empty(test_client, mock_knowledge_service):
     mock_knowledge_service.list_patterns = AsyncMock(return_value=[])
     
     with patch('api.routers.knowledge_router.create_knowledge_service', return_value=mock_knowledge_service):
-        response = test_client.get("/knowledge/patterns")
+        response = test_client.get("/api/v1/knowledge/patterns")
         
         assert response.status_code == 200
         data = response.json()

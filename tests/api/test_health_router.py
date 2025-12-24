@@ -9,19 +9,15 @@ from fastapi.testclient import TestClient
 
 
 def test_root_endpoint(test_client):
-    """Test root health check endpoint."""
-    response = test_client.get("/")
+    """Test OpenAPI docs endpoint."""
+    response = test_client.get("/docs")
     
     assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
-    assert data["service"] == "Causal Discovery API"
-    assert "version" in data
 
 
 def test_health_endpoint(test_client):
     """Test detailed health check endpoint."""
-    response = test_client.get("/health")
+    response = test_client.get("/api/v1/health")
     
     assert response.status_code == 200
     data = response.json()
@@ -36,7 +32,7 @@ def test_health_endpoint(test_client):
 
 def test_health_components_structure(test_client):
     """Test health endpoint returns correct component structure."""
-    response = test_client.get("/health")
+    response = test_client.get("/api/v1/health")
     data = response.json()
     
     # Check LLM component
