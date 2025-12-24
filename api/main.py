@@ -12,7 +12,7 @@ Includes:
 - Hybrid scoring (physics + chain + experience)
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket, Body
+from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -31,6 +31,14 @@ from api.models import (
     InvestigateRequest,
     InvestigateResponse,
 )
+
+# Import exceptions
+from api.exceptions import CausalDiscoveryError, map_to_http_exception
+
+# Import logging and middleware
+from api.logging_config import configure_logging, get_logger
+from api.middleware import RequestIDMiddleware
+from api.config import get_settings
 
 from api.services.llm_service import get_llm_service, OllamaLLMService
 from api.services.causal_service import (
@@ -73,6 +81,22 @@ from api.routers.investigation_router import router as investigation_router
 from api.routers.knowledge_router import router as knowledge_router
 from api.routers.pipeline_router import router as pipeline_router
 
+# Configure logging
+settings = get_settings()
+configure_logging(
+    log_level=settings.log_level,
+    log_format=settings.log_format,
+    log_file=settings.log_file
+)
+logger = get_logger("api.main")
+
+logger.info(
+    "application_starting",
+    app_name=settings.app_name,
+    version=settings.app_version,
+    debug=settings.debug
+)
+
 # Initialize FastAPI
 app = FastAPI(
     title="🔬 Causal Discovery API",
@@ -98,15 +122,44 @@ app.include_router(investigation_router)
 app.include_router(knowledge_router)
 app.include_router(pipeline_router)
 
+# Add Request ID middleware
+app.add_middleware(RequestIDMiddleware)
+
 # CORS for React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_origins,
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=settings.cors_allow_methods,
+    allow_headers=settings.cors_allow_headers,
+)
+
+logger.info("middleware_configured", cors_origins=settings.cors_origins)
 
 
+# ==========================
+# GLOBAL EXCEPTION HANDLERS
+# ==========================
+
+@app.exception_handler(CausalDiscoveryError)
+async def causal_discovery_exception_handler(request: Request, exc: CausalDiscoveryError):
+    """Handle all domain-specific exceptions."""
+    http_exc = map_to_http_exception(exc)
+    return JSONResponse(
+        status_code=http_exc.status_code,
+        content=http_exc.detail
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle unexpected exceptions."""
+    return JSONResponse(
+        status_code=500,
+        content={
+            "message": "Internal server error",
+            "details": {"error": str(exc), "type": type(exc).__name__}
+        }
     )
 # ============== INVESTIGATION AGENT ==============
 
