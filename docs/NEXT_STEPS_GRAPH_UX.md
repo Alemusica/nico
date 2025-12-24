@@ -308,6 +308,12 @@ Response:
 11. `feat: Heatmap correlazioni spaziali su mappa`
 12. `feat: Play/pause animation per evoluzione temporale`
 
+### Priority 5 - Data Preview & Simulation
+13. `feat: Data preview runner con sampling intelligente`
+14. `feat: Mixed-source data fusion engine (temporal + spatial)`
+15. `feat: Preview visualization dashboard (map + time series + stats)`
+16. `research: Valutare alternative a EarthKit (Pangeo, GEE, Planetary Computer)`
+
 ---
 
 ## 🔗 Collegamenti Interni
