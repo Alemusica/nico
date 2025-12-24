@@ -1,6 +1,7 @@
 /**
  * Knowledge Search Component - Swiss Design
  * Search papers, events, patterns, climate indices
+ * Now includes Data Explorer for direct data downloads
  */
 
 import { useState } from 'react'
@@ -15,7 +16,8 @@ import {
   Plus,
   Filter,
   Database,
-  Server
+  Server,
+  Download
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useStore } from '../store'
@@ -27,14 +29,16 @@ import {
   getKnowledgeStats,
   compareBackends
 } from '../api'
+import { DataExplorer } from './DataExplorer'
 
-type TabType = 'papers' | 'patterns' | 'events' | 'climate'
+type TabType = 'papers' | 'patterns' | 'events' | 'climate' | 'explorer'
 
 const tabs = [
   { id: 'papers', label: 'Papers', icon: BookOpen },
   { id: 'patterns', label: 'Patterns', icon: Activity },
   { id: 'events', label: 'Events', icon: Calendar },
   { id: 'climate', label: 'Climate', icon: Thermometer },
+  { id: 'explorer', label: 'Data Explorer', icon: Download },
 ] as const
 
 export function KnowledgeSearch() {
@@ -250,7 +254,9 @@ export function KnowledgeSearch() {
 
         {/* Results */}
         <div className="p-phi-lg min-h-[400px]">
-          {activeTab === 'climate' && climateData?.indices ? (
+          {activeTab === 'explorer' ? (
+            <DataExplorer />
+          ) : activeTab === 'climate' && climateData?.indices ? (
             <ClimateIndicesList indices={climateData.indices} />
           ) : searchResults ? (
             <SearchResults 

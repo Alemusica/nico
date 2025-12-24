@@ -412,9 +412,11 @@ class InvestigationAgent:
         self,
         llm_client: Any = None,  # LLM service for query understanding
         db_client: Any = None,   # Database client for storage
+        knowledge_service: Any = None,  # KnowledgeService for storing papers
     ):
         self.llm_client = llm_client
         self.db_client = db_client
+        self.knowledge_service = knowledge_service
         
         self.query_parser = QueryParser()
         
@@ -677,9 +679,15 @@ class InvestigationAgent:
         collect_news: bool = False,
         run_correlation: bool = True,
         expand_search: bool = True,
+        temporal_resolution: str = "daily",
+        spatial_resolution: str = "0.25",
     ):
         """
         Run investigation with streaming progress updates.
+        
+        Args:
+            temporal_resolution: 'hourly', '6-hourly', 'daily'
+            spatial_resolution: '0.1', '0.25', '0.5' (degrees)
         
         Yields progress dictionaries with:
         - step: int (1-6)
@@ -689,7 +697,11 @@ class InvestigationAgent:
         - data: optional dict with results
         - progress: optional 0-100 percentage
         """
-        yield {"step": 0, "status": "started", "message": f"🔍 Starting investigation: {query}"}
+        # Store resolution config for data collection methods
+        self._temporal_resolution = temporal_resolution
+        self._spatial_resolution = float(spatial_resolution)
+        
+        yield {"step": 0, "status": "started", "message": f"🔍 Starting investigation: {query}", "data": {"resolution": {"temporal": temporal_resolution, "spatial": spatial_resolution}}}
         
         # Initialize result
         result = InvestigationResult(query=query, event_context=EventContext(location_name=""))
@@ -1003,7 +1015,7 @@ class InvestigationAgent:
         ctx: EventContext,
         result: InvestigationResult,
     ):
-        """Collect scientific papers."""
+        """Collect scientific papers and save to knowledge base."""
         if not self.literature_scraper:
             return
         
@@ -1020,6 +1032,15 @@ class InvestigationAgent:
                 result.papers.append(paper.to_dict())
             
             print(f"      ✅ Found {len(papers)} papers")
+            
+            # Save papers to knowledge base
+            if self.knowledge_service and papers:
+                try:
+                    print(f"      💾 Saving {len(papers)} papers to knowledge base...")
+                    saved_count = await self.knowledge_service.bulk_add_papers(papers)
+                    print(f"      ✅ Saved {saved_count} papers to vector DB")
+                except Exception as e:
+                    print(f"      ⚠️ Paper storage error: {e}")
         except Exception as e:
             print(f"      ⚠️ Literature search error: {e}")
     

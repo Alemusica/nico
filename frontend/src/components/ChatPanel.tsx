@@ -11,6 +11,7 @@ import { useStore } from '../store'
 import { chat, investigateStreaming, isInvestigationQuery, createInvestigationBriefing } from '../api'
 import type { InvestigateProgress, InvestigateResponse, InvestigationBriefingData } from '../api'
 import { InvestigationProgress } from './InvestigationProgress'
+import { InvestigationResult } from './InvestigationResult'
 import type { ProgressStep } from './InvestigationProgress'
 
 interface ChatPanelProps {
@@ -24,7 +25,24 @@ const suggestions = [
   'Find precursors for Venice acqua alta',
 ]
 
-// Briefing Card Component
+const TEMPORAL_OPTIONS = [
+  { value: 'hourly', label: 'Hourly', desc: 'High detail, large download' },
+  { value: '6-hourly', label: '6-hourly', desc: 'Good balance' },
+  { value: 'daily', label: 'Daily', desc: 'Fast download' },
+]
+
+const SPATIAL_OPTIONS = [
+  { value: '0.1', label: '0.1°', desc: '~11 km, high detail' },
+  { value: '0.25', label: '0.25°', desc: '~25 km, default' },
+  { value: '0.5', label: '0.5°', desc: '~50 km, fast' },
+]
+
+export interface ResolutionConfig {
+  temporal: string
+  spatial: string
+}
+
+// Briefing Card Component with Resolution Picker
 function BriefingCard({ 
   briefing, 
   onConfirm, 
@@ -32,10 +50,16 @@ function BriefingCard({
   isLoading 
 }: { 
   briefing: InvestigationBriefingData
-  onConfirm: () => void
+  onConfirm: (resolution?: ResolutionConfig) => void
   onCancel: () => void
   isLoading: boolean
 }) {
+  const [showOptions, setShowOptions] = useState(false)
+  const [resolution, setResolution] = useState<ResolutionConfig>({ 
+    temporal: 'daily', 
+    spatial: '0.25' 
+  })
+  
   const formatTime = (sec: number) => sec < 60 ? `${Math.round(sec)}s` : `${Math.floor(sec/60)}m ${Math.round(sec%60)}s`
   
   return (
@@ -95,6 +119,58 @@ function BriefingCard({
           </div>
         </div>
         
+        {/* Resolution Picker (collapsible) */}
+        <div className="border-t pt-3">
+          <button 
+            onClick={() => setShowOptions(!showOptions)}
+            className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800"
+          >
+            ⚙️ {showOptions ? 'Hide' : 'Configure'} Resolution
+          </button>
+          
+          {showOptions && (
+            <div className="mt-2 grid grid-cols-2 gap-3 p-3 bg-white rounded-lg border border-slate-200">
+              {/* Temporal */}
+              <div>
+                <label className="text-xs text-slate-500 font-medium mb-1 block">
+                  ⏱️ Temporal
+                </label>
+                <select
+                  value={resolution.temporal}
+                  onChange={(e) => setResolution({ ...resolution, temporal: e.target.value })}
+                  className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:ring-2 focus:ring-blue-500"
+                >
+                  {TEMPORAL_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {TEMPORAL_OPTIONS.find(o => o.value === resolution.temporal)?.desc}
+                </p>
+              </div>
+              
+              {/* Spatial */}
+              <div>
+                <label className="text-xs text-slate-500 font-medium mb-1 block">
+                  🗺️ Spatial
+                </label>
+                <select
+                  value={resolution.spatial}
+                  onChange={(e) => setResolution({ ...resolution, spatial: e.target.value })}
+                  className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:ring-2 focus:ring-blue-500"
+                >
+                  {SPATIAL_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {SPATIAL_OPTIONS.find(o => o.value === resolution.spatial)?.desc}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+        
         {/* Total */}
         <div className="bg-blue-100 rounded-lg p-2 text-center">
           <p className="text-sm font-semibold text-blue-800">
@@ -113,7 +189,7 @@ function BriefingCard({
             Cancel
           </button>
           <button 
-            onClick={onConfirm}
+            onClick={() => onConfirm(resolution)}
             disabled={isLoading}
             className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
           >
@@ -136,7 +212,7 @@ function BriefingCard({
 }
 
 export function ChatPanel({ expanded = false }: ChatPanelProps) {
-  const { messages, addMessage, clearMessages, causalGraph, selectedLink } = useStore()
+  const { messages, addMessage, clearMessages, causalGraph, selectedLink, setPendingInvestigationResult } = useStore()
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isInvestigating, setIsInvestigating] = useState(false)
@@ -163,13 +239,20 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
     }
   }, [])
 
-  const handleInvestigation = useCallback((query: string) => {
+  const handleInvestigation = useCallback((query: string, resolution?: ResolutionConfig) => {
     setIsInvestigating(true)
     setProgressSteps([])
     setPendingBriefing(null)
     
     const cleanup = investigateStreaming(
-      { query },
+      { 
+        query,
+        // Pass resolution config if provided
+        ...(resolution && {
+          temporal_resolution: resolution.temporal,
+          spatial_resolution: resolution.spatial,
+        })
+      },
       // On progress
       (progress: InvestigateProgress) => {
         setProgressSteps(prev => [...prev, progress as ProgressStep])
@@ -178,31 +261,12 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
       (result: InvestigateResponse) => {
         setIsInvestigating(false)
         
-        // Format investigation response
-        let response = '🕵️ **Investigation Complete**\n\n'
-        response += '📍 **Location**: ' + (result.location || 'Unknown') + '\n'
-        response += '📅 **Period**: ' + (result.time_range || 'Unknown') + '\n'
-        response += '🎯 **Event Type**: ' + (result.event_type || 'Unknown') + '\n'
-        response += '📊 **Data Sources**: ' + (result.data_sources_count || 0) + '\n'
-        response += '📚 **Papers Found**: ' + (result.papers_found || 0) + '\n'
-        response += '🎯 **Confidence**: ' + ((result.confidence || 0) * 100).toFixed(0) + '%\n\n'
+        // Save investigation result as message with metadata
+        addMessage('assistant', '🕵️ Investigation Complete', {
+          type: 'investigation_result',
+          investigation_result: result
+        })
         
-        if (result.key_findings && result.key_findings.length > 0) {
-          response += '### 🔍 Key Findings:\n'
-          result.key_findings.forEach((finding, i) => {
-            response += (i + 1) + '. ' + finding + '\n'
-          })
-          response += '\n'
-        }
-        
-        if (result.recommendations && result.recommendations.length > 0) {
-          response += '### 💡 Recommendations:\n'
-          result.recommendations.forEach((rec, i) => {
-            response += (i + 1) + '. ' + rec + '\n'
-          })
-        }
-        
-        addMessage('assistant', response)
         setProgressSteps([])
         setIsLoading(false)
       },
@@ -238,11 +302,11 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
     setIsLoading(false)
   }
 
-  // Confirm briefing and start investigation
-  const confirmBriefing = () => {
+  // Confirm briefing and start investigation with resolution
+  const confirmBriefing = (resolution?: ResolutionConfig) => {
     if (pendingQuery) {
       setIsLoading(true)
-      handleInvestigation(pendingQuery)
+      handleInvestigation(pendingQuery, resolution)
     }
   }
 
@@ -363,10 +427,39 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
                   message.role === 'user' ? 'chat-message-user' : 'chat-message-assistant'
                 )}
               >
-                <p className="text-phi-sm whitespace-pre-wrap">{message.content}</p>
-                <span className="text-phi-xs opacity-60 mt-1 block">
-                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+                {/* Render Investigation Result if metadata present */}
+                {message.metadata?.type === 'investigation_result' ? (
+                  <InvestigationResult 
+                    result={message.metadata.investigation_result}
+                    onRunAnalysis={() => {
+                      const result = message.metadata.investigation_result
+                      setPendingInvestigationResult(result)
+                      addMessage('assistant', '🔬 Starting causal analysis on investigation data...\n\n' +
+                        'Please navigate to the **Graph** tab to configure and run PCMCI analysis on the collected data.')
+                    }}
+                    onViewData={() => {
+                      const result = message.metadata.investigation_result
+                      addMessage('assistant', '📊 Investigation data has been cached and is available in the Data Explorer.\n\n' +
+                        `Location: **${result.location}**\n` +
+                        `Period: **${result.time_range}**\n` +
+                        `Sources: **${result.data_sources_count}** datasets\n\n` +
+                        'Navigate to **Knowledge → Data Explorer** to explore the cached data.')
+                    }}
+                    onViewPapers={() => {
+                      const result = message.metadata.investigation_result
+                      addMessage('assistant', `📚 Found **${result.papers_found} scientific papers** related to ${result.event_type} events in ${result.location}.\n\n` +
+                        'Papers have been stored in the knowledge base.\n' +
+                        'Navigate to **Knowledge → Papers** tab to search and explore them.')
+                    }}
+                  />
+                ) : (
+                  <>
+                    <p className="text-phi-sm whitespace-pre-wrap">{message.content}</p>
+                    <span className="text-phi-xs opacity-60 mt-1 block">
+                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </>
+                )}
               </div>
             ))}
             

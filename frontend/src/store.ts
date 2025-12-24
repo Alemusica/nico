@@ -29,6 +29,10 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  metadata?: {
+    type?: 'investigation_result'
+    investigation_result?: any
+  }
 }
 
 interface AppState {
@@ -50,8 +54,12 @@ interface AppState {
   
   // Chat
   messages: Message[]
-  addMessage: (role: 'user' | 'assistant', content: string) => void
+  addMessage: (role: 'user' | 'assistant', content: string, metadata?: any) => void
   clearMessages: () => void
+  
+  // Investigation
+  pendingInvestigationResult: any | null
+  setPendingInvestigationResult: (result: any | null) => void
   
   // UI State
   sidebarCollapsed: boolean
@@ -79,7 +87,7 @@ export const useStore = create<AppState>((set) => ({
   
   // Chat
   messages: [],
-  addMessage: (role, content) => set((state) => ({
+  addMessage: (role, content, metadata) => set((state) => ({
     messages: [
       ...state.messages,
       {
@@ -87,10 +95,15 @@ export const useStore = create<AppState>((set) => ({
         role,
         content,
         timestamp: new Date(),
+        metadata,
       },
     ],
   })),
   clearMessages: () => set({ messages: [] }),
+  
+  // Investigation
+  pendingInvestigationResult: null,
+  setPendingInvestigationResult: (result) => set({ pendingInvestigationResult: result }),
   
   // UI
   sidebarCollapsed: false,

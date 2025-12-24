@@ -785,6 +785,117 @@ async def _run_download(job_id: str, briefing: InvestigationBriefing):
         job["error"] = str(e)
 
 
+class DirectDownloadRequest(BaseModel):
+    """Request for direct data download from Data Explorer."""
+    source: str  # cmems, era5, climate_indices
+    variables: List[str]
+    lat_min: float
+    lat_max: float
+    lon_min: float
+    lon_max: float
+    start_date: str
+    end_date: str
+    temporal_resolution: str = "daily"
+    spatial_resolution: str = "0.25"
+
+
+@app.post("/data/download")
+async def direct_download(request: DirectDownloadRequest):
+    """
+    Direct data download from Data Explorer.
+    
+    Downloads data from specified source with given parameters.
+    """
+    if not DATA_MANAGER_AVAILABLE:
+        raise HTTPException(503, "Data Manager not available")
+    
+    manager = get_data_manager()
+    
+    try:
+        from src.data_manager.models import DataRequest
+        
+        lat_range = (request.lat_min, request.lat_max)
+        lon_range = (request.lon_min, request.lon_max)
+        time_range = (request.start_date, request.end_date)
+        
+        # Create resolution config
+        temporal = TemporalResolution(request.temporal_resolution)
+        spatial = SpatialResolution(request.spatial_resolution)
+        resolution = ResolutionConfig(temporal=temporal, spatial=spatial)
+        
+        # Estimate size and time
+        size_mb, time_sec = manager.estimate_request(
+            request.source,
+            request.variables,
+            lat_range,
+            lon_range,
+            time_range,
+            resolution,
+        )
+        
+        # Create data request
+        data_request = DataRequest(
+            source=request.source,
+            variables=request.variables,
+            lat_range=lat_range,
+            lon_range=lon_range,
+            time_range=time_range,
+            resolution=resolution,
+            description=f"Direct download from {request.source}",
+            estimated_size_mb=size_mb,
+            estimated_time_sec=time_sec,
+        )
+        
+        # Download using internal method
+        data = await manager._download_source(data_request)
+        
+        if data is None:
+            return {
+                "status": "error",
+                "message": f"No data available from {request.source}",
+            }
+        
+        # Cache the data
+        manager.cache.add(
+            source=request.source,
+            variables=request.variables,
+            lat_range=lat_range,
+            lon_range=lon_range,
+            time_range=time_range,
+            resolution_temporal=temporal.value,
+            resolution_spatial=spatial.value,
+            data=data,
+        )
+        
+        # Return success with metadata
+        if hasattr(data, 'dims'):  # xarray Dataset/DataArray
+            return {
+                "status": "success",
+                "message": f"Downloaded {request.source} data ({len(request.variables)} variables)",
+                "shape": {k: int(v) for k, v in data.dims.items()},
+                "variables": list(data.data_vars) if hasattr(data, 'data_vars') else [],
+                "size_mb": round(size_mb, 2),
+                "cached": True,
+            }
+        elif isinstance(data, dict):  # Climate indices
+            return {
+                "status": "success",
+                "message": f"Downloaded climate indices ({len(request.variables)} indices)",
+                "indices": list(data.keys()),
+                "cached": True,
+            }
+        else:
+            return {
+                "status": "success",
+                "message": f"Downloaded {request.source} data",
+                "cached": True,
+            }
+            
+    except Exception as e:
+        import traceback
+        raise HTTPException(500, f"Download failed: {str(e)}\n{traceback.format_exc()}")
+
+
 @app.get("/data/download/{job_id}/status")
 async def get_download_status(job_id: str):
     """Get status of a download job."""
@@ -823,6 +934,70 @@ async def clear_cache(source: Optional[str] = None, older_than_days: Optional[in
     manager = get_data_manager()
     manager.clear_cache(source, older_than_days)
     return {"status": "cleared"}
+
+
+@app.post("/data/cache/load_as_dataset")
+async def load_cached_data_as_dataset(
+    entry_id: str,
+    dataset_name: Optional[str] = None,
+):
+    """
+    Load cached data as a dataset for causal analysis.
+    
+    Converts cached xarray data to pandas DataFrame and loads into DataService.
+    """
+    if not DATA_MANAGER_AVAILABLE:
+        raise HTTPException(503, "Data Manager not available")
+    
+    manager = get_data_manager()
+    
+    # Find cache entry
+    entries = manager.list_cached_data()
+    entry = next((e for e in entries if e.get('id') == entry_id), None)
+    
+    if not entry:
+        raise HTTPException(404, f"Cache entry {entry_id} not found")
+    
+    # Load data from cache
+    cached_data = manager.cache.load(entry)
+    
+    if cached_data is None:
+        raise HTTPException(500, "Failed to load data from cache")
+    
+    # Convert to DataFrame for analysis
+    import pandas as pd
+    import xarray as xr
+    
+    if isinstance(cached_data, xr.Dataset):
+        # Convert xarray Dataset to DataFrame
+        df = cached_data.to_dataframe().reset_index()
+    elif isinstance(cached_data, dict):
+        # Climate indices - already dict format
+        df = pd.DataFrame(cached_data)
+    else:
+        raise HTTPException(400, "Unsupported data format")
+    
+    # Load into DataService
+    data_service = get_data_service()
+    name = dataset_name or f"{entry['source']}_{entry_id[:8]}"
+    
+    # Store in data service
+    data_service._datasets[name] = df
+    data_service._metadata[name] = DatasetMetadata(
+        name=name,
+        n_rows=len(df),
+        n_cols=len(df.columns),
+        columns=[ColumnInfo(name=c, dtype=str(df[c].dtype)) for c in df.columns],
+        filename=f"cache_{entry_id}",
+        source="investigation_cache"
+    )
+    
+    return {
+        "status": "loaded",
+        "dataset_name": name,
+        "rows": len(df),
+        "columns": list(df.columns),
+    }
 
 
 @app.put("/data/resolution")
@@ -893,8 +1068,20 @@ async def websocket_investigate(websocket: WebSocket):
             await websocket.close()
             return
         
+        # Get knowledge service for storing papers (use SurrealDB)
+        knowledge_service = None
+        try:
+            backend = request.get("backend", "surrealdb")
+            knowledge_service = get_knowledge_service(backend)
+        except Exception as e:
+            print(f"Warning: Could not initialize knowledge service: {e}")
+        
         # Create agent and run streaming investigation
-        agent = InvestigationAgent()
+        agent = InvestigationAgent(knowledge_service=knowledge_service)
+        
+        # Extract resolution config if provided
+        temporal_resolution = request.get("temporal_resolution", "daily")
+        spatial_resolution = request.get("spatial_resolution", "0.25")
         
         async for progress in agent.investigate_streaming(
             query=request.get("query", ""),
@@ -905,6 +1092,8 @@ async def websocket_investigate(websocket: WebSocket):
             collect_news=request.get("collect_news", False),
             run_correlation=request.get("run_correlation", True),
             expand_search=request.get("expand_search", True),
+            temporal_resolution=temporal_resolution,
+            spatial_resolution=spatial_resolution,
         ):
             await websocket.send_text(json.dumps(progress))
         
@@ -1291,10 +1480,30 @@ _knowledge_services: Dict[str, Any] = {}
 
 async def get_knowledge_service(backend: str = "neo4j"):
     """Get or create knowledge service instance."""
+    from api.services.knowledge_service import KnowledgeBackend
+    
+    # SurrealDB is not fully implemented, fallback to neo4j
+    if backend == "surrealdb":
+        print("⚠️ SurrealDB not fully implemented, falling back to neo4j")
+        backend = "neo4j"
+    
     if backend not in _knowledge_services:
-        service = create_knowledge_service(backend)
-        await service.connect()
-        _knowledge_services[backend] = service
+        try:
+            # Convert string to enum
+            backend_enum = KnowledgeBackend(backend)
+            service = create_knowledge_service(backend_enum)
+            await service.connect()
+            _knowledge_services[backend] = service
+        except Exception as e:
+            print(f"⚠️ Failed to create {backend} service: {e}")
+            # Fallback to neo4j
+            if backend != "neo4j":
+                backend_enum = KnowledgeBackend.NEO4J
+                service = create_knowledge_service(backend_enum)
+                await service.connect()
+                _knowledge_services["neo4j"] = service
+                return _knowledge_services["neo4j"]
+            raise
     return _knowledge_services[backend]
 
 

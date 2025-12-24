@@ -101,6 +101,9 @@ export interface InvestigateRequest {
   collect_news?: boolean
   run_correlation?: boolean
   expand_search?: boolean
+  // Resolution configuration
+  temporal_resolution?: 'hourly' | '6-hourly' | 'daily'
+  spatial_resolution?: '0.1' | '0.25' | '0.5'
 }
 
 export interface InvestigateProgress {
