@@ -47,6 +47,7 @@ from api.logging_config import configure_logging, get_logger
 from api.middleware import RequestIDMiddleware
 from api.config import get_settings
 from api.rate_limit import setup_rate_limiting, set_limiter
+from api.security import setup_security_middleware
 
 from api.services.llm_service import get_llm_service, OllamaLLMService
 from api.services.causal_service import (
@@ -224,6 +225,9 @@ app.include_router(pipeline_router, prefix=API_V1_PREFIX)
 
 # Add Request ID middleware
 app.add_middleware(RequestIDMiddleware)
+
+# Setup security middleware
+setup_security_middleware(app)
 
 # Setup rate limiting
 limiter = setup_rate_limiting(app)

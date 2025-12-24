@@ -289,30 +289,36 @@ Response:
 ## 📋 Riepilogo Issue da Creare
 
 ### Priority 1 - Core Graph UX
-1. `feat: Double-click drill-down su nodi del grafo causale`
-2. `feat: Grid resolution metadata per ogni variabile nel grafo`
-3. `ui: Badge visuale risoluzione su nodi del grafo`
+1. [#1](https://github.com/Alemusica/nico/issues/1) - `feat: Double-click drill-down su nodi del grafo causale`
+2. [#2](https://github.com/Alemusica/nico/issues/2) - `feat: Grid resolution metadata per ogni variabile nel grafo`
+3. `ui: Badge visuale risoluzione su nodi del grafo` *(da creare)*
 
 ### Priority 2 - Dataset Selection
-4. `feat: Dataset selector panel nel cockpit`
-5. `feat: LLM suggestions per dataset ottimale`
-6. `feat: Area selection via search bar + map click`
+4. [#3](https://github.com/Alemusica/nico/issues/3) - `feat: Dataset selector panel nel cockpit`
+5. `feat: LLM suggestions per dataset ottimale` *(incluso in #3)*
+6. `feat: Area selection via search bar + map click` *(incluso in #3)*
 
 ### Priority 3 - Temporal/Spatial Controls
-7. `feat: Timeline slider con pin per esplorazione temporale`
-8. `feat: Geographic buffer control per espansione area`
-9. `feat: Map view integrata con grafo causale`
+7. [#4](https://github.com/Alemusica/nico/issues/4) - `feat: Timeline slider con pin per esplorazione temporale`
+8. [#5](https://github.com/Alemusica/nico/issues/5) - `feat: Geographic buffer control per espansione area`
+9. `feat: Map view integrata con grafo causale` *(da creare)*
 
 ### Priority 4 - Advanced
-10. `feat: Interpolazione automatica per allineare griglie diverse`
-11. `feat: Heatmap correlazioni spaziali su mappa`
-12. `feat: Play/pause animation per evoluzione temporale`
+10. `feat: Interpolazione automatica per allineare griglie diverse` *(da creare)*
+11. `feat: Heatmap correlazioni spaziali su mappa` *(incluso in #5)*
+12. `feat: Play/pause animation per evoluzione temporale` *(incluso in #4)*
 
 ### Priority 5 - Data Preview & Simulation
-13. `feat: Data preview runner con sampling intelligente`
-14. `feat: Mixed-source data fusion engine (temporal + spatial)`
-15. `feat: Preview visualization dashboard (map + time series + stats)`
-16. `research: Valutare alternative a EarthKit (Pangeo, GEE, Planetary Computer)`
+13. [#6](https://github.com/Alemusica/nico/issues/6) - `feat: Data preview runner con sampling intelligente`
+14. `feat: Mixed-source data fusion engine (temporal + spatial)` *(incluso in #6)*
+15. `feat: Preview visualization dashboard (map + time series + stats)` *(incluso in #6)*
+16. `research: Valutare alternative a EarthKit (Pangeo, GEE, Planetary Computer)` *(incluso in #6)*
+
+### Quick Wins - Data Sources
+17. [#7](https://github.com/Alemusica/nico/issues/7) - `feat: Aggiungi variabili humidity a ERA5 client` ⚡ *5 min*
+18. [#8](https://github.com/Alemusica/nico/issues/8) - `feat: GNSS Radio Occultation client (COSMIC-2)` ⚡ *30 min*
+19. [#9](https://github.com/Alemusica/nico/issues/9) - `feat: Aggiungi causal-learn (PC, LiNGAM, NOTEARS)` ⚡ *10 min*
+20. [#10](https://github.com/Alemusica/nico/issues/10) - `research: Valutare integrazione PyAPS/MintPy` 🔬 *1-2 hours*
 
 ---
 
