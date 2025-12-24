@@ -109,6 +109,7 @@ async def health():
     return {
         "status": "healthy",
         "version": "1.0.0",
+        "api_version": "v1",
         "components": {
             "llm": {
                 "status": "available" if llm_available else "fallback (rules)",

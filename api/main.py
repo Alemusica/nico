@@ -211,14 +211,16 @@ Check system health: `GET /health`
     ]
 )
 
-# Include routers
-app.include_router(analysis_router)
-app.include_router(chat_router)
-app.include_router(data_router)
-app.include_router(health_router)
-app.include_router(investigation_router)
-app.include_router(knowledge_router)
-app.include_router(pipeline_router)
+# Include routers with v1 prefix
+API_V1_PREFIX = "/api/v1"
+
+app.include_router(analysis_router, prefix=API_V1_PREFIX)
+app.include_router(chat_router, prefix=API_V1_PREFIX)
+app.include_router(data_router, prefix=API_V1_PREFIX)
+app.include_router(health_router, prefix=API_V1_PREFIX)
+app.include_router(investigation_router, prefix=API_V1_PREFIX)
+app.include_router(knowledge_router, prefix=API_V1_PREFIX)
+app.include_router(pipeline_router, prefix=API_V1_PREFIX)
 
 # Add Request ID middleware
 app.add_middleware(RequestIDMiddleware)
