@@ -40,7 +40,7 @@ class SurrealDBKnowledgeService(KnowledgeService):
     
     def __init__(
         self,
-        url: str = "ws://localhost:8000/rpc",
+        url: str = "ws://localhost:8001/rpc",
         namespace: str = "oceanography",
         database: str = "knowledge",
         username: str = "root",

@@ -57,6 +57,7 @@ except ImportError:
 
 # Import routers
 from api.routers.analysis_router import router as analysis_router
+from api.routers.investigation_router import router as investigation_router
 
 # Initialize FastAPI
 app = FastAPI(
@@ -76,6 +77,7 @@ Intelligent causal discovery with LLM-powered explanations.
 
 # Include routers
 app.include_router(analysis_router)
+app.include_router(investigation_router)
 
 # CORS for React frontend
 app.add_middleware(
@@ -1072,7 +1074,7 @@ async def websocket_investigate(websocket: WebSocket):
         knowledge_service = None
         try:
             backend = request.get("backend", "surrealdb")
-            knowledge_service = get_knowledge_service(backend)
+            knowledge_service = await get_knowledge_service(backend)
         except Exception as e:
             print(f"Warning: Could not initialize knowledge service: {e}")
         
@@ -1953,7 +1955,11 @@ async def link_index_pattern(link: LinkIndexPattern, backend: str = "neo4j"):
 async def get_knowledge_stats(backend: str = "neo4j"):
     """Get knowledge base statistics."""
     service = await get_knowledge_service(backend)
-    stats = await service.get_statistics()
+    try:
+        stats = await service.get_statistics()
+    except AttributeError:
+        # Neo4j service doesn't have get_statistics yet
+        stats = {"error": "Statistics not implemented for this backend"}
     return {"statistics": stats, "backend": backend}
 
 
