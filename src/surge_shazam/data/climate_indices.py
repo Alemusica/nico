@@ -15,6 +15,7 @@ These indices affect precipitation patterns and flooding in Europe/Mediterranean
 """
 
 import os
+import ssl
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -24,10 +25,22 @@ import json
 from urllib.parse import urljoin
 
 try:
+    import certifi
+    HAS_CERTIFI = True
+except ImportError:
+    HAS_CERTIFI = False
+
+try:
     import aiohttp
     HAS_AIOHTTP = True
 except ImportError:
     HAS_AIOHTTP = False
+
+# SSL context for macOS certificate verification
+if HAS_CERTIFI:
+    SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+else:
+    SSL_CONTEXT = ssl.create_default_context()
 
 try:
     import pandas as pd
@@ -198,7 +211,8 @@ class ClimateIndicesClient:
             return await self._download_fallback(index_name)
         
         try:
-            async with aiohttp.ClientSession() as session:
+            connector = aiohttp.TCPConnector(ssl=SSL_CONTEXT)
+            async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.get(index_info.url, timeout=30) as response:
                     if response.status != 200:
                         print(f"❌ HTTP {response.status}")
@@ -460,7 +474,8 @@ class ClimateIndicesClient:
                     (rule['favorable'] == 'negative' and event_value < rule['threshold']) or
                     (rule['favorable'] == 'positive' and event_value > rule['threshold'])
                 )
-                analysis[idx_name]['favorable_for_flood'] = is_favorable
+                # Convert numpy bool to Python bool for JSON serialization
+                analysis[idx_name]['favorable_for_flood'] = bool(is_favorable)
                 analysis[idx_name]['interpretation'] = (
                     f"{idx_name.upper()}={event_value:.2f} "
                     f"({'favorable' if is_favorable else 'not favorable'} for flood)"

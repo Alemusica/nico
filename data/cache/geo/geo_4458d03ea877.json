@@ -1,0 +1,19 @@
+{
+  "name": "Valtellina",
+  "lat": 46.3233624,
+  "lon": 10.2584137,
+  "bbox": [
+    46.0113575,
+    46.6353523,
+    9.2469833,
+    10.6327598
+  ],
+  "country": "Italia",
+  "region": "Lombardia",
+  "place_type": "geographical",
+  "osm_id": 8425324,
+  "area_km2": null,
+  "elevation_m": null,
+  "original_query": "Valtellina",
+  "confidence": 0.5185475387060305
+}

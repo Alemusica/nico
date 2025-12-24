@@ -13,6 +13,8 @@ Extract structured information for knowledge graph.
 import os
 import re
 import asyncio
+import ssl
+import certifi
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -25,6 +27,9 @@ try:
     HAS_AIOHTTP = True
 except ImportError:
     HAS_AIOHTTP = False
+
+# SSL context with certifi certificates
+SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 
 @dataclass
@@ -155,7 +160,8 @@ class ArxivScraper:
         await self._rate_limit()
         
         try:
-            async with aiohttp.ClientSession() as session:
+            connector = aiohttp.TCPConnector(ssl=SSL_CONTEXT)
+            async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.get(self.BASE_URL, params=params, timeout=30) as response:
                     if response.status != 200:
                         print(f"❌ arXiv API error: {response.status}")
@@ -278,7 +284,8 @@ class ArxivScraper:
         await self._rate_limit()
         
         try:
-            async with aiohttp.ClientSession() as session:
+            connector = aiohttp.TCPConnector(ssl=SSL_CONTEXT)
+            async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.get(paper.pdf_url, timeout=60) as response:
                     if response.status == 200:
                         with open(output_path, 'wb') as f:
@@ -334,7 +341,8 @@ class SemanticScholarScraper:
             params["fieldsOfStudy"] = ",".join(fields_of_study)
         
         try:
-            async with aiohttp.ClientSession(headers=self.headers) as session:
+            connector = aiohttp.TCPConnector(ssl=SSL_CONTEXT)
+            async with aiohttp.ClientSession(headers=self.headers, connector=connector) as session:
                 url = f"{self.BASE_URL}/paper/search"
                 async with session.get(url, params=params, timeout=30) as response:
                     if response.status != 200:
@@ -397,7 +405,8 @@ class SemanticScholarScraper:
         }
         
         try:
-            async with aiohttp.ClientSession(headers=self.headers) as session:
+            connector = aiohttp.TCPConnector(ssl=SSL_CONTEXT)
+            async with aiohttp.ClientSession(headers=self.headers, connector=connector) as session:
                 url = f"{self.BASE_URL}/paper/{paper_id}/citations"
                 async with session.get(url, params=params, timeout=30) as response:
                     if response.status == 200:

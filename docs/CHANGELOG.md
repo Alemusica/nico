@@ -5,6 +5,179 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2024-12-24
+
+### Added
+
+#### 📊 Data Manager System (`src/data_manager/`)
+Centralized data management with caching and resolution control:
+
+- **Data Manager** (`manager.py`):
+  - Central hub for ERA5, CMEMS, Climate Indices
+  - Briefing creation for user confirmation before download
+  - Size/time estimation for data requests
+  - Progress callbacks during download
+
+- **Data Cache** (`cache.py`):
+  - SQLite-indexed persistent cache
+  - Automatic cache hit detection
+  - Source-specific subdirectories
+  - Cache statistics and cleanup
+
+- **Resolution Config** (`config.py`):
+  - Temporal: hourly, 6-hourly, daily, monthly
+  - Spatial: 0.1°, 0.25°, 0.5°, 1.0°
+  - Per-source default configurations
+  - User-adjustable investigation settings
+
+#### 🕵️ Investigation Briefing System
+Two-phase investigation workflow with user confirmation:
+
+- **Briefing Endpoint** (`api/main.py`):
+  - `POST /investigate/briefing` - create data plan
+  - Returns estimated sizes, times, cached sources
+  - User reviews before download starts
+
+- **Investigation Agent Updates** (`src/agent/investigation_agent.py`):
+  - `create_briefing()` method for data planning
+  - Streaming progress with `investigate_streaming()`
+  - Valtellina 1987 known event added
+  - Improved location parsing (Valtellina, Sondrio, etc.)
+
+#### 🖥️ Frontend Components
+React components for data management and investigation:
+
+- **DataSourcesPanel.tsx**:
+  - View/manage data source connections
+  - Resolution settings (temporal/spatial)
+  - Cache statistics and cleanup
+
+- **InvestigationBriefing.tsx**:
+  - Briefing card with confirm/cancel
+  - Data request expansion details
+  - Resolution modifier before download
+
+- **InvestigationProgress.tsx**:
+  - Step-by-step progress indicator
+  - Substep tracking (satellite, ERA5, indices, papers)
+  - Animated progress bar
+
+### Fixed
+
+- **SSL Certificate Errors**: All aiohttp clients now use `ssl.create_default_context(cafile=certifi.where())`
+  - geo_resolver.py
+  - literature_scraper.py
+  - climate_indices.py
+  - pdf_parser.py
+
+- **JSON Serialization**: numpy.bool_ → Python bool in climate_indices.py and InvestigationResult.to_dict()
+
+- **TypeScript Errors**: Removed unused imports in DataSourcesPanel.tsx, InvestigationBriefing.tsx
+
+---
+
+## [1.6.0] - 2024-12-23
+
+### Added
+
+#### 🕵️ Investigation Agent System (`src/agent/`)
+Complete LLM-powered investigation pipeline for natural disaster analysis:
+
+- **Investigation Agent** (`investigation_agent.py`):
+  - Natural language query parsing (Italian/English)
+  - Known event recognition (Lago Maggiore 2000, 1993, 1994)
+  - Multi-source data collection orchestration
+  - Correlation analysis and key findings generation
+  - Confidence scoring (0-100%)
+
+- **Geo Resolver** (`tools/geo_resolver.py`):
+  - Known locations database (Lago Maggiore, Po Valley, etc.)
+  - Nominatim API integration for unknown locations
+  - Bounding box expansion for spatial queries
+  - Temporal context calculation for event analysis
+
+- **Literature Scraper** (`tools/literature_scraper.py`):
+  - arXiv API integration (physics.ao-ph, physics.geo-ph)
+  - Semantic Scholar API (free, 100 req/5min)
+  - Paper deduplication by DOI
+  - Flood/climate-specific search methods
+
+- **PDF Parser** (`tools/pdf_parser.py`):
+  - pdfplumber integration for text extraction
+  - Section detection (Abstract, Methods, Results)
+  - Table and figure extraction
+  - Fallback to PyPDF2
+
+#### 🌊 Data Clients (`src/surge_shazam/data/`)
+
+- **CMEMS Client** (`cmems_client.py`):
+  - Sea level global/European datasets
+  - SST and ocean physics data
+  - Synthetic fallback for testing
+  - copernicusmarine library integration
+
+- **ERA5 Client** (`era5_client.py`):
+  - CDS API v2 integration (new format)
+  - Flood/drought/storm surge variable sets
+  - ~/.cdsapirc configuration support
+  - Synthetic fallback for testing
+
+- **Climate Indices Client** (`climate_indices.py`):
+  - NAO, AO, ONI, AMO, PDO, PNA, EA, SCAND
+  - NOAA data sources
+  - Flood analysis interpretation
+  - Event-specific index correlation
+
+#### 🕷️ Data Pipeline (`src/pipeline/`)
+
+- **Scraper** (`scraper.py`):
+  - newspaper3k for news articles
+  - Semantic Scholar API for papers
+  - RSS feed support (Nature Climate, Science Daily, etc.)
+  - Rate limiting and caching
+
+- **Raffinatore** (`raffinatore.py`):
+  - Entity extraction (spaCy NER)
+  - Topic classification (sea_ice, temperature, etc.)
+  - Quality scoring (0-10 scale)
+  - Duplicate detection (Jaccard similarity)
+
+- **Correlatore** (`correlatore.py`):
+  - Temporal proximity scoring
+  - Topic-event correlation
+  - Precursor/concurrent/consequence classification
+  - Decay weighting for temporal distance
+
+- **Knowledge Scorer** (`knowledge_scorer.py`):
+  - Multi-factor indices:
+    - Thermodynamics
+    - Anemometry
+    - Precipitation
+    - Cryosphere
+    - Oceanography
+  - Data density scoring
+  - Source diversity calculation
+
+#### 🧪 Test Suite (`tests/test_investigation/`)
+81 comprehensive tests:
+- `test_geo_resolver.py` - 12 tests
+- `test_cmems_client.py` - 10 tests
+- `test_era5_client.py` - 13 tests
+- `test_climate_indices.py` - 14 tests
+- `test_literature_scraper.py` - 14 tests
+- `test_investigation_agent.py` - 18 tests
+
+Test runner with quick check: `python tests/run_investigation_tests.py`
+
+### Changed
+- Updated ERA5 client to use new CDS API format
+- API URL updated: `https://cds.climate.copernicus.eu/api`
+- Added `is_configured` property for API status check
+
+### Fixed
+- Bbox format standardized to `(lat_min, lat_max, lon_min, lon_max)`
+- Async test support with pytest-asyncio
+
 ## [1.5.0] - 2024-12-24
 
 ### Added

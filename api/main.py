@@ -12,7 +12,7 @@ Includes:
 - Hybrid scoring (physics + chain + experience)
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket
+from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -37,6 +37,23 @@ from api.services.knowledge_service import (
     ClimateIndex,
     CausalPattern,
 )
+
+# Import Investigation Agent
+try:
+    from src.agent.investigation_agent import InvestigationAgent
+    INVESTIGATION_AGENT_AVAILABLE = True
+except ImportError:
+    INVESTIGATION_AGENT_AVAILABLE = False
+    InvestigationAgent = None
+
+# Import Data Manager
+try:
+    from src.data_manager.manager import DataManager, InvestigationBriefing
+    from src.data_manager.config import ResolutionConfig, TemporalResolution, SpatialResolution
+    DATA_MANAGER_AVAILABLE = True
+except ImportError:
+    DATA_MANAGER_AVAILABLE = False
+    DataManager = None
 
 # Import routers
 from api.routers.analysis_router import router as analysis_router
@@ -132,6 +149,34 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     suggestions: List[str] = []
+
+
+class InvestigateRequest(BaseModel):
+    """Request to start an investigation."""
+    query: str
+    collect_satellite: bool = True
+    collect_reanalysis: bool = True
+    collect_climate_indices: bool = True
+    collect_papers: bool = True
+    collect_news: bool = False
+    run_correlation: bool = True
+    expand_search: bool = True
+
+
+class InvestigateResponse(BaseModel):
+    """Response from investigation."""
+    status: str
+    query: str
+    location: Optional[str] = None
+    event_type: Optional[str] = None
+    time_range: Optional[str] = None
+    data_sources_count: int = 0
+    papers_found: int = 0
+    correlations: List[Dict[str, Any]] = []
+    key_findings: List[str] = []
+    recommendations: List[str] = []
+    confidence: float = 0.0
+    raw_result: Optional[Dict[str, Any]] = None
 
 
 # ============== HEALTH ==============
@@ -444,7 +489,437 @@ Be concise and actionable."""
     )
 
 
+# ============== INVESTIGATION AGENT ==============
+
+@app.post("/investigate", response_model=InvestigateResponse)
+async def investigate(request: InvestigateRequest):
+    """
+    🕵️ Run full investigation with the Investigation Agent.
+    
+    Takes a natural language query like:
+    - "analizza alluvioni Lago Maggiore 2000"
+    - "investigate floods in Po Valley 1994"
+    - "extreme precipitation Venice October 2020"
+    
+    Returns comprehensive investigation results including:
+    - Collected data sources (satellite, reanalysis, indices)
+    - Found papers and literature
+    - Correlation analysis
+    - Key findings and recommendations
+    """
+    if not INVESTIGATION_AGENT_AVAILABLE:
+        return InvestigateResponse(
+            status="error",
+            query=request.query,
+            key_findings=["Investigation Agent not available. Check import errors."],
+            recommendations=["Run: pip install -r requirements.txt"]
+        )
+    
+    try:
+        # Initialize agent
+        agent = InvestigationAgent()
+        
+        # Run investigation
+        result = await agent.investigate(
+            query=request.query,
+            collect_satellite=request.collect_satellite,
+            collect_reanalysis=request.collect_reanalysis,
+            collect_climate_indices=request.collect_climate_indices,
+            collect_papers=request.collect_papers,
+            collect_news=request.collect_news,
+            run_correlation=request.run_correlation,
+            expand_search=request.expand_search
+        )
+        
+        # Convert to response
+        return InvestigateResponse(
+            status="success",
+            query=result.query,
+            location=result.event_context.location_name,
+            event_type=result.event_context.event_type,
+            time_range=f"{result.event_context.start_date} to {result.event_context.end_date}",
+            data_sources_count=len(result.data_sources),
+            papers_found=len(result.papers),
+            correlations=result.correlations,
+            key_findings=result.key_findings,
+            recommendations=result.recommendations,
+            confidence=result.confidence,
+            raw_result=result.to_dict()
+        )
+        
+    except Exception as e:
+        import traceback
+        return InvestigateResponse(
+            status="error",
+            query=request.query,
+            key_findings=[f"Investigation failed: {str(e)}"],
+            recommendations=["Check logs for details"],
+            raw_result={"error": str(e), "traceback": traceback.format_exc()}
+        )
+
+
+@app.get("/investigate/status")
+async def investigate_status():
+    """Check if Investigation Agent is available and configured."""
+    status = {
+        "agent_available": INVESTIGATION_AGENT_AVAILABLE,
+        "components": {}
+    }
+    
+    if INVESTIGATION_AGENT_AVAILABLE:
+        try:
+            from src.agent.tools.geo_resolver import GeoResolver
+            status["components"]["geo_resolver"] = True
+        except ImportError:
+            status["components"]["geo_resolver"] = False
+            
+        try:
+            from src.surge_shazam.data.cmems_client import CMEMSClient
+            status["components"]["cmems_client"] = True
+        except ImportError:
+            status["components"]["cmems_client"] = False
+            
+        try:
+            from src.surge_shazam.data.era5_client import ERA5Client
+            status["components"]["era5_client"] = True
+        except ImportError:
+            status["components"]["era5_client"] = False
+            
+        try:
+            from src.agent.tools.literature_scraper import LiteratureScraper
+            status["components"]["literature_scraper"] = True
+        except ImportError:
+            status["components"]["literature_scraper"] = False
+    
+    return status
+
+
+# ============== DATA MANAGER ENDPOINTS ==============
+
+# Global data manager instance
+_data_manager = None
+
+def get_data_manager() -> DataManager:
+    """Get or create data manager instance."""
+    global _data_manager
+    if _data_manager is None and DATA_MANAGER_AVAILABLE:
+        _data_manager = DataManager()
+    return _data_manager
+
+
+class ResolutionRequest(BaseModel):
+    """Request model for resolution configuration."""
+    temporal: str = "daily"  # hourly, 3-hourly, 6-hourly, daily, monthly
+    spatial: str = "0.25"    # 0.1, 0.25, 0.5, 1.0
+
+
+class BriefingRequest(BaseModel):
+    """Request model for investigation briefing."""
+    query: str
+    location_name: str
+    location_bbox: List[float]  # [lat_min, lat_max, lon_min, lon_max]
+    event_type: str
+    event_start: str  # YYYY-MM-DD
+    event_end: str    # YYYY-MM-DD
+    precursor_days: int = 30
+    resolution: Optional[ResolutionRequest] = None
+
+
+class BriefingConfirmation(BaseModel):
+    """Request model for confirming a briefing."""
+    briefing_id: str
+    confirmed: bool = True
+    modified_resolution: Optional[ResolutionRequest] = None
+
+
+@app.get("/data/sources")
+async def get_data_sources():
+    """Get available data sources and their status."""
+    if not DATA_MANAGER_AVAILABLE:
+        raise HTTPException(503, "Data Manager not available")
+    
+    manager = get_data_manager()
+    return {
+        "sources": manager.get_available_sources(),
+        "default_resolution": manager.config.investigation_resolution.to_dict(),
+    }
+
+
+@app.get("/data/resolutions")
+async def get_available_resolutions():
+    """Get available resolution options."""
+    return {
+        "temporal": [
+            {"value": "hourly", "label": "Hourly (24/day)", "description": "Most detailed, largest downloads"},
+            {"value": "3-hourly", "label": "3-hourly (8/day)", "description": "Good for sub-daily patterns"},
+            {"value": "6-hourly", "label": "6-hourly (4/day)", "description": "Synoptic patterns, recommended"},
+            {"value": "daily", "label": "Daily (1/day)", "description": "Fastest, good for multi-day events"},
+            {"value": "monthly", "label": "Monthly", "description": "Climate indices only"},
+        ],
+        "spatial": [
+            {"value": "0.1", "label": "High (0.1°, ~11km)", "description": "Small areas only"},
+            {"value": "0.25", "label": "Medium (0.25°, ~28km)", "description": "Default, ERA5 native"},
+            {"value": "0.5", "label": "Low (0.5°, ~55km)", "description": "Faster for large areas"},
+            {"value": "1.0", "label": "Coarse (1.0°, ~111km)", "description": "Continental scale"},
+        ],
+    }
+
+
+@app.post("/data/briefing")
+async def create_investigation_briefing(request: BriefingRequest):
+    """
+    Create an investigation briefing for user confirmation.
+    
+    This is the Ishikawa-style planning step where LLM proposes
+    what data to collect and user confirms before download.
+    """
+    if not DATA_MANAGER_AVAILABLE:
+        raise HTTPException(503, "Data Manager not available")
+    
+    manager = get_data_manager()
+    
+    # Parse resolution if provided
+    resolution = None
+    if request.resolution:
+        resolution = ResolutionConfig(
+            temporal=TemporalResolution(request.resolution.temporal),
+            spatial=SpatialResolution(request.resolution.spatial),
+        )
+    
+    # Create briefing
+    briefing = manager.create_briefing(
+        query=request.query,
+        location_name=request.location_name,
+        location_bbox=tuple(request.location_bbox),
+        event_type=request.event_type,
+        event_time_range=(request.event_start, request.event_end),
+        precursor_days=request.precursor_days,
+        resolution=resolution,
+    )
+    
+    # Store briefing for later confirmation
+    import hashlib
+    briefing_id = hashlib.md5(f"{request.query}_{datetime.now().isoformat()}".encode()).hexdigest()[:12]
+    
+    # Store in simple in-memory cache (for now)
+    if not hasattr(app, "_briefings"):
+        app._briefings = {}
+    app._briefings[briefing_id] = briefing
+    
+    return {
+        "briefing_id": briefing_id,
+        "briefing": briefing.to_dict(),
+        "summary": briefing.summary(),
+    }
+
+
+@app.post("/data/briefing/{briefing_id}/confirm")
+async def confirm_briefing(briefing_id: str, confirmation: BriefingConfirmation):
+    """
+    Confirm a briefing and start download.
+    
+    Returns immediately with download job ID. Use /data/download/{job_id}/status
+    to check progress, or use WebSocket for real-time updates.
+    """
+    if not DATA_MANAGER_AVAILABLE:
+        raise HTTPException(503, "Data Manager not available")
+    
+    if not hasattr(app, "_briefings") or briefing_id not in app._briefings:
+        raise HTTPException(404, "Briefing not found")
+    
+    briefing = app._briefings[briefing_id]
+    
+    if not confirmation.confirmed:
+        del app._briefings[briefing_id]
+        return {"status": "cancelled"}
+    
+    # Update resolution if modified
+    if confirmation.modified_resolution:
+        for req in briefing.data_requests:
+            req.resolution = ResolutionConfig(
+                temporal=TemporalResolution(confirmation.modified_resolution.temporal),
+                spatial=SpatialResolution(confirmation.modified_resolution.spatial),
+            )
+    
+    briefing.confirmed = True
+    
+    # Start download in background
+    import uuid
+    job_id = str(uuid.uuid4())[:8]
+    
+    if not hasattr(app, "_download_jobs"):
+        app._download_jobs = {}
+    
+    app._download_jobs[job_id] = {
+        "status": "queued",
+        "briefing_id": briefing_id,
+        "progress": {},
+        "results": None,
+    }
+    
+    # Launch background task
+    asyncio.create_task(_run_download(job_id, briefing))
+    
+    return {
+        "status": "started",
+        "job_id": job_id,
+        "briefing_id": briefing_id,
+    }
+
+
+async def _run_download(job_id: str, briefing: InvestigationBriefing):
+    """Background task to run download."""
+    manager = get_data_manager()
+    job = app._download_jobs[job_id]
+    job["status"] = "downloading"
+    
+    def progress_callback(source: str, progress: float, message: str):
+        job["progress"][source] = {"progress": progress, "message": message}
+    
+    try:
+        results = await manager.download_briefing(briefing, progress_callback)
+        job["results"] = {k: "downloaded" if v is not None else "failed" for k, v in results.items()}
+        job["status"] = "completed"
+    except Exception as e:
+        job["status"] = "error"
+        job["error"] = str(e)
+
+
+@app.get("/data/download/{job_id}/status")
+async def get_download_status(job_id: str):
+    """Get status of a download job."""
+    if not hasattr(app, "_download_jobs") or job_id not in app._download_jobs:
+        raise HTTPException(404, "Job not found")
+    
+    return app._download_jobs[job_id]
+
+
+@app.get("/data/cache/stats")
+async def get_cache_stats():
+    """Get cache statistics."""
+    if not DATA_MANAGER_AVAILABLE:
+        raise HTTPException(503, "Data Manager not available")
+    
+    manager = get_data_manager()
+    return manager.get_cache_stats()
+
+
+@app.get("/data/cache/entries")
+async def list_cache_entries(source: Optional[str] = None):
+    """List cached data entries."""
+    if not DATA_MANAGER_AVAILABLE:
+        raise HTTPException(503, "Data Manager not available")
+    
+    manager = get_data_manager()
+    return {"entries": manager.list_cached_data(source)}
+
+
+@app.delete("/data/cache")
+async def clear_cache(source: Optional[str] = None, older_than_days: Optional[int] = None):
+    """Clear cache entries."""
+    if not DATA_MANAGER_AVAILABLE:
+        raise HTTPException(503, "Data Manager not available")
+    
+    manager = get_data_manager()
+    manager.clear_cache(source, older_than_days)
+    return {"status": "cleared"}
+
+
+@app.put("/data/resolution")
+async def update_default_resolution(resolution: ResolutionRequest):
+    """Update default investigation resolution."""
+    if not DATA_MANAGER_AVAILABLE:
+        raise HTTPException(503, "Data Manager not available")
+    
+    manager = get_data_manager()
+    manager.update_resolution(temporal=resolution.temporal, spatial=resolution.spatial)
+    return {"status": "updated", "resolution": manager.config.investigation_resolution.to_dict()}
+
+
 # ============== WEBSOCKET FOR STREAMING ==============
+
+@app.post("/investigate/briefing")
+async def create_investigation_briefing_from_query(
+    query: str = Body(..., embed=True),
+    collect_satellite: bool = Body(True),
+    collect_reanalysis: bool = Body(True),
+    collect_climate_indices: bool = Body(True),
+    collect_papers: bool = Body(True),
+):
+    """
+    Create a briefing for an investigation query.
+    
+    Shows the user what data will be downloaded before starting.
+    User can then confirm to proceed with the full investigation.
+    """
+    if not INVESTIGATION_AGENT_AVAILABLE:
+        raise HTTPException(503, "Investigation Agent not available")
+    
+    agent = InvestigationAgent()
+    
+    try:
+        briefing = await agent.create_briefing(
+            query=query,
+            collect_satellite=collect_satellite,
+            collect_reanalysis=collect_reanalysis,
+            collect_climate_indices=collect_climate_indices,
+            collect_papers=collect_papers,
+        )
+        
+        return {
+            "status": "success",
+            "briefing": briefing,
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Briefing creation failed: {str(e)}")
+
+
+@app.websocket("/ws/investigate")
+async def websocket_investigate(websocket: WebSocket):
+    """WebSocket for streaming investigation progress."""
+    await websocket.accept()
+    
+    try:
+        # Receive investigation request
+        data = await websocket.receive_text()
+        request = json.loads(data)
+        
+        if not INVESTIGATION_AGENT_AVAILABLE:
+            await websocket.send_text(json.dumps({
+                "step": "error",
+                "status": "error",
+                "message": "Investigation Agent not available"
+            }))
+            await websocket.close()
+            return
+        
+        # Create agent and run streaming investigation
+        agent = InvestigationAgent()
+        
+        async for progress in agent.investigate_streaming(
+            query=request.get("query", ""),
+            collect_satellite=request.get("collect_satellite", True),
+            collect_reanalysis=request.get("collect_reanalysis", True),
+            collect_climate_indices=request.get("collect_climate_indices", True),
+            collect_papers=request.get("collect_papers", True),
+            collect_news=request.get("collect_news", False),
+            run_correlation=request.get("run_correlation", True),
+            expand_search=request.get("expand_search", True),
+        ):
+            await websocket.send_text(json.dumps(progress))
+        
+        await websocket.close()
+        
+    except Exception as e:
+        import traceback
+        await websocket.send_text(json.dumps({
+            "step": "error",
+            "status": "error",
+            "message": f"Investigation failed: {str(e)}",
+            "traceback": traceback.format_exc()
+        }))
+        await websocket.close()
+
 
 @app.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):

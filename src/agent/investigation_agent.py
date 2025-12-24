@@ -131,6 +131,16 @@ class InvestigationResult:
     confidence: float = 0.0
     
     def to_dict(self) -> dict:
+        # Helper to convert numpy types to Python native types
+        def convert_value(v):
+            if hasattr(v, 'item'):  # numpy scalar
+                return v.item()
+            elif isinstance(v, dict):
+                return {k: convert_value(val) for k, val in v.items()}
+            elif isinstance(v, list):
+                return [convert_value(item) for item in v]
+            return v
+        
         return {
             'query': self.query,
             'location': self.event_context.location_name,
@@ -138,10 +148,10 @@ class InvestigationResult:
             'time_range': f"{self.event_context.start_date} to {self.event_context.end_date}",
             'data_sources_count': len(self.data_sources),
             'papers_found': len(self.papers),
-            'correlations': self.correlations,
+            'correlations': convert_value(self.correlations),
             'key_findings': self.key_findings,
             'recommendations': self.recommendations,
-            'confidence': self.confidence,
+            'confidence': float(self.confidence) if hasattr(self.confidence, 'item') else self.confidence,
         }
 
 
@@ -186,6 +196,13 @@ class QueryParser:
     
     # Known flood events (for quick lookup)
     KNOWN_EVENTS = {
+        'valtellina 1987': {
+            'location': 'Valtellina',
+            'start_date': '1987-07-18',
+            'end_date': '1987-07-28',
+            'event_type': 'flood',
+            'keywords': ['Valtellina disaster 1987', 'Val Pola landslide', 'Adda river', 'Sondrio'],
+        },
         'lago maggiore 2000': {
             'location': 'Lago Maggiore',
             'start_date': '2000-10-10',
@@ -261,6 +278,22 @@ class QueryParser:
     
     def _extract_location(self, query: str) -> str:
         """Extract location name from query."""
+        query_lower = query.lower()
+        
+        # Check for specific known locations first
+        known_locations = {
+            'valtellina': 'Valtellina',
+            'val tellina': 'Valtellina',
+            'sondrio': 'Sondrio',
+            'bormio': 'Bormio',
+            'tirano': 'Tirano',
+            'morbegno': 'Morbegno',
+            'valchiavenna': 'Valchiavenna',
+        }
+        for key, name in known_locations.items():
+            if key in query_lower:
+                return name
+        
         # Look for common location patterns
         patterns = [
             r'(?:lago|lake)\s+(\w+)',
@@ -278,13 +311,13 @@ class QueryParser:
         # Look for Italian lake names
         lakes = ['maggiore', 'como', 'garda', 'iseo', 'orta']
         for lake in lakes:
-            if lake in query.lower():
+            if lake in query_lower:
                 return f"Lago {lake.capitalize()}"
         
         # Look for regions
         regions = ['piemonte', 'lombardia', 'veneto', 'liguria', 'pianura padana']
         for region in regions:
-            if region in query.lower():
+            if region in query_lower:
                 return region.replace('pianura padana', 'Pianura Padana').title()
         
         return "Italy"  # Default
@@ -398,6 +431,218 @@ class InvestigationAgent:
             self._geo_resolver = GeoResolver()
         return self._geo_resolver
     
+    async def create_briefing(
+        self,
+        query: str,
+        collect_satellite: bool = True,
+        collect_reanalysis: bool = True,
+        collect_climate_indices: bool = True,
+        collect_papers: bool = True,
+    ) -> Dict:
+        """
+        Create a data briefing for user confirmation before download.
+        
+        Returns:
+            Dict with briefing info including:
+            - event_context: parsed query info
+            - location: resolved location
+            - data_requests: list of data sources with estimates
+            - total_estimated_size_mb: total download size
+            - total_estimated_time_sec: total estimated time
+        """
+        # Step 1: Parse query
+        event_context = self.query_parser.parse(query)
+        
+        # Step 2: Geo-resolve location
+        location = None
+        if self.geo_resolver:
+            location = await self.geo_resolver.resolve(event_context.location_name)
+            if location:
+                event_context.location = location
+        
+        # Step 3: Build data request list with estimates
+        data_requests = []
+        total_size = 0.0
+        total_time = 0.0
+        
+        # Calculate bbox
+        if location and location.bbox:
+            bbox = location.bbox
+            lat_range = (bbox[0], bbox[1])
+            lon_range = (bbox[2], bbox[3])
+        elif location:
+            lat_range = (location.lat - 1, location.lat + 1)
+            lon_range = (location.lon - 1, location.lon + 1)
+        else:
+            lat_range = (44, 47)  # Default Italy
+            lon_range = (8, 12)
+        
+        time_range = (event_context.start_date, event_context.end_date)
+        
+        # CMEMS Satellite
+        if collect_satellite and CMEMSClient:
+            size_mb = self._estimate_data_size("cmems", lat_range, lon_range, time_range)
+            time_sec = 30 + size_mb * 3  # 30s setup + 3 sec/MB
+            data_requests.append({
+                "source": "cmems",
+                "name": "CMEMS Sea Level",
+                "variables": ["sla", "adt"],
+                "lat_range": lat_range,
+                "lon_range": lon_range,
+                "time_range": time_range,
+                "estimated_size_mb": round(size_mb, 2),
+                "estimated_time_sec": round(time_sec),
+                "description": "Satellite altimetry sea level anomaly",
+            })
+            total_size += size_mb
+            total_time += time_sec
+        
+        # ERA5 Reanalysis
+        if collect_reanalysis and ERA5Client:
+            size_mb = self._estimate_data_size("era5", lat_range, lon_range, time_range)
+            time_sec = 60 + size_mb * 2  # 60s queue + 2 sec/MB
+            data_requests.append({
+                "source": "era5",
+                "name": "ERA5 Reanalysis",
+                "variables": ["total_precipitation", "2m_temperature", "mean_sea_level_pressure", "runoff"],
+                "lat_range": lat_range,
+                "lon_range": lon_range,
+                "time_range": time_range,
+                "estimated_size_mb": round(size_mb, 2),
+                "estimated_time_sec": round(time_sec),
+                "description": "Meteorological reanalysis (precipitation, temperature, pressure)",
+            })
+            total_size += size_mb
+            total_time += time_sec
+        
+        # Climate Indices (always fast)
+        if collect_climate_indices and ClimateIndicesClient:
+            data_requests.append({
+                "source": "climate_indices",
+                "name": "Climate Indices",
+                "variables": ["nao", "ao", "ea", "scand"],
+                "lat_range": None,
+                "lon_range": None,
+                "time_range": time_range,
+                "estimated_size_mb": 0.01,
+                "estimated_time_sec": 5,
+                "description": "NAO, AO, EA, SCAND teleconnection indices",
+            })
+            total_time += 5
+        
+        # Scientific papers
+        if collect_papers and LiteratureScraper:
+            data_requests.append({
+                "source": "papers",
+                "name": "Scientific Literature",
+                "variables": ["arxiv", "semantic_scholar"],
+                "lat_range": None,
+                "lon_range": None,
+                "time_range": None,
+                "estimated_size_mb": 0.5,
+                "estimated_time_sec": 30,
+                "description": "Search arXiv and Semantic Scholar for relevant papers",
+            })
+            total_time += 30
+        
+        return {
+            "query": query,
+            "event_context": {
+                "location_name": event_context.location_name,
+                "event_type": event_context.event_type,
+                "start_date": event_context.start_date,
+                "end_date": event_context.end_date,
+                "keywords": event_context.keywords,
+            },
+            "location": {
+                "lat": location.lat if location else None,
+                "lon": location.lon if location else None,
+                "bbox": location.bbox if location else None,
+                "name": location.name if location else event_context.location_name,
+                "country": location.country if location else None,
+                "region": location.region if location else None,
+            } if location else None,
+            "data_requests": data_requests,
+            "total_estimated_size_mb": round(total_size, 2),
+            "total_estimated_time_sec": round(total_time),
+            "summary": self._generate_briefing_summary(
+                event_context, location, data_requests, total_size, total_time
+            ),
+        }
+    
+    def _estimate_data_size(
+        self,
+        source: str,
+        lat_range: Tuple[float, float],
+        lon_range: Tuple[float, float],
+        time_range: Tuple[str, str],
+    ) -> float:
+        """Estimate data size in MB."""
+        from datetime import datetime
+        
+        lat_span = abs(lat_range[1] - lat_range[0])
+        lon_span = abs(lon_range[1] - lon_range[0])
+        
+        start = datetime.strptime(time_range[0], "%Y-%m-%d")
+        end = datetime.strptime(time_range[1], "%Y-%m-%d")
+        days = (end - start).days + 1
+        
+        if source == "era5":
+            # ERA5: 0.25° resolution, hourly
+            lat_points = max(1, int(lat_span / 0.25))
+            lon_points = max(1, int(lon_span / 0.25))
+            time_points = days * 24
+            vars_count = 4
+        elif source == "cmems":
+            # CMEMS: 0.125° resolution, daily
+            lat_points = max(1, int(lat_span / 0.125))
+            lon_points = max(1, int(lon_span / 0.125))
+            time_points = days
+            vars_count = 2
+        else:
+            return 0.1
+        
+        # 4 bytes per float, compressed ~50%
+        total_points = lat_points * lon_points * time_points * vars_count
+        return (total_points * 4 * 0.5) / (1024 * 1024)
+    
+    def _generate_briefing_summary(
+        self,
+        ctx: 'EventContext',
+        location: Any,
+        requests: List[Dict],
+        total_size: float,
+        total_time: float,
+    ) -> str:
+        """Generate human-readable briefing summary."""
+        lines = [
+            f"📍 **{ctx.location_name}**",
+        ]
+        
+        if location:
+            lines.append(f"   Coordinates: {location.lat:.3f}°N, {location.lon:.3f}°E")
+            if location.bbox:
+                lines.append(f"   Area: {location.bbox[0]:.2f}°-{location.bbox[1]:.2f}°N, {location.bbox[2]:.2f}°-{location.bbox[3]:.2f}°E")
+        
+        lines.extend([
+            f"📅 **Period**: {ctx.start_date} → {ctx.end_date}",
+            f"🎯 **Event**: {ctx.event_type}",
+            "",
+            "📦 **Data to download**:",
+        ])
+        
+        for req in requests:
+            lines.append(f"   • **{req['name']}**: {', '.join(req['variables'][:3])}")
+            if req['estimated_size_mb'] > 0.1:
+                lines.append(f"     ~{req['estimated_size_mb']:.1f} MB, ~{req['estimated_time_sec']}s")
+        
+        lines.extend([
+            "",
+            f"⏱️ **Totale**: ~{total_size:.1f} MB, ~{total_time:.0f}s",
+        ])
+        
+        return "\n".join(lines)
+    
     @property
     def cmems_client(self):
         if self._cmems_client is None and CMEMSClient:
@@ -421,6 +666,132 @@ class InvestigationAgent:
         if self._literature_scraper is None and LiteratureScraper:
             self._literature_scraper = LiteratureScraper()
         return self._literature_scraper
+    
+    async def investigate_streaming(
+        self,
+        query: str,
+        collect_satellite: bool = True,
+        collect_reanalysis: bool = True,
+        collect_climate_indices: bool = True,
+        collect_papers: bool = True,
+        collect_news: bool = False,
+        run_correlation: bool = True,
+        expand_search: bool = True,
+    ):
+        """
+        Run investigation with streaming progress updates.
+        
+        Yields progress dictionaries with:
+        - step: int (1-6)
+        - substep: optional string
+        - status: 'started' | 'progress' | 'complete' | 'error'
+        - message: human-readable message
+        - data: optional dict with results
+        - progress: optional 0-100 percentage
+        """
+        yield {"step": 0, "status": "started", "message": f"🔍 Starting investigation: {query}"}
+        
+        # Initialize result
+        result = InvestigationResult(query=query, event_context=EventContext(location_name=""))
+        
+        # Step 1: Parse query
+        yield {"step": 1, "status": "started", "message": "📝 Parsing query..."}
+        event_context = self.query_parser.parse(query)
+        result.event_context = event_context
+        yield {
+            "step": 1, 
+            "status": "complete", 
+            "message": f"Query parsed: {event_context.location_name}",
+            "data": {
+                "location": event_context.location_name,
+                "event_type": event_context.event_type,
+                "start_date": event_context.start_date,
+                "end_date": event_context.end_date,
+            }
+        }
+        
+        # Step 2: Geo-resolve location
+        yield {"step": 2, "status": "started", "message": "🌍 Resolving location..."}
+        if self.geo_resolver:
+            location = await self.geo_resolver.resolve(event_context.location_name)
+            if location:
+                event_context.location = location
+                yield {
+                    "step": 2, 
+                    "status": "complete", 
+                    "message": f"Location found: {location.lat:.3f}°N, {location.lon:.3f}°E",
+                    "data": {"lat": location.lat, "lon": location.lon, "bbox": location.bbox}
+                }
+            else:
+                yield {"step": 2, "status": "error", "message": "⚠️ Could not resolve location"}
+        
+        # Step 3: Collect data
+        yield {"step": 3, "status": "started", "message": "📊 Collecting data..."}
+        total_sources = sum([collect_satellite, collect_reanalysis, collect_climate_indices, collect_papers])
+        collected = 0
+        
+        if collect_satellite and event_context.location:
+            yield {"step": 3, "substep": "satellite", "status": "started", "message": "📡 Downloading satellite data (CMEMS)..."}
+            try:
+                await self._collect_satellite_data(event_context, result)
+                collected += 1
+                yield {"step": 3, "substep": "satellite", "status": "complete", "message": "✅ Satellite data collected", "progress": int(collected/total_sources*100)}
+            except Exception as e:
+                yield {"step": 3, "substep": "satellite", "status": "error", "message": f"⚠️ Satellite error: {str(e)[:50]}"}
+        
+        if collect_reanalysis and event_context.location:
+            yield {"step": 3, "substep": "era5", "status": "started", "message": "🌤️ Downloading ERA5 reanalysis..."}
+            try:
+                await self._collect_reanalysis_data(event_context, result)
+                collected += 1
+                yield {"step": 3, "substep": "era5", "status": "complete", "message": "✅ ERA5 data collected", "progress": int(collected/total_sources*100)}
+            except Exception as e:
+                yield {"step": 3, "substep": "era5", "status": "error", "message": f"⚠️ ERA5 error: {str(e)[:50]}"}
+        
+        if collect_climate_indices:
+            yield {"step": 3, "substep": "indices", "status": "started", "message": "🌍 Fetching climate indices..."}
+            try:
+                await self._collect_climate_indices(event_context, result)
+                collected += 1
+                yield {"step": 3, "substep": "indices", "status": "complete", "message": "✅ Climate indices collected", "progress": int(collected/total_sources*100)}
+            except Exception as e:
+                yield {"step": 3, "substep": "indices", "status": "error", "message": f"⚠️ Indices error: {str(e)[:50]}"}
+        
+        if collect_papers:
+            yield {"step": 3, "substep": "papers", "status": "started", "message": "📚 Searching scientific papers..."}
+            try:
+                await self._collect_papers(event_context, result)
+                collected += 1
+                yield {"step": 3, "substep": "papers", "status": "complete", "message": f"✅ Found {len(result.papers)} papers", "progress": int(collected/total_sources*100)}
+            except Exception as e:
+                yield {"step": 3, "substep": "papers", "status": "error", "message": f"⚠️ Papers error: {str(e)[:50]}"}
+        
+        yield {"step": 3, "status": "complete", "message": f"Data collection complete: {len(result.data_sources)} sources"}
+        
+        # Step 4: Correlation analysis
+        if run_correlation and len(result.data_sources) > 1:
+            yield {"step": 4, "status": "started", "message": "🔗 Running correlation analysis..."}
+            await self._run_correlation(result)
+            yield {"step": 4, "status": "complete", "message": f"Found {len(result.correlations)} correlations"}
+        
+        # Step 5: Expand search
+        if expand_search:
+            yield {"step": 5, "status": "started", "message": "🔭 Expanding temporal/spatial search..."}
+            await self._expand_search(event_context, result)
+            yield {"step": 5, "status": "complete", "message": "Search expanded"}
+        
+        # Step 6: Generate findings
+        yield {"step": 6, "status": "started", "message": "📋 Generating findings..."}
+        await self._generate_findings(result)
+        yield {"step": 6, "status": "complete", "message": f"Generated {len(result.key_findings)} findings"}
+        
+        # Final result
+        yield {
+            "step": "complete",
+            "status": "success",
+            "message": "✅ Investigation complete!",
+            "result": result.to_dict()
+        }
     
     async def investigate(
         self,
@@ -524,8 +895,12 @@ class InvestigationAgent:
         print("   📡 Fetching satellite data...")
         
         loc = ctx.location
-        lat_range = (loc.bbox[1], loc.bbox[3]) if loc.bbox else (loc.lat - 1, loc.lat + 1)
-        lon_range = (loc.bbox[0], loc.bbox[2]) if loc.bbox else (loc.lon - 1, loc.lon + 1)
+        # bbox format: (lat_min, lat_max, lon_min, lon_max)
+        lat_range = (loc.bbox[0], loc.bbox[1]) if loc.bbox else (loc.lat - 1, loc.lat + 1)
+        lon_range = (loc.bbox[2], loc.bbox[3]) if loc.bbox else (loc.lon - 1, loc.lon + 1)
+        
+        print(f"      Area: lat={lat_range}, lon={lon_range}")
+        print(f"      Time: {ctx.start_date} to {ctx.end_date}")
         
         try:
             ds = await self.cmems_client.download(
@@ -560,8 +935,13 @@ class InvestigationAgent:
         print("   🌤️ Fetching reanalysis data...")
         
         loc = ctx.location
-        lat_range = (loc.bbox[1], loc.bbox[3]) if loc.bbox else (loc.lat - 2, loc.lat + 2)
-        lon_range = (loc.bbox[0], loc.bbox[2]) if loc.bbox else (loc.lon - 2, loc.lon + 2)
+        # bbox format: (lat_min, lat_max, lon_min, lon_max)
+        # Expand slightly for ERA5 (coarser resolution)
+        lat_range = (loc.bbox[0] - 0.5, loc.bbox[1] + 0.5) if loc.bbox else (loc.lat - 2, loc.lat + 2)
+        lon_range = (loc.bbox[2] - 0.5, loc.bbox[3] + 0.5) if loc.bbox else (loc.lon - 2, loc.lon + 2)
+        
+        print(f"      Area: lat={lat_range}, lon={lon_range}")
+        print(f"      Time: {ctx.start_date} to {ctx.end_date}")
         
         try:
             ds = await self.era5_client.download_for_flood(

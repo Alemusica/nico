@@ -87,6 +87,219 @@ export async function chat(message: string, context?: Record<string, unknown>) {
 }
 
 // =========================================================================
+// Investigation Agent Endpoints
+// =========================================================================
+
+const WS_BASE = 'ws://localhost:8000'
+
+export interface InvestigateRequest {
+  query: string
+  collect_satellite?: boolean
+  collect_reanalysis?: boolean
+  collect_climate_indices?: boolean
+  collect_papers?: boolean
+  collect_news?: boolean
+  run_correlation?: boolean
+  expand_search?: boolean
+}
+
+export interface InvestigateProgress {
+  step: number | string
+  substep?: string
+  status: 'started' | 'progress' | 'complete' | 'error'
+  message: string
+  data?: Record<string, unknown>
+  progress?: number
+  result?: Record<string, unknown>
+}
+
+export interface InvestigateResponse {
+  status: string
+  query: string
+  location?: string
+  event_type?: string
+  time_range?: string
+  data_sources_count?: number
+  papers_found?: number
+  correlations?: Record<string, unknown>[]
+  key_findings?: string[]
+  recommendations?: string[]
+  confidence?: number
+  raw_result?: Record<string, unknown>
+}
+
+/**
+ * Run investigation with WebSocket streaming for real-time progress.
+ */
+export function investigateStreaming(
+  request: InvestigateRequest,
+  onProgress: (progress: InvestigateProgress) => void,
+  onComplete: (result: InvestigateResponse) => void,
+  onError: (error: string) => void,
+): () => void {
+  const ws = new WebSocket(`${WS_BASE}/ws/investigate`)
+  
+  ws.onopen = () => {
+    ws.send(JSON.stringify(request))
+  }
+  
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data) as InvestigateProgress
+    
+    if (data.step === 'complete' && data.result) {
+      // Investigation finished
+      const result: InvestigateResponse = {
+        status: 'success',
+        query: request.query,
+        location: data.result.location as string,
+        event_type: data.result.event_type as string,
+        time_range: data.result.time_range as string,
+        data_sources_count: data.result.data_sources_count as number,
+        papers_found: data.result.papers_found as number,
+        correlations: data.result.correlations as Record<string, unknown>[],
+        key_findings: data.result.key_findings as string[],
+        recommendations: data.result.recommendations as string[],
+        confidence: data.result.confidence as number,
+        raw_result: data.result,
+      }
+      onComplete(result)
+    } else if (data.step === 'error') {
+      onError(data.message)
+    } else {
+      onProgress(data)
+    }
+  }
+  
+  ws.onerror = () => {
+    onError('WebSocket connection failed')
+  }
+  
+  ws.onclose = () => {
+    // Connection closed
+  }
+  
+  // Return cleanup function
+  return () => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.close()
+    }
+  }
+}
+
+/**
+ * Run a full investigation using the Investigation Agent (HTTP fallback).
+ * Accepts natural language queries like:
+ * - "analizza alluvioni Lago Maggiore 2000"
+ * - "investigate floods in Po Valley 1994"
+ */
+export async function investigate(request: InvestigateRequest): Promise<InvestigateResponse> {
+  const res = await fetch(`${API_BASE}/investigate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  return res.json()
+}
+
+/**
+ * Check if Investigation Agent is available and configured.
+ */
+export async function getInvestigateStatus() {
+  const res = await fetch(`${API_BASE}/investigate/status`)
+  return res.json()
+}
+
+/**
+ * Investigation Briefing - shows what data will be downloaded before starting.
+ */
+export interface InvestigationBriefingData {
+  query: string
+  event_context: {
+    location_name: string
+    event_type: string
+    start_date: string
+    end_date: string
+    keywords: string[]
+  }
+  location: {
+    lat: number
+    lon: number
+    bbox: [number, number, number, number]
+    name: string
+    country: string
+    region: string
+  } | null
+  data_requests: Array<{
+    source: string
+    name: string
+    variables: string[]
+    lat_range: [number, number] | null
+    lon_range: [number, number] | null
+    time_range: [string, string] | null
+    estimated_size_mb: number
+    estimated_time_sec: number
+    description: string
+  }>
+  total_estimated_size_mb: number
+  total_estimated_time_sec: number
+  summary: string
+}
+
+/**
+ * Create an investigation briefing before starting the download.
+ * Returns estimated sizes, times, and what data will be collected.
+ */
+export async function createInvestigationBriefing(
+  query: string,
+  options?: {
+    collect_satellite?: boolean
+    collect_reanalysis?: boolean
+    collect_climate_indices?: boolean
+    collect_papers?: boolean
+  }
+): Promise<{ status: string; briefing: InvestigationBriefingData }> {
+  const res = await fetch(`${API_BASE}/investigate/briefing`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query,
+      collect_satellite: options?.collect_satellite ?? true,
+      collect_reanalysis: options?.collect_reanalysis ?? true,
+      collect_climate_indices: options?.collect_climate_indices ?? true,
+      collect_papers: options?.collect_papers ?? true,
+    }),
+  })
+  return res.json()
+}
+
+/**
+ * Detect if a message is an investigation query (vs general chat).
+ * Investigation queries mention locations, dates, events, or use keywords like:
+ * "analizza", "investigate", "cerca", "studia", "alluvione", "flood", etc.
+ */
+export function isInvestigationQuery(message: string): boolean {
+  const investigationKeywords = [
+    // Italian
+    'analizza', 'analisi', 'studia', 'cerca', 'investiga', 'indaga',
+    'alluvione', 'alluvioni', 'inondazione', 'esondazione', 'piena',
+    'evento', 'eventi', 'estremo', 'estremi',
+    'lago', 'fiume', 'mare', 'oceano', 'costa',
+    // English
+    'analyze', 'analysis', 'study', 'investigate', 'search', 'find',
+    'flood', 'flooding', 'inundation', 'surge', 'extreme',
+    'event', 'events', 'lake', 'river', 'sea', 'ocean', 'coast',
+    // Dates patterns
+    '19', '20', 'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio',
+    'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre',
+    'january', 'february', 'march', 'april', 'may', 'june',
+    'july', 'august', 'september', 'october', 'november', 'december',
+  ]
+  
+  const lowerMessage = message.toLowerCase()
+  return investigationKeywords.some(kw => lowerMessage.includes(kw))
+}
+
+// =========================================================================
 // Knowledge Base Endpoints
 // =========================================================================
 
@@ -319,5 +532,175 @@ export async function getCrossPatterns(): Promise<{
   recommendation: string
 }> {
   const res = await fetch(`${API_BASE}/historical/cross-patterns`)
+  return res.json()
+}
+
+// =========================================================================
+// Data Manager Endpoints
+// =========================================================================
+
+export interface DataSource {
+  name: string
+  description: string
+  enabled: boolean
+  connected: boolean
+  variables: string[]
+  default_resolution: {
+    temporal: string
+    spatial: string
+  }
+  min_start_date: string
+}
+
+export interface DataRequest {
+  source: string
+  variables: string[]
+  lat_range: [number, number]
+  lon_range: [number, number]
+  time_range: [string, string]
+  resolution: {
+    temporal: string
+    spatial: string
+  }
+  description: string
+  estimated_size_mb: number
+  estimated_time_sec: number
+}
+
+export interface Briefing {
+  query: string
+  location_name: string
+  location_bbox: [number, number, number, number]
+  event_type: string
+  time_period: [string, string]
+  precursor_period: [string, string]
+  data_requests: DataRequest[]
+  total_estimated_size_mb: number
+  total_estimated_time_sec: number
+  cached_sources: string[]
+  needs_download: string[]
+}
+
+export interface BriefingResponse {
+  briefing_id: string
+  briefing: Briefing
+  summary: string
+}
+
+/**
+ * Get available data sources and their status.
+ */
+export async function getDataSources(): Promise<{
+  sources: Record<string, DataSource>
+  default_resolution: { temporal: string; spatial: string }
+}> {
+  const res = await fetch(`${API_BASE}/data/sources`)
+  return res.json()
+}
+
+/**
+ * Get available resolution options.
+ */
+export async function getResolutions(): Promise<{
+  temporal: Array<{ value: string; label: string; description: string }>
+  spatial: Array<{ value: string; label: string; description: string }>
+}> {
+  const res = await fetch(`${API_BASE}/data/resolutions`)
+  return res.json()
+}
+
+/**
+ * Create an investigation briefing for user review.
+ */
+export async function createBriefing(params: {
+  query: string
+  location_name: string
+  location_bbox: [number, number, number, number]
+  event_type: string
+  event_start: string
+  event_end: string
+  precursor_days?: number
+  resolution?: { temporal: string; spatial: string }
+}): Promise<BriefingResponse> {
+  const res = await fetch(`${API_BASE}/data/briefing`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json()
+}
+
+/**
+ * Confirm a briefing and start download.
+ */
+export async function confirmBriefing(
+  briefingId: string,
+  resolution?: { temporal: string; spatial: string }
+): Promise<{
+  status: string
+  job_id?: string
+  briefing_id?: string
+}> {
+  const res = await fetch(`${API_BASE}/data/briefing/${briefingId}/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      briefing_id: briefingId,
+      confirmed: true,
+      modified_resolution: resolution,
+    }),
+  })
+  return res.json()
+}
+
+/**
+ * Get download job status.
+ */
+export async function getDownloadStatus(jobId: string): Promise<{
+  status: string
+  briefing_id: string
+  progress: Record<string, { progress: number; message: string }>
+  results: Record<string, string> | null
+  error?: string
+}> {
+  const res = await fetch(`${API_BASE}/data/download/${jobId}/status`)
+  return res.json()
+}
+
+/**
+ * Get cache statistics.
+ */
+export async function getCacheStats(): Promise<{
+  total_entries: number
+  total_size_mb: number
+  sources: Record<string, { count: number; size_mb: number; accesses: number }>
+}> {
+  const res = await fetch(`${API_BASE}/data/cache/stats`)
+  return res.json()
+}
+
+/**
+ * Clear cache.
+ */
+export async function clearCache(source?: string): Promise<{ status: string }> {
+  const url = source 
+    ? `${API_BASE}/data/cache?source=${source}`
+    : `${API_BASE}/data/cache`
+  const res = await fetch(url, { method: 'DELETE' })
+  return res.json()
+}
+
+/**
+ * Update default resolution.
+ */
+export async function updateResolution(
+  temporal: string,
+  spatial: string
+): Promise<{ status: string; resolution: { temporal: string; spatial: string } }> {
+  const res = await fetch(`${API_BASE}/data/resolution`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ temporal, spatial }),
+  })
   return res.json()
 }

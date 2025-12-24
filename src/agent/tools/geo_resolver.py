@@ -24,7 +24,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 import aiohttp
+import ssl
+import certifi
 import time
+
+# Create SSL context with certifi certificates
+SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 
 @dataclass
@@ -288,7 +293,8 @@ class GeoResolver:
         headers = {"User-Agent": self.USER_AGENT}
         
         try:
-            async with aiohttp.ClientSession() as session:
+            connector = aiohttp.TCPConnector(ssl=SSL_CONTEXT)
+            async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.get(
                     self.NOMINATIM_URL,
                     params=params,

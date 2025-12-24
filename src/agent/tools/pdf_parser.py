@@ -16,12 +16,19 @@ Uses multiple backends:
 
 import os
 import re
+import ssl
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 import json
+
+try:
+    import certifi
+    HAS_CERTIFI = True
+except ImportError:
+    HAS_CERTIFI = False
 
 try:
     import fitz  # PyMuPDF
@@ -40,6 +47,12 @@ try:
     HAS_AIOHTTP = True
 except ImportError:
     HAS_AIOHTTP = False
+
+# SSL context for macOS certificate verification
+if HAS_CERTIFI:
+    SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+else:
+    SSL_CONTEXT = ssl.create_default_context()
 
 
 @dataclass
@@ -284,7 +297,8 @@ class PDFParser:
             return None
         
         try:
-            async with aiohttp.ClientSession() as session:
+            connector = aiohttp.TCPConnector(ssl=SSL_CONTEXT)
+            async with aiohttp.ClientSession(connector=connector) as session:
                 with open(pdf_path, 'rb') as f:
                     data = aiohttp.FormData()
                     data.add_field('input', f, filename=pdf_path.name)
