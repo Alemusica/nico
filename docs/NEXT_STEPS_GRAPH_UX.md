@@ -176,6 +176,116 @@ Elementi da considerare:
 
 ---
 
+## 🎬 6. Data Simulation & Preview Runner
+
+### Caso d'Uso
+> "Mi runni la simulazione dei dati di quei dataset (possono essere anche misto di varie sorgenti) in quell'area di studio così la vedo?"
+
+### Funzionalità Proposta
+
+**Data Preview Engine** - Sistema per simulare e visualizzare dati prima dell'analisi completa:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│          DATASET SIMULATION PREVIEW                      │
+├──────────────────────────────────────────────────────────┤
+│  Selected Datasets:                                      │
+│  ☑ ERA5 Temperature (0.25° | hourly)                    │
+│  ☑ GPM Precipitation (0.1° | 30min)                     │
+│  ☑ CMEMS Sea Level (0.08° | daily)                      │
+│                                                          │
+│  Area: Valtellina, Italy (46.2°N, 10.1°E ±50km)        │
+│  Period: 2023-07-15 to 2023-07-20                       │
+│                                                          │
+│  [▶ Run Preview] [⚙️ Settings] [💾 Cache]              │
+└──────────────────────────────────────────────────────────┘
+                        ↓
+┌──────────────────────────────────────────────────────────┐
+│          PREVIEW VISUALIZATION                           │
+├──────────────────────────────────────────────────────────┤
+│  ┌────────────────┐  ┌────────────────┐                 │
+│  │   Map View     │  │  Time Series   │                 │
+│  │   [heatmap]    │  │  [line chart]  │                 │
+│  └────────────────┘  └────────────────┘                 │
+│  ┌────────────────┐  ┌────────────────┐                 │
+│  │  Statistics    │  │  Data Quality  │                 │
+│  │  [summary]     │  │  [coverage %]  │                 │
+│  └────────────────┘  └────────────────┘                 │
+│                                                          │
+│  ✅ Preview ready - 3 datasets, 85% coverage            │
+│  [✓ Proceed to Analysis] [🔄 Adjust Parameters]        │
+└──────────────────────────────────────────────────────────┘
+```
+
+### Componenti Tecnici
+
+#### 6.1 Preview API Endpoint
+```python
+POST /data/preview/run
+{
+    "datasets": [
+        {"source": "ERA5", "variables": ["temperature_2m"]},
+        {"source": "GPM", "variables": ["precipitation"]},
+        {"source": "CMEMS", "variables": ["sea_level"]}
+    ],
+    "area": {"lat": 46.2, "lon": 10.1, "buffer_km": 50},
+    "time_range": {"start": "2023-07-15", "end": "2023-07-20"},
+    "preview_mode": true  // Usa sample o cache preview
+}
+
+Response:
+{
+    "preview_id": "prev_abc123",
+    "datasets_status": [...],
+    "coverage_stats": {...},
+    "preview_data": {...},  // Dati campionati per viz
+    "estimated_full_size": "2.3 GB"
+}
+```
+
+#### 6.2 Mixed-Source Data Fusion
+- **Temporal Alignment**: Interpolazione automatica a risoluzione comune
+- **Spatial Regridding**: Griglia unificata per visualizzazione
+- **Quality Flags**: Indicatori di coverage e data gaps
+- **Resolution Warnings**: Alert su possibili mismatch
+
+#### 6.3 Visualizzazione Integrata
+| View | Descrizione |
+|------|-------------|
+| **Map Heatmap** | Spatial distribution overlay multi-dataset |
+| **Time Series** | Confronto temporale variabili multiple |
+| **Statistics Panel** | Mean, std, percentiles per dataset |
+| **Quality Dashboard** | Coverage %, missing data, temporal gaps |
+
+### Framework Alternativi da Valutare
+
+> **Nota**: EarthKit è un punto di partenza, ma potrebbero esistere alternative migliori
+
+**Da Esplorare**:
+- **Pangeo**: https://pangeo.io/ - Scientific Python ecosystem for big geospatial data
+- **Google Earth Engine**: https://earthengine.google.com/ - Satellite imagery + compute
+- **Holoviz**: https://holoviz.org/ - Data viz stack (hvPlot, GeoViews, Datashader)
+- **xArray + Dask**: Per analisi multi-dimensional arrays distribuiti
+- **Planetary Computer**: https://planetarycomputer.microsoft.com/ - Multi-dataset hub
+- **Climate Data Store (CDS)**: https://cds.climate.copernicus.eu/ - Toolbox
+
+### Vantaggi per l'Utente
+
+1. **Instant Feedback**: Vedi subito se i dati coprono l'area/periodo
+2. **Quality Check**: Identifica gaps prima di analisi pesante
+3. **Parameter Tuning**: Aggiusta area/periodo basandosi su preview
+4. **Multi-Source Validation**: Confronta dati da fonti diverse
+5. **Decision Support**: Scegli dataset ottimale per coverage
+
+### Issue da Creare
+- [ ] `feat: Data preview runner con sampling intelligente`
+- [ ] `feat: Mixed-source data fusion engine (temporal + spatial)`
+- [ ] `feat: Preview visualization dashboard (map + time series + stats)`
+- [ ] `feat: Quality check panel per coverage e data gaps`
+- [ ] `research: Valutare alternative a EarthKit (Pangeo, GEE, Planetary Computer)`
+
+---
+
 ## 📋 Riepilogo Issue da Creare
 
 ### Priority 1 - Core Graph UX
