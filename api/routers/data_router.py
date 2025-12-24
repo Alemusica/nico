@@ -17,6 +17,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from api.services.data_service import DataService, DatasetMetadata
+from api.performance import cached, timed, get_cache
 
 
 router = APIRouter(prefix="/data", tags=["data"])
@@ -103,11 +104,13 @@ class DirectDownloadRequest(BaseModel):
 # ============== FILE OPERATIONS ==============
 
 @router.get("/files")
+@cached(ttl_seconds=300, key_prefix="data_files")
 async def list_files():
     """
     List all available data files in the data directory.
     
     Returns a list of files ready for loading and analysis.
+    Cached for 5 minutes to improve performance.
     
     **Response Example:**
     ```json
