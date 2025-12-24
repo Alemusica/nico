@@ -7,10 +7,13 @@ Endpoints for LLM-powered chat and streaming WebSocket connections.
 import json
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, WebSocket
+from fastapi import APIRouter, HTTPException, WebSocket, Request
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from api.services.llm_service import get_llm_service
+from api.rate_limit import get_limiter
 
 
 router = APIRouter(tags=["chat"])
@@ -31,8 +34,36 @@ class ChatResponse(BaseModel):
 # ============== CHAT ENDPOINT ==============
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """Chat with LLM about data and causality."""
+async def chat(request: ChatRequest, req: Request):
+    """
+    Chat with LLM about data and causality.
+    
+    Rate limited to prevent abuse. Uses configured rate limits from settings.
+    
+    **Request Example:**
+    ```json
+    {
+      "message": "Why does NAO affect Fram Strait temperature?",
+      "context": {
+        "current_investigation": "fram_strait_2022",
+        "recent_findings": ["wind_stress -> temperature"]
+      }
+    }
+    ```
+    
+    **Response Example:**
+    ```json
+    {
+      "response": "The NAO affects Fram Strait through wind-driven circulation...",
+      "suggestions": ["Run causal discovery", "View correlations"]
+    }
+    ```
+    """
+    # Apply rate limiting if enabled
+    limiter = get_limiter()
+    if limiter:
+        await limiter.check(req)
+    
     llm = get_llm_service()
     
     if not await llm.check_availability():

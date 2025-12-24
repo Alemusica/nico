@@ -46,6 +46,7 @@ from api.exceptions import CausalDiscoveryError, map_to_http_exception
 from api.logging_config import configure_logging, get_logger
 from api.middleware import RequestIDMiddleware
 from api.config import get_settings
+from api.rate_limit import setup_rate_limiting, set_limiter
 
 from api.services.llm_service import get_llm_service, OllamaLLMService
 from api.services.causal_service import (
@@ -221,6 +222,14 @@ app.include_router(pipeline_router)
 
 # Add Request ID middleware
 app.add_middleware(RequestIDMiddleware)
+
+# Setup rate limiting
+limiter = setup_rate_limiting(app)
+if limiter:
+    set_limiter(limiter)
+    logger.info("rate_limiting_enabled", per_minute=settings.rate_limit_per_minute)
+else:
+    logger.info("rate_limiting_disabled")
 
 # CORS for React frontend
 app.add_middleware(
