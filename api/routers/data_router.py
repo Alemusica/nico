@@ -104,14 +104,60 @@ class DirectDownloadRequest(BaseModel):
 
 @router.get("/files")
 async def list_files():
-    """List available data files."""
+    """
+    List all available data files in the data directory.
+    
+    Returns a list of files ready for loading and analysis.
+    
+    **Response Example:**
+    ```json
+    {
+      "files": [
+        "fram_strait_2020_2023.csv",
+        "barents_opening_daily.nc",
+        "nao_index_monthly.csv"
+      ]
+    }
+    ```
+    """
     service = get_data_service()
     return {"files": service.list_available_files()}
 
 
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    """Upload and load a data file."""
+    """
+    Upload and load a data file (CSV or NetCDF).
+    
+    Accepts CSV and NetCDF (.nc) files. The file is loaded into memory
+    and metadata is automatically extracted.
+    
+    **Supported Formats:**
+    - CSV: Comma-separated values with headers
+    - NetCDF: Network Common Data Form (Climate/Forecast conventions)
+    
+    **Request:**
+    - Content-Type: multipart/form-data
+    - Field: `file` (binary file content)
+    
+    **Response Example:**
+    ```json
+    {
+      "success": true,
+      "dataset": {
+        "name": "fram_strait_temperature.csv",
+        "rows": 1460,
+        "columns": ["time", "temperature", "salinity"],
+        "time_range": ["2020-01-01", "2023-12-31"],
+        "variables": ["temperature", "salinity"]
+      }
+    }
+    ```
+    
+    **Errors:**
+    - 400: Unsupported file type
+    - 500: File parsing error
+    """
     service = get_data_service()
     
     try:

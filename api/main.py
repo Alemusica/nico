@@ -10,6 +10,13 @@ Includes:
 - Root cause analysis (Ishikawa, FMEA, 5-Why)
 - Multi-satellite data fusion
 - Hybrid scoring (physics + chain + experience)
+
+API Documentation:
+- Swagger UI: /docs
+- ReDoc: /redoc
+- Usage Guide: /docs/API_USAGE.md
+
+For examples, see docs/API_USAGE.md
 """
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket, Body, Request
@@ -101,16 +108,106 @@ logger.info(
 app = FastAPI(
     title="🔬 Causal Discovery API",
     description="""
-Intelligent causal discovery with LLM-powered explanations.
+Intelligent causal discovery with LLM-powered explanations for oceanographic research.
 
-## Features:
-- **Data Management**: Upload, interpret, and preview datasets
-- **Causal Discovery**: PCMCI and correlation-based analysis
-- **Root Cause Analysis**: Ishikawa diagrams, FMEA, 5-Why
-- **Satellite Fusion**: Multi-satellite data integration
-- **Hybrid Scoring**: Physics + Chain + Experience based validation
+## 🌊 Features
+
+### Data Management
+- **Upload** custom datasets (CSV, NetCDF, ZARR)
+- **Interpret** data with automatic variable detection
+- **Preview** dataset statistics and metadata
+- **Cache** management for performance
+
+### Causal Discovery
+- **PCMCI** algorithm (Tigramite) for causal analysis
+- **Correlation** fallback when Tigramite unavailable
+- **Lag detection** up to 90 days
+- **Confidence scoring** with p-values
+
+### Root Cause Analysis
+- **Ishikawa** (Fishbone) diagrams
+- **FMEA** (Failure Mode Effects Analysis)
+- **5-Why** iterative questioning
+- **Hypothesis generation** with LLM
+
+### Knowledge System
+- **Scientific papers** database with DOI linking
+- **Historical events** catalog
+- **Causal patterns** library
+- **Knowledge graph** export
+
+### Investigation Agent
+- **Real-time** progress via WebSocket
+- **Multi-source** data fusion
+- **Automated** hypothesis testing
+- **Briefing** management
+
+## 📚 Documentation
+
+- **Interactive API**: [/docs](/docs) (Swagger UI)
+- **Alternative docs**: [/redoc](/redoc) (ReDoc)
+- **Usage guide**: See `docs/API_USAGE.md`
+- **Examples**: Python, curl, WebSocket
+
+## 🔧 Configuration
+
+All settings configurable via environment variables:
+- `APP_NAME`, `APP_VERSION`, `DEBUG`
+- `OLLAMA_BASE_URL`, `OLLAMA_MODEL`
+- `NEO4J_URI`, `NEO4J_PASSWORD`
+- See `.env.example` for complete list
+
+## 🚦 Health & Status
+
+Check system health: `GET /health`
+
+## 🔗 Quick Links
+
+- [GitHub](https://github.com/your-org/nico)
+- [Documentation](docs/)
+- [API Usage Guide](docs/API_USAGE.md)
     """,
     version="1.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    contact={
+        "name": "Causal Discovery Team",
+        "email": "support@causaldiscovery.io",
+    },
+    license_info={
+        "name": "MIT License",
+        "url": "https://opensource.org/licenses/MIT",
+    },
+    openapi_tags=[
+        {
+            "name": "health",
+            "description": "System health checks and component status"
+        },
+        {
+            "name": "data",
+            "description": "Dataset management, upload, and caching operations"
+        },
+        {
+            "name": "analysis",
+            "description": "Causal discovery and root cause analysis"
+        },
+        {
+            "name": "knowledge",
+            "description": "Scientific knowledge base (papers, events, patterns)"
+        },
+        {
+            "name": "investigation",
+            "description": "Automated investigation agent and briefing management"
+        },
+        {
+            "name": "chat",
+            "description": "LLM-powered question answering"
+        },
+        {
+            "name": "pipeline",
+            "description": "End-to-end analysis pipeline execution"
+        }
+    ]
 )
 
 # Include routers

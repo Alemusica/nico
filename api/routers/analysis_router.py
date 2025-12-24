@@ -55,12 +55,35 @@ router = APIRouter(prefix="/analysis", tags=["Root Cause Analysis"])
 # ============== REQUEST/RESPONSE MODELS ==============
 
 class IshikawaRequest(BaseModel):
-    """Request for Ishikawa diagram generation."""
-    event_description: str = Field(..., description="What happened")
-    event_location: str = Field(..., description="Where (e.g., 'Fram Strait, 78°N 0°E')")
-    event_time: str = Field(..., description="When (ISO format)")
-    observed_data: Optional[Dict[str, Any]] = Field(None, description="Measurements at event time")
-    domain: str = Field("flood", description="Analysis domain")
+    """Request for Ishikawa (fishbone) diagram generation.
+    
+    The Ishikawa diagram organizes potential root causes into categories
+    (e.g., atmospheric, oceanic, sea_ice) to systematically analyze events.
+    """
+    event_description: str = Field(
+        ..., 
+        description="What happened",
+        examples=["Sharp temperature increase in Fram Strait"]
+    )
+    event_location: str = Field(
+        ..., 
+        description="Where the event occurred",
+        examples=["Fram Strait, 78°N 0°E"]
+    )
+    event_time: str = Field(
+        ..., 
+        description="When (ISO format)",
+        examples=["2022-01-15T00:00:00Z"]
+    )
+    observed_data: Optional[Dict[str, Any]] = Field(
+        None, 
+        description="Measurements at event time",
+        examples=[{"temperature": 5.2, "salinity": 34.8}]
+    )
+    domain: str = Field(
+        "flood", 
+        description="Analysis domain (flood, drought, etc.)"
+    )
 
 
 class IshikawaCauseResponse(BaseModel):
@@ -79,11 +102,31 @@ class IshikawaResponse(BaseModel):
 
 
 class FMEARequest(BaseModel):
-    """Request for FMEA analysis."""
-    component: str = Field(..., description="Component being analyzed")
-    function: str = Field(..., description="What it's supposed to do")
-    data_source: str = Field("satellite", description="Data source")
-    known_issues: Optional[List[str]] = Field(None, description="Known issues")
+    """Request for Failure Mode and Effects Analysis (FMEA).
+    
+    FMEA systematically identifies potential failure modes and their impacts,
+    calculating Risk Priority Numbers (RPN) to prioritize mitigation efforts.
+    """
+    component: str = Field(
+        ..., 
+        description="Component being analyzed",
+        examples=["CMEMS Sea Surface Temperature"]
+    )
+    function: str = Field(
+        ..., 
+        description="What it's supposed to do",
+        examples=["Provide daily SST measurements with 0.1°C accuracy"]
+    )
+    data_source: str = Field(
+        "satellite", 
+        description="Data source type",
+        examples=["satellite", "buoy", "model"]
+    )
+    known_issues: Optional[List[str]] = Field(
+        None, 
+        description="Known issues with this component",
+        examples=[["Cloud contamination", "Sensor drift"]]
+    )
 
 
 class FMEAItemResponse(BaseModel):
@@ -108,10 +151,27 @@ class FMEAResponse(BaseModel):
 
 
 class FiveWhyRequest(BaseModel):
-    """Request for 5-Why analysis."""
-    symptom: str = Field(..., description="Initial problem/observation")
-    context: Optional[Dict[str, Any]] = Field(None, description="Additional context")
-    max_depth: int = Field(5, description="Maximum depth")
+    """Request for 5-Why root cause analysis.
+    
+    The 5-Why technique iteratively asks 'why' to drill down to root causes.
+    Each answer becomes the basis for the next 'why' question.
+    """
+    symptom: str = Field(
+        ..., 
+        description="Initial problem or observation",
+        examples=["Ocean temperature increased by 3°C in one week"]
+    )
+    context: Optional[Dict[str, Any]] = Field(
+        None, 
+        description="Additional context (location, time, measurements)",
+        examples=[{"region": "Fram Strait", "date": "2022-01-15"}]
+    )
+    max_depth: int = Field(
+        5, 
+        ge=1, 
+        le=10,
+        description="Maximum depth of why-questions to ask"
+    )
 
 
 class WhyStepResponse(BaseModel):
