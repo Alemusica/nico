@@ -6,10 +6,16 @@ Shared fixtures and configuration for all tests.
 
 import pytest
 import sys
+import os
 from pathlib import Path
 
-# Add src to path for all tests
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# CRITICAL: Add project root to path BEFORE pytest collects tests
+project_root = Path(__file__).parent.parent.absolute()
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Also ensure we're in project root
+os.chdir(project_root)
 
 
 def pytest_configure(config):
