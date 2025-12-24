@@ -99,7 +99,9 @@ def render_sidebar() -> AppConfig:
     st.sidebar.title("⚙️ Settings")
     
     # === GATE SELECTION (TOP PRIORITY) ===
-    gate_info = _render_gate_selector()
+    # TEMPORARILY DISABLED FOR DEBUGGING
+    # gate_info = _render_gate_selector()
+    st.sidebar.info("🔧 Gate selector temporarily disabled")
     
     st.sidebar.divider()
     
@@ -107,6 +109,7 @@ def render_sidebar() -> AppConfig:
     data_source = st.sidebar.radio(
         "Data Source",
         ["📂 Local Files", "📤 Upload Files"],
+        key="data_source_radio_unique"
     )
     
     if data_source == "📂 Local Files":
@@ -164,7 +167,8 @@ def _render_gate_selector() -> dict | None:
         range(len(gate_options)),
         format_func=lambda i: gate_options[i],
         index=current_idx,
-        help="Select an ocean strait to analyze"
+        help="Select an ocean strait to analyze",
+        key="main_gate_selector_unique"
     )
     
     selected_gate_id = gate_ids[selected_idx]

@@ -1,0 +1,19 @@
+{
+  "name": "Lago Maggiore",
+  "lat": 45.9510936,
+  "lon": 8.6341652,
+  "bbox": [
+    45.7224279,
+    46.179924,
+    8.4805596,
+    8.8657105
+  ],
+  "country": "Italia",
+  "region": "Piemonte",
+  "place_type": "lake",
+  "osm_id": 11758,
+  "area_km2": null,
+  "elevation_m": null,
+  "original_query": "Lake Maggiore",
+  "confidence": 0.5514316911178918
+}

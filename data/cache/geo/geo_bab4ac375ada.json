@@ -1,0 +1,19 @@
+{
+  "name": "Italia",
+  "lat": 42.6384261,
+  "lon": 12.674297,
+  "bbox": [
+    35.2889616,
+    47.0921485,
+    6.6272658,
+    18.7844746
+  ],
+  "country": "Italia",
+  "region": "",
+  "place_type": "administrative",
+  "osm_id": 365331,
+  "area_km2": null,
+  "elevation_m": null,
+  "original_query": "Italy",
+  "confidence": 0.9472892328660153
+}

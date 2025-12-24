@@ -1,0 +1,55 @@
+{
+  "regions": {
+    "source": "Norwegian Sea",
+    "target": "Fram Strait"
+  },
+  "observations": {
+    "norwegian_sea": 73,
+    "fram_strait": 733
+  },
+  "n_patterns_tested": 26,
+  "validation_results": {
+    "valid": 19,
+    "invalid": 7,
+    "best_patterns": [
+      {
+        "lag_days": 49,
+        "correlation": 0.883,
+        "physics_score": 0.7,
+        "mechanism": "West Spitsbergen Current (hypothesized)"
+      },
+      {
+        "lag_days": 63,
+        "correlation": 0.866,
+        "physics_score": 1.0,
+        "mechanism": "West Spitsbergen Current (hypothesized)"
+      },
+      {
+        "lag_days": 70,
+        "correlation": 0.856,
+        "physics_score": 1.0,
+        "mechanism": "West Spitsbergen Current (hypothesized)"
+      },
+      {
+        "lag_days": 56,
+        "correlation": 0.844,
+        "physics_score": 0.7,
+        "mechanism": "West Spitsbergen Current (hypothesized)"
+      },
+      {
+        "lag_days": 77,
+        "correlation": 0.819,
+        "physics_score": 1.0,
+        "mechanism": "West Spitsbergen Current (hypothesized)"
+      }
+    ]
+  },
+  "expected_propagation": {
+    "from": "norwegian_sea",
+    "to": "fram_strait",
+    "mechanism": "West Spitsbergen Current",
+    "speed_m_s": 0.2,
+    "distance_km": 1500,
+    "expected_lag_days": 90
+  }
+}
