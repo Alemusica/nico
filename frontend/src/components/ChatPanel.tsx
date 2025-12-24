@@ -465,12 +465,13 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
                     }}
                     onViewData={() => {
                       const result = message.metadata.investigation_result
-                      setActiveView('knowledge')
-                      addMessage('assistant', '📊 Navigated to Data Explorer!\n\n' +
+                      setPendingInvestigationResult(result)
+                      setActiveView('data')
+                      addMessage('assistant', '📊 Navigated to Data Panel!\n\n' +
                         `Location: **${result.location}**\n` +
                         `Period: **${result.time_range}**\n` +
                         `Sources: **${result.data_sources_count}** cached datasets\n\n` +
-                        'Use the cache entries to explore your investigation data.')
+                        'Switch to the **Cache tab** to view and load your investigation data.')
                     }}
                     onViewPapers={() => {
                       const result = message.metadata.investigation_result
