@@ -552,3 +552,50 @@ async def load_cached_data_as_dataset(
         "rows": len(df),
         "columns": list(df.columns),
     }
+
+
+# ========================
+# LLM INTERPRETATION
+# ========================
+@router.post("/interpret")
+async def interpret_dataset(dataset_name: str):
+    """Use LLM to interpret dataset structure and meanings."""
+    from api.models import InterpretationRequest, InterpretationResponse
+    
+    data_service = get_data_service()
+    llm = get_llm_service()
+    
+    meta = data_service.get_metadata(dataset_name)
+    if not meta:
+        raise HTTPException(404, f"Dataset '{dataset_name}' not found")
+    
+    # Check LLM availability
+    if not await llm.check_availability():
+        return {
+            "columns": meta.columns,
+            "summary": "LLM not available for interpretation",
+        }
+    
+    # Get sample data
+    sample = data_service.get_sample_data(dataset_name, n_rows=10)
+    
+    # Run interpretation
+    result = await llm.interpret_dataset(
+        columns_info=meta.columns,
+        filename=dataset_name,
+        sample_data=sample,
+    )
+    
+    return {
+        "columns": [{
+            "name": c.name,
+            "dtype": c.dtype,
+            "interpretation": c.interpretation,
+            "is_temporal": c.is_temporal,
+            "unit": c.unit,
+        } for c in result.columns],
+        "temporal_column": result.temporal_column,
+        "suggested_targets": result.suggested_targets,
+        "domain": result.domain,
+        "summary": result.summary,
+    }

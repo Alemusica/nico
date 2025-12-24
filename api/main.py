@@ -23,6 +23,15 @@ import json
 import io
 import asyncio
 
+# Import API models
+from api.models import (
+    DatasetInfo,
+    InterpretationRequest,
+    InterpretationResponse,
+    InvestigateRequest,
+    InvestigateResponse,
+)
+
 from api.services.llm_service import get_llm_service, OllamaLLMService
 from api.services.causal_service import (
     get_discovery_service, 
@@ -59,8 +68,10 @@ except ImportError:
 from api.routers.analysis_router import router as analysis_router
 from api.routers.chat_router import router as chat_router
 from api.routers.data_router import router as data_router
+from api.routers.health_router import router as health_router
 from api.routers.investigation_router import router as investigation_router
 from api.routers.knowledge_router import router as knowledge_router
+from api.routers.pipeline_router import router as pipeline_router
 
 # Initialize FastAPI
 app = FastAPI(
@@ -82,8 +93,10 @@ Intelligent causal discovery with LLM-powered explanations.
 app.include_router(analysis_router)
 app.include_router(chat_router)
 app.include_router(data_router)
+app.include_router(health_router)
 app.include_router(investigation_router)
 app.include_router(knowledge_router)
+app.include_router(pipeline_router)
 
 # CORS for React frontend
 app.add_middleware(
@@ -92,211 +105,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
 
 
-# ============== MODELS ==============
-
-class DatasetInfo(BaseModel):
-    name: str
-    file_type: str
-    n_rows: int
-    n_cols: int
-    columns: List[Dict[str, Any]]
-    memory_mb: float
-    time_range: Optional[Dict[str, str]] = None
-    spatial_bounds: Optional[Dict[str, float]] = None
-
-
-class InterpretationRequest(BaseModel):
-    dataset_name: str
-
-
-class InterpretationResponse(BaseModel):
-    columns: List[Dict[str, Any]]
-    temporal_column: Optional[str] = None
-    suggested_targets: List[str] = []
-    domain: Optional[str] = None
-    summary: str = ""
-
-
-class DiscoveryRequest(BaseModel):
-    dataset_name: str
-    variables: Optional[List[str]] = None
-    time_column: Optional[str] = None
-    max_lag: int = 7
-    alpha_level: float = 0.05
-    domain: str = "flood"
-    use_llm: bool = True
-
-
-class CausalLinkResponse(BaseModel):
-    source: str
-    target: str
-    lag: int
-    strength: float
-    p_value: float
-    explanation: Optional[str] = None
-    physics_valid: Optional[bool] = None
-    physics_score: Optional[float] = None
-
-
-class DiscoveryResponse(BaseModel):
-    variables: List[str]
-    links: List[CausalLinkResponse]
-    max_lag: int
-    alpha: float
-    method: str
-
-
-class ChatRequest(BaseModel):
-    message: str
-    context: Optional[Dict[str, Any]] = None
-
-
-class ChatResponse(BaseModel):
-    response: str
-    suggestions: List[str] = []
-
-
-class InvestigateRequest(BaseModel):
-    """Request to start an investigation."""
-    query: str
-    collect_satellite: bool = True
-    collect_reanalysis: bool = True
-    collect_climate_indices: bool = True
-    collect_papers: bool = True
-    collect_news: bool = False
-    run_correlation: bool = True
-    expand_search: bool = True
-
-
-class InvestigateResponse(BaseModel):
-    """Response from investigation."""
-    status: str
-    query: str
-    location: Optional[str] = None
-    event_type: Optional[str] = None
-    time_range: Optional[str] = None
-    data_sources_count: int = 0
-    papers_found: int = 0
-    correlations: List[Dict[str, Any]] = []
-    key_findings: List[str] = []
-    recommendations: List[str] = []
-    confidence: float = 0.0
-    raw_result: Optional[Dict[str, Any]] = None
-
-
-# ============== HEALTH ==============
-
-@app.get("/")
-async def root():
-    """API health check."""
-    return {"status": "ok", "service": "Causal Discovery API", "version": "1.0.0"}
-
-
-@app.get("/health")
-async def health():
-    """Detailed health check with robustness status."""
-    llm = get_llm_service()
-    llm_available = await llm.check_availability()
-    
-    # Check tigramite availability
-    try:
-        from tigramite import data_processing as pp
-        tigramite_status = "available"
-    except ImportError:
-        tigramite_status = "fallback (correlation)"
-    
-    # Check database connections
-    neo4j_status = "fallback (in-memory)"
-    surrealdb_status = "fallback (json)"
-    
-    try:
-        from neo4j import GraphDatabase
-        # Try to connect if env vars set
-        import os
-        uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-        try:
-            driver = GraphDatabase.driver(uri, auth=("neo4j", os.getenv("NEO4J_PASSWORD", "causalpass123")))
-            driver.verify_connectivity()
-            neo4j_status = "connected"
-            driver.close()
-        except Exception:
-            pass
-    except ImportError:
-        pass
-    
-    try:
-        import surrealdb
-        surrealdb_status = "available (not connected)"
-    except ImportError:
-        pass
-    
-    return {
-        "status": "healthy",
-        "version": "1.0.0",
-        "components": {
-            "llm": {
-                "status": "available" if llm_available else "fallback (rules)",
-                "model": llm.config.model if llm_available else None
-            },
-            "causal_discovery": {
-                "status": tigramite_status,
-                "method": "PCMCI" if tigramite_status == "available" else "cross-correlation"
-            },
-            "databases": {
-                "neo4j": neo4j_status,
-                "surrealdb": surrealdb_status
-            }
-        },
-        "robustness": "All components have fallbacks - system operational"
-    }
-
-
-# ============== DATA ENDPOINTS ==============
-
-# ============== LLM INTERPRETATION ==============
-
-@app.post("/interpret", response_model=InterpretationResponse)
-async def interpret_dataset(request: InterpretationRequest):
-    """Use LLM to interpret dataset structure and meanings."""
-    data_service = get_data_service()
-    llm = get_llm_service()
-    
-    meta = data_service.get_metadata(request.dataset_name)
-    if not meta:
-        raise HTTPException(404, f"Dataset '{request.dataset_name}' not found")
-    
-    # Check LLM availability
-    if not await llm.check_availability():
-        return InterpretationResponse(
-            columns=meta.columns,
-            summary="LLM not available for interpretation",
-        )
-    
-    # Get sample data
-    sample = data_service.get_sample_data(request.dataset_name, n_rows=10)
-    
-    # Run interpretation
-    result = await llm.interpret_dataset(
-        columns_info=meta.columns,
-        filename=request.dataset_name,
-        sample_data=sample,
-    )
-    
-    return InterpretationResponse(
-        columns=[{
-            "name": c.name,
-            "dtype": c.dtype,
-            "interpretation": c.interpretation,
-            "is_temporal": c.is_temporal,
-            "unit": c.unit,
-        } for c in result.columns],
-        temporal_column=result.temporal_column,
-        suggested_targets=result.suggested_targets,
-        domain=result.domain,
-        summary=result.summary,
     )
 # ============== INVESTIGATION AGENT ==============
 
@@ -365,33 +175,6 @@ async def investigate(request: InvestigateRequest):
             recommendations=["Check logs for details"],
             raw_result={"error": str(e), "traceback": traceback.format_exc()}
         )
-
-# ============== HYPOTHESES ==============
-
-@app.post("/hypotheses")
-async def generate_hypotheses(
-    dataset_name: str,
-    domain: str = "flood",
-):
-    """Generate hypotheses for potential causal relationships."""
-    data_service = get_data_service()
-    llm = get_llm_service()
-    
-    df = data_service.get_dataset(dataset_name)
-    if df is None:
-        raise HTTPException(404, f"Dataset '{dataset_name}' not found")
-    
-    if not await llm.check_availability():
-        return {"hypotheses": [], "error": "LLM not available"}
-    
-    variables = df.select_dtypes(include=['number']).columns.tolist()
-    
-    hypotheses = await llm.generate_hypotheses(
-        variables=variables,
-        domain=domain,
-    )
-    
-    return {"hypotheses": hypotheses}
 
 
 # ============== HISTORICAL EPISODE ANALYSIS ==============
@@ -689,47 +472,4 @@ async def get_cross_episode_patterns():
     }
 
 
-# ============== PIPELINE ENDPOINTS ==============
-
-class FullPipelineRequest(BaseModel):
-    """Request for running full pipeline."""
-    topics: Optional[List[str]] = None
-    paper_queries: Optional[List[str]] = None
-    max_per_topic: int = 5
-
-
-@app.post("/pipeline/run")
-async def run_full_pipeline(request: FullPipelineRequest):
-    """
-    Run the complete 4-stage data intelligence pipeline.
-    
-    1. SCRAPE → 2. REFINE → 3. CORRELATE → 4. SCORE
-    
-    Returns comprehensive results including:
-    - Multi-factor indices (thermodynamics, anemometry, precipitation, etc.)
-    - Precursor signals found
-    - Confidence scores
-    """
-    try:
-        from src.pipeline import run_full_pipeline as do_pipeline
-        
-        results = do_pipeline(
-            topics=request.topics,
-            paper_queries=request.paper_queries,
-        )
-        
-        # Serialize for JSON response
-        return {
-            "status": "success",
-            "stats": results["stats"],
-            "summary": {
-                "scraped": len(results["scraped"]),
-                "refined": len(results["refined"]),
-                "correlations": len(results["correlations"]),
-                "knowledge_items": len(results["knowledge"]),
-            },
-            "knowledge": [k.to_dict() for k in results["knowledge"]]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 

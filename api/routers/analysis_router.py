@@ -802,3 +802,32 @@ async def find_correlations(
     
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+# ========================
+# HYPOTHESES GENERATION
+# ========================
+@router.post("/hypotheses")
+async def generate_hypotheses(
+    dataset_name: str,
+    domain: str = "flood",
+):
+    """Generate causal hypotheses for potential relationships."""
+    data_service = get_data_service()
+    llm = get_llm_service()
+    
+    df = data_service.get_dataset(dataset_name)
+    if df is None:
+        raise HTTPException(404, f"Dataset '{dataset_name}' not found")
+    
+    if not await llm.check_availability():
+        return {"hypotheses": [], "error": "LLM not available"}
+    
+    variables = df.select_dtypes(include=['number']).columns.tolist()
+    
+    hypotheses = await llm.generate_hypotheses(
+        variables=variables,
+        domain=domain,
+    )
+    
+    return {"hypotheses": hypotheses}
