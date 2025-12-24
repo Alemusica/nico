@@ -137,6 +137,28 @@ ERA5_VARIABLES = {
         description="Geopotential at 500 hPa",
         level_type="pressure",
     ),
+    
+    # Humidity variables (Issue #7 - GitHub)
+    "dewpoint_2m": ERA5Variable(
+        cds_name="2m_dewpoint_temperature",
+        short_name="d2m",
+        units="K",
+        description="2 metre dewpoint temperature (proxy for humidity)",
+    ),
+    "specific_humidity_850": ERA5Variable(
+        cds_name="specific_humidity",
+        short_name="q",
+        units="kg/kg",
+        description="Specific humidity at 850 hPa",
+        level_type="pressure",
+    ),
+    "relative_humidity_850": ERA5Variable(
+        cds_name="relative_humidity",
+        short_name="r",
+        units="%",
+        description="Relative humidity at 850 hPa",
+        level_type="pressure",
+    ),
 }
 
 
