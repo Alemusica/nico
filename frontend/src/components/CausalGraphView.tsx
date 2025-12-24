@@ -231,6 +231,12 @@ export function CausalGraphView() {
                 Suggested lag: {pendingInvestigationResult.event_type === 'flood' ? '14 days' : 
                               pendingInvestigationResult.event_type === 'drought' ? '90 days' : '7 days'}
               </p>
+              <div className="mt-phi-sm flex items-center gap-phi-md text-phi-xs">
+                <span className="opacity-90">📊 Next steps:</span>
+                <span className="bg-white/20 px-2 py-1 rounded">1. Go to Data tab</span>
+                <span className="bg-white/20 px-2 py-1 rounded">2. Load cached investigation data</span>
+                <span className="bg-white/20 px-2 py-1 rounded">3. Return here to run PCMCI</span>
+              </div>
             </div>
             <button 
               onClick={() => setShowInvestigationHint(false)}

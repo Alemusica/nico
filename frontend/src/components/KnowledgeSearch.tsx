@@ -4,7 +4,7 @@
  * Now includes Data Explorer for direct data downloads
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { 
   Search, 
@@ -49,16 +49,23 @@ export function KnowledgeSearch() {
   const [showCompare, setShowCompare] = useState(false)
   
   // Initialize search query from store if available
-  useState(() => {
+  useEffect(() => {
     if (knowledgeSearchQuery) {
       setSearchQuery(knowledgeSearchQuery)
       setActiveTab('papers')
       // Clear after use
       setKnowledgeSearchQuery(null)
-      // Trigger search
-      setTimeout(() => handleSearch(), 100)
+      // Trigger search after state update
+      setTimeout(async () => {
+        try {
+          const results = await searchPapers(knowledgeSearchQuery, 20, backend)
+          setSearchResults(results)
+        } catch (error) {
+          console.error('Auto-search failed:', error)
+        }
+      }, 200)
     }
-  })
+  }, [knowledgeSearchQuery, backend, setKnowledgeSearchQuery])
 
   // Fetch stats
   const { data: stats } = useQuery({

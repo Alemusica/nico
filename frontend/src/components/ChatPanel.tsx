@@ -8,7 +8,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Send, Sparkles, RefreshCw, Globe, Database, MapPin, Clock, Download, X, Check } from 'lucide-react'
 import clsx from 'clsx'
 import { useStore } from '../store'
-import { chat, investigateStreaming, isInvestigationQuery, createInvestigationBriefing } from '../api'
+import { chat, investigateStreaming, isInvestigationQuery, createInvestigationBriefing, listCacheEntries, loadCachedAsDataset } from '../api'
 import type { InvestigateProgress, InvestigateResponse, InvestigationBriefingData } from '../api'
 import { InvestigationProgress } from './InvestigationProgress'
 import { InvestigationResult } from './InvestigationResult'
@@ -434,13 +434,34 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
                 {message.metadata?.type === 'investigation_result' ? (
                   <InvestigationResult 
                     result={message.metadata.investigation_result}
-                    onRunAnalysis={() => {
+                    onRunAnalysis={async () => {
                       const result = message.metadata.investigation_result
                       setPendingInvestigationResult(result)
-                      setActiveView('graph')
-                      addMessage('assistant', '🔬 Navigated to Graph view for causal analysis!\n\n' +
-                        `Ready to analyze ${result.data_sources_count} data sources from ${result.location}.\n` +
-                        'Configure PCMCI parameters and run discovery.')
+                      
+                      // Load cached investigation data as dataset
+                      try {
+                        const cacheEntries = await listCacheEntries()
+                        if (cacheEntries && cacheEntries.length > 0) {
+                          // Load all cache entries as datasets
+                          for (const entry of cacheEntries.slice(0, 3)) { // Load first 3 entries
+                            await loadCachedAsDataset(entry.id, `investigation_${entry.source}`)
+                          }
+                          setActiveView('graph')
+                          addMessage('assistant', `🔬 Navigated to Graph view with **${cacheEntries.length} datasets loaded**!\n\n` +
+                            `Analysis ready for ${result.location}.\n` +
+                            'Configure PCMCI parameters in the sidebar and click "Run Discovery".')
+                        } else {
+                          setActiveView('graph')
+                          addMessage('assistant', '🔬 Navigated to Graph view!\n\n' +
+                            `Ready to analyze ${result.data_sources_count} data sources from ${result.location}.\n` +
+                            'Note: No cached data found. Load datasets from Data Panel first.')
+                        }
+                      } catch (error) {
+                        console.error('Failed to load cache:', error)
+                        setActiveView('graph')
+                        addMessage('assistant', '🔬 Navigated to Graph view!\n\n' +
+                          'Failed to auto-load cached data. Please load datasets manually from the Data Panel.')
+                      }
                     }}
                     onViewData={() => {
                       const result = message.metadata.investigation_result

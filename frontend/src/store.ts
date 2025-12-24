@@ -75,8 +75,8 @@ interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  // Backend - default to Neo4j
-  backend: 'neo4j',
+  // Backend - default to SurrealDB (investigation papers)
+  backend: 'surrealdb',
   setBackend: (backend) => set({ backend }),
   
   // Dataset

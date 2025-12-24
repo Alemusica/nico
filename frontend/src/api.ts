@@ -694,6 +694,54 @@ export async function clearCache(source?: string): Promise<{ status: string }> {
 }
 
 /**
+ * List cache entries.
+ */
+export async function listCacheEntries(source?: string): Promise<{
+  entries: Array<{
+    id: string
+    source: string
+    variables: string[]
+    lat_range: [number, number]
+    lon_range: [number, number]
+    time_range: [string, string]
+    resolution_temporal: string
+    resolution_spatial: string
+    size_mb: number
+    created_at: string
+    access_count: number
+  }>
+}> {
+  const url = source 
+    ? `${API_BASE}/data/cache/entries?source=${source}`
+    : `${API_BASE}/data/cache/entries`
+  const res = await fetch(url)
+  return res.json()
+}
+
+/**
+ * Load cached data as dataset for analysis.
+ */
+export async function loadCachedAsDataset(
+  entryId: string,
+  datasetName?: string
+): Promise<{
+  status: string
+  dataset_name: string
+  rows: number
+  columns: string[]
+}> {
+  const res = await fetch(`${API_BASE}/data/cache/load_as_dataset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      entry_id: entryId,
+      dataset_name: datasetName 
+    }),
+  })
+  return res.json()
+}
+
+/**
  * Update default resolution.
  */
 export async function updateResolution(
