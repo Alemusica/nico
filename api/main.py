@@ -57,6 +57,7 @@ except ImportError:
 
 # Import routers
 from api.routers.analysis_router import router as analysis_router
+from api.routers.chat_router import router as chat_router
 from api.routers.data_router import router as data_router
 from api.routers.investigation_router import router as investigation_router
 from api.routers.knowledge_router import router as knowledge_router
@@ -79,6 +80,7 @@ Intelligent causal discovery with LLM-powered explanations.
 
 # Include routers
 app.include_router(analysis_router)
+app.include_router(chat_router)
 app.include_router(data_router)
 app.include_router(investigation_router)
 app.include_router(knowledge_router)
@@ -296,122 +298,6 @@ async def interpret_dataset(request: InterpretationRequest):
         domain=result.domain,
         summary=result.summary,
     )
-
-
-# ============== CAUSAL DISCOVERY ==============
-
-@app.post("/discover", response_model=DiscoveryResponse)
-async def discover_causality(request: DiscoveryRequest):
-    """Run causal discovery on a dataset."""
-    data_service = get_data_service()
-    
-    df = data_service.get_dataset(request.dataset_name)
-    if df is None:
-        raise HTTPException(404, f"Dataset '{request.dataset_name}' not found")
-    
-    # Configure discovery
-    config = DiscoveryConfig(
-        max_lag=request.max_lag,
-        alpha_level=request.alpha_level,
-        use_llm_explanations=request.use_llm,
-    )
-    
-    service = CausalDiscoveryService(config)
-    
-    try:
-        graph = await service.discover(
-            df=df,
-            variables=request.variables,
-            time_column=request.time_column,
-            domain=request.domain,
-        )
-        
-        return DiscoveryResponse(
-            variables=graph.variables,
-            links=[CausalLinkResponse(
-                source=l.source,
-                target=l.target,
-                lag=l.lag,
-                strength=l.strength,
-                p_value=l.p_value,
-                explanation=l.explanation,
-                physics_valid=l.physics_valid,
-                physics_score=l.physics_score,
-            ) for l in graph.links],
-            max_lag=graph.max_lag,
-            alpha=graph.alpha,
-            method=graph.discovery_method,
-        )
-    
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-@app.post("/discover/correlations")
-async def find_correlations(
-    dataset_name: str,
-    source_var: str,
-    target_var: str,
-    max_lag: int = 30,
-):
-    """Find cross-correlations between two variables."""
-    data_service = get_data_service()
-    
-    df = data_service.get_dataset(dataset_name)
-    if df is None:
-        raise HTTPException(404, f"Dataset '{dataset_name}' not found")
-    
-    service = get_discovery_service()
-    
-    try:
-        results = await service.find_cross_correlations(
-            df=df,
-            source_var=source_var,
-            target_var=target_var,
-            max_lag=max_lag,
-        )
-        return {"correlations": results[:20]}  # Top 20
-    
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-# ============== CHAT ==============
-
-@app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """Chat with LLM about the data and discoveries."""
-    llm = get_llm_service()
-    
-    if not await llm.check_availability():
-        return ChatResponse(
-            response="LLM is not available. Please check if Ollama is running.",
-            suggestions=["Run: ollama serve"]
-        )
-    
-    # Build context-aware prompt
-    context_str = ""
-    if request.context:
-        context_str = f"\n\nContext:\n{json.dumps(request.context, indent=2)}"
-    
-    system = """You are a scientific data analyst assistant specializing in causal discovery.
-Help users understand their data, interpret discovered relationships, and suggest next steps.
-Be concise and actionable."""
-    
-    prompt = f"{request.message}{context_str}"
-    
-    response = await llm._generate(prompt, system)
-    
-    return ChatResponse(
-        response=response,
-        suggestions=[
-            "What variables should I investigate?",
-            "Explain the strongest relationship",
-            "Is this pattern physically plausible?",
-        ]
-    )
-
-
 # ============== INVESTIGATION AGENT ==============
 
 @app.post("/investigate", response_model=InvestigateResponse)
@@ -479,42 +365,6 @@ async def investigate(request: InvestigateRequest):
             recommendations=["Check logs for details"],
             raw_result={"error": str(e), "traceback": traceback.format_exc()}
         )
-
-
-# ============== WEBSOCKET FOR STREAMING ==============
-
-@app.websocket("/ws/chat")
-async def websocket_chat(websocket: WebSocket):
-    """WebSocket for streaming LLM responses."""
-    await websocket.accept()
-    llm = get_llm_service()
-    
-    try:
-        while True:
-            data = await websocket.receive_text()
-            message = json.loads(data)
-            
-            if not await llm.check_availability():
-                await websocket.send_text(json.dumps({
-                    "error": "LLM not available"
-                }))
-                continue
-            
-            # Stream response
-            async for chunk in llm._generate_stream(message.get("prompt", "")):
-                await websocket.send_text(json.dumps({
-                    "chunk": chunk,
-                    "done": False,
-                }))
-            
-            await websocket.send_text(json.dumps({
-                "chunk": "",
-                "done": True,
-            }))
-    
-    except Exception as e:
-        await websocket.close()
-
 
 # ============== HYPOTHESES ==============
 

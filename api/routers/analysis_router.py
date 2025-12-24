@@ -40,6 +40,12 @@ from src.data.satellite_fusion import (
     SATELLITE_CONFIGS,
     SatelliteStatus,
 )
+from api.services.causal_service import (
+    get_discovery_service,
+    CausalDiscoveryService,
+    DiscoveryConfig,
+)
+from api.services.data_service import get_data_service
 
 
 # Create router
@@ -164,6 +170,38 @@ class DynamicIndicesResponse(BaseModel):
     precipitation: Dict[str, Any]
 
 
+
+
+class DiscoveryRequest(BaseModel):
+    """Request for causal discovery."""
+    dataset_name: str
+    variables: Optional[List[str]] = None
+    time_column: Optional[str] = None
+    max_lag: int = 7
+    alpha_level: float = 0.05
+    domain: str = "flood"
+    use_llm: bool = True
+
+
+class CausalLinkResponse(BaseModel):
+    """A single causal link in the discovery graph."""
+    source: str
+    target: str
+    lag: int
+    strength: float
+    p_value: float
+    explanation: Optional[str] = None
+    physics_valid: Optional[bool] = None
+    physics_score: Optional[float] = None
+
+
+class DiscoveryResponse(BaseModel):
+    """Response containing discovered causal graph."""
+    variables: List[str]
+    links: List[CausalLinkResponse]
+    max_lag: int
+    alpha: float
+    method: str
 # ============== ISHIKAWA ENDPOINTS ==============
 
 @router.post("/ishikawa", response_model=IshikawaResponse)
@@ -686,3 +724,81 @@ async def run_comprehensive_analysis(
 
 # Export router for inclusion in main app
 __all__ = ["router"]
+
+
+# ============== CAUSAL DISCOVERY ==============
+
+@router.post("/discover", response_model=DiscoveryResponse)
+async def discover_causality(request: DiscoveryRequest):
+    """Run causal discovery on a dataset."""
+    data_service = get_data_service()
+    
+    df = data_service.get_dataset(request.dataset_name)
+    if df is None:
+        raise HTTPException(404, f"Dataset '{request.dataset_name}' not found")
+    
+    # Configure discovery
+    config = DiscoveryConfig(
+        max_lag=request.max_lag,
+        alpha_level=request.alpha_level,
+        use_llm_explanations=request.use_llm,
+    )
+    
+    service = CausalDiscoveryService(config)
+    
+    try:
+        graph = await service.discover(
+            df=df,
+            variables=request.variables,
+            time_column=request.time_column,
+            domain=request.domain,
+        )
+        
+        return DiscoveryResponse(
+            variables=graph.variables,
+            links=[CausalLinkResponse(
+                source=l.source,
+                target=l.target,
+                lag=l.lag,
+                strength=l.strength,
+                p_value=l.p_value,
+                explanation=l.explanation,
+                physics_valid=l.physics_valid,
+                physics_score=l.physics_score,
+            ) for l in graph.links],
+            max_lag=graph.max_lag,
+            alpha=graph.alpha,
+            method=graph.discovery_method,
+        )
+    
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@router.post("/discover/correlations")
+async def find_correlations(
+    dataset_name: str,
+    source_var: str,
+    target_var: str,
+    max_lag: int = 30,
+):
+    """Find cross-correlations between two variables."""
+    data_service = get_data_service()
+    
+    df = data_service.get_dataset(dataset_name)
+    if df is None:
+        raise HTTPException(404, f"Dataset '{dataset_name}' not found")
+    
+    service = get_discovery_service()
+    
+    try:
+        results = await service.find_cross_correlations(
+            df=df,
+            source_var=source_var,
+            target_var=target_var,
+            max_lag=max_lag,
+        )
+        return {"correlations": results[:20]}  # Top 20
+    
+    except Exception as e:
+        raise HTTPException(500, str(e))
