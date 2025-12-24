@@ -2,7 +2,8 @@
  * API Client for Causal Discovery Backend
  */
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = 'http://localhost:8000/api/v1'
+const WS_BASE = 'ws://localhost:8000'
 
 export type Backend = 'neo4j' | 'surrealdb'
 
@@ -90,8 +91,6 @@ export async function chat(message: string, context?: Record<string, unknown>) {
 // Investigation Agent Endpoints
 // =========================================================================
 
-const WS_BASE = 'ws://localhost:8000'
-
 export interface InvestigateRequest {
   query: string
   collect_satellite?: boolean
@@ -140,7 +139,7 @@ export function investigateStreaming(
   onComplete: (result: InvestigateResponse) => void,
   onError: (error: string) => void,
 ): () => void {
-  const ws = new WebSocket(`${WS_BASE}/ws/investigate`)
+  const ws = new WebSocket(`${WS_BASE}/api/v1/investigation/ws`)
   
   ws.onopen = () => {
     ws.send(JSON.stringify(request))
@@ -196,7 +195,7 @@ export function investigateStreaming(
  * - "investigate floods in Po Valley 1994"
  */
 export async function investigate(request: InvestigateRequest): Promise<InvestigateResponse> {
-  const res = await fetch(`${API_BASE}/investigate`, {
+  const res = await fetch(`http://localhost:8000/investigate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
@@ -208,7 +207,7 @@ export async function investigate(request: InvestigateRequest): Promise<Investig
  * Check if Investigation Agent is available and configured.
  */
 export async function getInvestigateStatus() {
-  const res = await fetch(`${API_BASE}/investigate/status`)
+  const res = await fetch(`${API_BASE}/investigation/status`)
   return res.json()
 }
 
@@ -261,7 +260,7 @@ export async function createInvestigationBriefing(
     collect_papers?: boolean
   }
 ): Promise<{ status: string; briefing: InvestigationBriefingData }> {
-  const res = await fetch(`${API_BASE}/investigate/briefing`, {
+  const res = await fetch(`${API_BASE}/investigation/briefing`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -465,7 +464,7 @@ export async function compareBackends() {
 // =========================================================================
 
 export async function checkHealth() {
-  const res = await fetch(`${API_BASE}/health`)
+  const res = await fetch(`http://localhost:8000/api/v1/health`)
   return res.json()
 }
 
@@ -507,17 +506,17 @@ export interface AnalysisResult {
 }
 
 export async function listHistoricalEpisodes(): Promise<{ episodes: HistoricalEpisode[]; count: number }> {
-  const res = await fetch(`${API_BASE}/historical/episodes`)
+  const res = await fetch(`http://localhost:8000/historical/episodes`)
   return res.json()
 }
 
 export async function getHistoricalEpisode(episodeId: string): Promise<HistoricalEpisode> {
-  const res = await fetch(`${API_BASE}/historical/episodes/${episodeId}`)
+  const res = await fetch(`http://localhost:8000/historical/episodes/${episodeId}`)
   return res.json()
 }
 
 export async function analyzeHistoricalEpisode(episodeId: string): Promise<AnalysisResult> {
-  const res = await fetch(`${API_BASE}/historical/analyze/${episodeId}`, {
+  const res = await fetch(`http://localhost:8000/historical/analyze/${episodeId}`, {
     method: 'POST',
   })
   return res.json()
@@ -534,7 +533,7 @@ export async function getCrossPatterns(): Promise<{
   }>
   recommendation: string
 }> {
-  const res = await fetch(`${API_BASE}/historical/cross-patterns`)
+  const res = await fetch(`http://localhost:8000/historical/cross-patterns`)
   return res.json()
 }
 
