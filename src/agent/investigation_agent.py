@@ -30,6 +30,18 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any, Union
 import json
 import re
+import uuid
+
+# Investigation system
+try:
+    from src.core.investigation_logger import InvestigationLogger, InvestigationStep
+    from src.core.investigation_validators import validate_papers_batch, ValidationLevel
+except ImportError:
+    # Fallback - will be handled gracefully
+    InvestigationLogger = None
+    InvestigationStep = None
+    validate_papers_batch = None
+    ValidationLevel = None
 
 # Try relative imports first, then absolute
 try:
@@ -426,6 +438,9 @@ class InvestigationAgent:
         self._era5_client = None
         self._climate_client = None
         self._literature_scraper = None
+        
+        # Logger will be initialized per investigation
+        self._logger = None  # type: Optional[InvestigationLogger]
     
     @property
     def geo_resolver(self):
@@ -697,30 +712,57 @@ class InvestigationAgent:
         - data: optional dict with results
         - progress: optional 0-100 percentage
         """
+        # Initialize structured logger
+        investigation_id = str(uuid.uuid4())
+        if InvestigationLogger:
+            self._logger = InvestigationLogger(investigation_id, query)
+            self._logger.log_metric("temporal_resolution", temporal_resolution)
+            self._logger.log_metric("spatial_resolution", spatial_resolution)
+        
         # Store resolution config for data collection methods
         self._temporal_resolution = temporal_resolution
         self._spatial_resolution = float(spatial_resolution)
         
-        yield {"step": 0, "status": "started", "message": f"🔍 Starting investigation: {query}", "data": {"resolution": {"temporal": temporal_resolution, "spatial": spatial_resolution}}}
+        yield {"step": 0, "status": "started", "message": f"🔍 Starting investigation: {query}", "data": {"resolution": {"temporal": temporal_resolution, "spatial": spatial_resolution}, "investigation_id": investigation_id}}
         
         # Initialize result
         result = InvestigationResult(query=query, event_context=EventContext(location_name=""))
         
         # Step 1: Parse query
         yield {"step": 1, "status": "started", "message": "📝 Parsing query..."}
-        event_context = self.query_parser.parse(query)
-        result.event_context = event_context
-        yield {
-            "step": 1, 
-            "status": "complete", 
-            "message": f"Query parsed: {event_context.location_name}",
-            "data": {
-                "location": event_context.location_name,
-                "event_type": event_context.event_type,
-                "start_date": event_context.start_date,
-                "end_date": event_context.end_date,
+        if self._logger and InvestigationStep:
+            self._logger.start_step(InvestigationStep.PARSE)
+        
+        try:
+            event_context = self.query_parser.parse(query)
+            result.event_context = event_context
+            
+            if self._logger and InvestigationStep:
+                self._logger.update_context(
+                    location=event_context.location_name,
+                    event_type=event_context.event_type,
+                    time_range=f"{event_context.start_date} to {event_context.end_date}"
+                )
+                self._logger.complete_step(InvestigationStep.PARSE, {
+                    "location": event_context.location_name,
+                    "event_type": event_context.event_type
+                })
+            
+            yield {
+                "step": 1, 
+                "status": "complete", 
+                "message": f"Query parsed: {event_context.location_name}",
+                "data": {
+                    "location": event_context.location_name,
+                    "event_type": event_context.event_type,
+                    "start_date": event_context.start_date,
+                    "end_date": event_context.end_date,
+                }
             }
-        }
+        except Exception as e:
+            if self._logger and InvestigationStep:
+                self._logger.fail_step(InvestigationStep.PARSE, str(e))
+            raise
         
         # Step 2: Geo-resolve location
         yield {"step": 2, "status": "started", "message": "🌍 Resolving location..."}
@@ -797,12 +839,30 @@ class InvestigationAgent:
         await self._generate_findings(result)
         yield {"step": 6, "status": "complete", "message": f"Generated {len(result.key_findings)} findings"}
         
+        # Log investigation summary
+        if self._logger and InvestigationStep:
+            self._logger.complete_step(InvestigationStep.COMPLETE, {
+                "data_sources": len(result.data_sources),
+                "papers_found": len(result.papers),
+                "correlations": len(result.correlations),
+                "key_findings": len(result.key_findings)
+            })
+            
+            # Get summary with metrics
+            summary = self._logger.get_summary()
+            print(f"\n📊 Investigation Summary:")
+            print(f"   Duration: {summary['total_duration_ms']:.0f}ms")
+            print(f"   Steps completed: {len(summary['steps_completed'])}")
+            print(f"   Steps failed: {len(summary['steps_failed'])}")
+            print(f"   Success rate: {summary['success_rate']*100:.1f}%")
+        
         # Final result
         yield {
             "step": "complete",
             "status": "success",
             "message": "✅ Investigation complete!",
-            "result": result.to_dict()
+            "result": result.to_dict(),
+            "summary": self._logger.get_summary() if self._logger else None
         }
     
     async def investigate(
@@ -1021,6 +1081,9 @@ class InvestigationAgent:
         
         print("   📚 Searching scientific literature...")
         
+        if self._logger and InvestigationStep:
+            self._logger.start_step(InvestigationStep.PAPERS_COLLECT)
+        
         try:
             papers = await self.literature_scraper.search_flood_papers(
                 location=ctx.location_name,
@@ -1028,21 +1091,93 @@ class InvestigationAgent:
                 max_results=20,
             )
             
-            for paper in papers:
-                result.papers.append(paper.to_dict())
-            
             print(f"      ✅ Found {len(papers)} papers")
             
-            # Save papers to knowledge base
-            if self.knowledge_service and papers:
+            if self._logger and InvestigationStep:
+                self._logger.complete_step(InvestigationStep.PAPERS_COLLECT, {
+                    "papers_found": len(papers)
+                })
+            
+            # Validate and sanitize papers
+            if self._logger and InvestigationStep:
+                self._logger.start_step(InvestigationStep.PAPERS_VALIDATE)
+            
+            papers_to_save = []
+            if validate_papers_batch and ValidationLevel:
                 try:
-                    print(f"      💾 Saving {len(papers)} papers to knowledge base...")
-                    saved_count = await self.knowledge_service.bulk_add_papers(papers)
+                    # Convert papers to dict format
+                    papers_dict = [p.to_dict() if hasattr(p, 'to_dict') else p for p in papers]
+                    
+                    # Validate and sanitize
+                    validated_papers, validation_results = validate_papers_batch(papers_dict)
+                    papers_to_save = validated_papers
+                    
+                    # Log validation results
+                    critical_failures = [r for r in validation_results if r.level == ValidationLevel.CRITICAL and not r.passed]
+                    warnings = [r for r in validation_results if r.level == ValidationLevel.WARNING and not r.passed]
+                    
+                    if self._logger:
+                        for vr in validation_results:
+                            self._logger.log_validation(vr.validator, vr.passed, vr.details)
+                        
+                        self._logger.complete_step(InvestigationStep.PAPERS_VALIDATE, {
+                            "original_count": len(papers_dict),
+                            "validated_count": len(validated_papers),
+                            "rejected_count": len(papers_dict) - len(validated_papers),
+                            "critical_failures": len(critical_failures),
+                            "warnings": len(warnings)
+                        })
+                    
+                    print(f"      ✅ Validated {len(validated_papers)}/{len(papers_dict)} papers")
+                    if critical_failures:
+                        print(f"      ⚠️ Rejected {len(papers_dict) - len(validated_papers)} papers due to validation errors")
+                except Exception as e:
+                    print(f"      ⚠️ Validation error: {e}, using unvalidated papers")
+                    papers_to_save = [p.to_dict() if hasattr(p, 'to_dict') else p for p in papers]
+                    if self._logger and InvestigationStep:
+                        self._logger.fail_step(InvestigationStep.PAPERS_VALIDATE, str(e))
+            else:
+                # No validation available, use papers as-is
+                papers_to_save = [p.to_dict() if hasattr(p, 'to_dict') else p for p in papers]
+            
+            # Add to result
+            for paper in papers_to_save:
+                result.papers.append(paper)
+            
+            # Save papers to knowledge base
+            if self.knowledge_service and papers_to_save:
+                if self._logger and InvestigationStep:
+                    self._logger.start_step(InvestigationStep.PAPERS_STORE)
+                
+                try:
+                    print(f"      💾 Saving {len(papers_to_save)} papers to knowledge base...")
+                    saved_count = await self.knowledge_service.bulk_add_papers(papers_to_save)
                     print(f"      ✅ Saved {saved_count} papers to vector DB")
+                    
+                    if self._logger and InvestigationStep:
+                        self._logger.complete_step(InvestigationStep.PAPERS_STORE, {
+                            "papers_saved": saved_count,
+                            "backend": "surrealdb"
+                        })
+                        
+                        # Health check: verify papers are searchable
+                        self._logger.log_health_check("knowledge_base", True, {
+                            "papers_stored": saved_count,
+                            "backend": "surrealdb"
+                        })
                 except Exception as e:
                     print(f"      ⚠️ Paper storage error: {e}")
+                    if self._logger and InvestigationStep:
+                        self._logger.fail_step(InvestigationStep.PAPERS_STORE, str(e), {
+                            "papers_count": len(papers_to_save)
+                        })
+                        self._logger.log_health_check("knowledge_base", False, {
+                            "error": str(e)
+                        })
         except Exception as e:
             print(f"      ⚠️ Literature search error: {e}")
+            if self._logger and InvestigationStep:
+                self._logger.fail_step(InvestigationStep.PAPERS_COLLECT, str(e))
     
     async def _run_correlation(self, result: InvestigationResult):
         """Run correlation analysis between data sources."""
