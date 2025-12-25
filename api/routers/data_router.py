@@ -16,7 +16,7 @@ from typing import List, Optional
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from api.services.data_service import DataService, DatasetMetadata
+from api.services.data_service import DataService, DatasetMetadata, get_data_service
 from api.performance import cached, timed, get_cache
 
 
@@ -48,15 +48,6 @@ def get_data_manager() -> "DataManager":
         _data_manager = DataManager()
     return _data_manager
 
-
-_data_service = None
-
-def get_data_service() -> DataService:
-    """Get or create data service instance."""
-    global _data_service
-    if _data_service is None:
-        _data_service = DataService()
-    return _data_service
 
 
 # ============== REQUEST/RESPONSE MODELS ==============
@@ -553,14 +544,14 @@ async def load_cached_data_as_dataset(
     
     manager = get_data_manager()
     
-    # Find cache entry
-    entries = manager.list_cached_data()
-    entry = next((e for e in entries if e.get('id') == entry_id), None)
+    # Find cache entry - use cache.list_entries() which returns CacheEntry objects
+    cache_entries = manager.cache.list_entries()
+    entry = next((e for e in cache_entries if e.id == entry_id), None)
     
     if not entry:
         raise HTTPException(404, f"Cache entry {entry_id} not found")
     
-    # Load data from cache
+    # Load data from cache (entry is now CacheEntry, not dict)
     cached_data = manager.cache.load(entry)
     
     if cached_data is None:
@@ -581,11 +572,11 @@ async def load_cached_data_as_dataset(
     
     # Load into DataService
     data_service = get_data_service()
-    name = dataset_name or f"{entry['source']}_{entry_id[:8]}"
+    name = dataset_name or f"{entry.source}_{entry_id[:8]}"
     
     # Store in data service
-    data_service._datasets[name] = df
-    data_service._metadata[name] = DatasetMetadata(
+    data_service.datasets[name] = df
+    data_service.metadata[name] = DatasetMetadata(
         name=name,
         file_type="cache",
         n_rows=len(df),

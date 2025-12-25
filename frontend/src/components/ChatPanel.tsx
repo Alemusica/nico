@@ -440,8 +440,9 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
                       
                       // Load cached investigation data as dataset
                       try {
-                        const cacheEntries = await listCacheEntries()
-                        if (cacheEntries && cacheEntries.length > 0) {
+                        const cacheResponse = await listCacheEntries()
+                        const cacheEntries = cacheResponse?.entries || []
+                        if (cacheEntries.length > 0) {
                           // Load all cache entries as datasets
                           for (const entry of cacheEntries.slice(0, 3)) { // Load first 3 entries
                             await loadCachedAsDataset(entry.id, `investigation_${entry.source}`)

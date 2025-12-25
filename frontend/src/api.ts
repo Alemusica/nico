@@ -758,13 +758,13 @@ export async function loadCachedAsDataset(
   rows: number
   columns: string[]
 }> {
-  const res = await fetch(`${API_BASE}/data/cache/load_as_dataset`, {
+  const params = new URLSearchParams({ entry_id: entryId })
+  if (datasetName) params.append('dataset_name', datasetName)
+  
+  const res = await fetch(`${API_BASE}/data/cache/load_as_dataset?${params}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-      entry_id: entryId,
-      dataset_name: datasetName 
-    }),
+    body: '{}',  // Empty body but valid JSON
   })
   return res.json()
 }
