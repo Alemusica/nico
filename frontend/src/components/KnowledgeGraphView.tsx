@@ -1,21 +1,16 @@
 /**
- * Knowledge Graph Explorer - Cosmograph Integration
+ * Knowledge Graph Explorer - D3.js Force-Directed Graph
  * 
- * Event-centric 3D graph visualization for exploring:
- * - Events (central nodes)
- * - Papers (research evidence)
- * - Patterns (causal relationships)
- * 
- * LLM Cockpit commands:
- * - "expand geographically" → show nearby events
- * - "find physical correlations" → highlight causal links
- * - "show precursors" → trace back causal chain
- * - "current risk assessment" → compare with present conditions
+ * Event-centric visualization with:
+ * - Labels on all nodes
+ * - Tooltips on hover
+ * - Variable link thickness (by strength)
+ * - Variable node size (by importance)
+ * - Color coding by type
  */
 
-import { useEffect, useState, useCallback } from 'react'
-import { Cosmograph, prepareCosmographData } from '@cosmograph/react'
-import type { CosmographConfig } from '@cosmograph/react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import * as d3 from 'd3'
 import { useStore } from '../store'
 import { 
   Network, 
@@ -28,9 +23,7 @@ import {
   Zap,
   AlertTriangle,
   Info,
-  ChevronRight,
-  Send,
-  Search
+  X
 } from 'lucide-react'
 
 // Types matching backend GraphNode/GraphLink
@@ -44,11 +37,16 @@ interface GraphNode {
   confidence?: number
   cluster?: string
   metadata?: Record<string, any>
+  // D3 simulation properties
+  x?: number
+  y?: number
+  fx?: number | null
+  fy?: number | null
 }
 
 interface GraphLink {
-  source: string
-  target: string
+  source: string | GraphNode
+  target: string | GraphNode
   type: string
   strength: number
   label?: string
@@ -68,11 +66,20 @@ interface GraphData {
 
 // Color scheme by node type
 const NODE_COLORS: Record<string, string> = {
-  event: '#ef4444',      // red-500 - events are central/important
-  paper: '#3b82f6',      // blue-500 - research papers
-  pattern: '#10b981',    // emerald-500 - causal patterns
-  data_source: '#8b5cf6', // violet-500 - data sources
-  climate_index: '#f59e0b', // amber-500 - climate indices
+  event: '#ef4444',       // red-500 - events are central
+  paper: '#3b82f6',       // blue-500 - research papers
+  pattern: '#10b981',     // emerald-500 - causal patterns
+  data_source: '#8b5cf6', // violet-500
+  climate_index: '#f59e0b', // amber-500
+}
+
+// Node size by type (events largest, papers smallest)
+const NODE_SIZES: Record<string, number> = {
+  event: 20,
+  pattern: 14,
+  paper: 10,
+  data_source: 12,
+  climate_index: 12,
 }
 
 const NODE_ICONS: Record<string, any> = {
@@ -83,7 +90,23 @@ const NODE_ICONS: Record<string, any> = {
   climate_index: Calendar,
 }
 
+// Link color by strength
+function getLinkColor(strength: number): string {
+  if (strength >= 0.7) return '#059669' // emerald-600 - strong
+  if (strength >= 0.5) return '#3b82f6' // blue-500 - moderate  
+  if (strength >= 0.3) return '#94a3b8' // slate-400 - weak
+  return '#cbd5e1' // slate-300 - very weak
+}
+
+function getLinkMarker(strength: number): string {
+  if (strength >= 0.7) return 'url(#kg-arrow-strong)'
+  if (strength >= 0.5) return 'url(#kg-arrow-moderate)'
+  return 'url(#kg-arrow-weak)'
+}
+
 export function KnowledgeGraphView() {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const { backend } = useStore()
   
   // State
@@ -91,18 +114,14 @@ export function KnowledgeGraphView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
-  const [cockpitCommand, setCockpitCommand] = useState('')
+  const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null)
+  const [hoveredLink, setHoveredLink] = useState<GraphLink | null>(null)
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState({
     showPapers: true,
     showEvents: true,
     showPatterns: true,
   })
-  
-  // Cosmograph config state
-  const [cosmographConfig, setCosmographConfig] = useState<CosmographConfig>({})
-  const [cosmographPoints, setCosmographPoints] = useState<any[]>([])
-  const [cosmographLinks, setCosmographLinks] = useState<any[]>([])
 
   // Fetch graph data
   const fetchGraphData = useCallback(async () => {
@@ -115,8 +134,8 @@ export function KnowledgeGraphView() {
         include_papers: String(filters.showPapers),
         include_events: String(filters.showEvents),
         include_patterns: String(filters.showPatterns),
-        limit_papers: '100',
-        limit_events: '50',
+        limit_papers: '50',
+        limit_events: '20',
       })
       
       const res = await fetch(`/api/v1/knowledge/graph?${params}`)
@@ -124,11 +143,6 @@ export function KnowledgeGraphView() {
       
       const data: GraphData = await res.json()
       setGraphData(data)
-      
-      // Prepare data for Cosmograph
-      if (data.nodes.length > 0) {
-        await prepareCosmographView(data)
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -136,212 +150,342 @@ export function KnowledgeGraphView() {
     }
   }, [backend, filters])
 
-  // Prepare Cosmograph data
-  const prepareCosmographView = async (data: GraphData) => {
-    // Transform nodes to Cosmograph format
-    const rawPoints = data.nodes.map(node => ({
-      id: node.id,
-      label: node.label,
-      type: node.type,
-      date: node.date,
-      confidence: node.confidence || 0.5,
-      cluster: node.cluster || node.type,
-      // Color based on type
-      color: NODE_COLORS[node.type] || '#94a3b8',
-      // Size based on confidence/importance
-      size: node.type === 'event' ? 15 : (node.confidence || 0.5) * 10 + 5,
-    }))
-
-    // Transform links
-    const rawLinks = data.links.map(link => ({
-      source: link.source,
-      target: link.target,
-      type: link.type,
-      strength: link.strength,
-      label: link.label,
-    }))
-
-    // Prepare for Cosmograph
-    const dataConfig = {
-      points: {
-        pointIdBy: 'id',
-      },
-      links: {
-        linkSourceBy: 'source',
-        linkTargetsBy: ['target'],
-      },
-    }
-
-    try {
-      const result = await prepareCosmographData(dataConfig, rawPoints, rawLinks)
-      if (result) {
-        // @ts-expect-error - Cosmograph types are complex
-        setCosmographPoints(result.points || [])
-        // @ts-expect-error - Cosmograph types are complex
-        setCosmographLinks(result.links || [])
-        setCosmographConfig({
-          ...result.cosmographConfig,
-          // Custom styling - use string colors
-          pointColor: '#3b82f6',
-          pointSize: 8,
-          linkWidth: 1,
-          linkColor: '#475569',
-          linkArrows: true,
-          // Simulation settings
-          simulationGravity: 0.25,
-          simulationRepulsion: 1,
-          simulationLinkSpring: 0.3,
-          // Events
-          onClick: (point: any) => {
-            if (point) {
-              const node = data.nodes.find(n => n.id === point.id)
-              setSelectedNode(node || null)
-            } else {
-              setSelectedNode(null)
-            }
-          },
-        } as CosmographConfig)
-      }
-    } catch (err) {
-      console.error('Failed to prepare Cosmograph data:', err)
-    }
-  }
-
-  // Load on mount
+  // Load on mount and when filters change
   useEffect(() => {
     fetchGraphData()
   }, [fetchGraphData])
 
-  // Handle cockpit command
-  const handleCockpitCommand = async () => {
-    if (!cockpitCommand.trim()) return
+  // D3 visualization
+  useEffect(() => {
+    if (!svgRef.current || !containerRef.current || !graphData || graphData.nodes.length === 0) return
+
+    const container = containerRef.current
+    const width = container.clientWidth
+    const height = container.clientHeight
+
+    // Clear previous
+    d3.select(svgRef.current).selectAll('*').remove()
+
+    const svg = d3.select(svgRef.current)
+      .attr('width', width)
+      .attr('height', height)
+      .attr('viewBox', [0, 0, width, height])
+
+    // Zoom behavior
+    const g = svg.append('g')
     
-    const cmd = cockpitCommand.toLowerCase()
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.2, 4])
+      .on('zoom', (event) => {
+        g.attr('transform', event.transform)
+      })
     
-    // Parse commands
-    if (cmd.includes('expand') && selectedNode) {
-      // Expand selected node
-      try {
-        const res = await fetch(`/api/v1/knowledge/graph/expand/${selectedNode.id}?backend=${backend}`)
-        const expanded = await res.json()
-        console.log('Expanded:', expanded)
-        // TODO: Merge expanded nodes into graph
-      } catch (err) {
-        console.error('Expand failed:', err)
-      }
-    } else if (cmd.includes('refresh') || cmd.includes('reload')) {
-      fetchGraphData()
-    } else if (cmd.includes('filter event')) {
-      setFilters({ ...filters, showEvents: true, showPapers: false, showPatterns: false })
-    } else if (cmd.includes('filter paper')) {
-      setFilters({ ...filters, showEvents: false, showPapers: true, showPatterns: false })
-    } else if (cmd.includes('show all')) {
-      setFilters({ showEvents: true, showPapers: true, showPatterns: true })
+    svg.call(zoom)
+
+    // Arrow markers for links
+    const defs = svg.append('defs')
+    
+    defs.selectAll('marker')
+      .data(['strong', 'moderate', 'weak'])
+      .join('marker')
+      .attr('id', d => `kg-arrow-${d}`)
+      .attr('viewBox', '0 -5 10 10')
+      .attr('refX', 25)
+      .attr('refY', 0)
+      .attr('markerWidth', 6)
+      .attr('markerHeight', 6)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('fill', d => {
+        if (d === 'strong') return '#059669'
+        if (d === 'moderate') return '#3b82f6'
+        return '#94a3b8'
+      })
+      .attr('d', 'M0,-5L10,0L0,5')
+
+    // Prepare data for simulation
+    const nodes = graphData.nodes.map(d => ({ ...d }))
+    const links = graphData.links.map(d => ({ ...d }))
+
+    // Force simulation
+    const simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links)
+        .id((d: any) => d.id)
+        .distance(120))
+      .force('charge', d3.forceManyBody().strength(-400))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius((d: any) => (NODE_SIZES[d.type] || 10) + 15))
+
+    // Draw links
+    const link = g.append('g')
+      .attr('class', 'links')
+      .selectAll('line')
+      .data(links)
+      .join('line')
+      .attr('stroke', d => getLinkColor(d.strength))
+      .attr('stroke-width', d => Math.max(1.5, d.strength * 5))
+      .attr('stroke-opacity', 0.7)
+      .attr('marker-end', d => getLinkMarker(d.strength))
+      .on('mouseover', (_event, d) => setHoveredLink(d))
+      .on('mouseout', () => setHoveredLink(null))
+      .style('cursor', 'pointer')
+
+    // Link labels (type/strength)
+    const linkLabels = g.append('g')
+      .attr('class', 'link-labels')
+      .selectAll('text')
+      .data(links)
+      .join('text')
+      .attr('font-size', '9px')
+      .attr('fill', '#64748b')
+      .attr('text-anchor', 'middle')
+      .attr('dy', -4)
+      .text(d => d.label || d.type.replace(/_/g, ' '))
+
+    // Draw nodes
+    const node = g.append('g')
+      .attr('class', 'nodes')
+      .selectAll('g')
+      .data(nodes)
+      .join('g')
+      .attr('cursor', 'pointer')
+      .call(d3.drag<any, GraphNode>()
+        .on('start', dragstarted)
+        .on('drag', dragged)
+        .on('end', dragended))
+      .on('click', (_event, d) => setSelectedNode(d))
+      .on('mouseover', (_event, d) => setHoveredNode(d))
+      .on('mouseout', () => setHoveredNode(null))
+
+    // Node glow/shadow for events
+    node.filter(d => d.type === 'event')
+      .append('circle')
+      .attr('r', d => (NODE_SIZES[d.type] || 10) + 4)
+      .attr('fill', 'none')
+      .attr('stroke', NODE_COLORS.event)
+      .attr('stroke-width', 2)
+      .attr('stroke-opacity', 0.3)
+
+    // Node circles with variable size
+    node.append('circle')
+      .attr('r', d => NODE_SIZES[d.type] || 10)
+      .attr('fill', d => NODE_COLORS[d.type] || '#94a3b8')
+      .attr('stroke', '#0f172a')
+      .attr('stroke-width', 2)
+      .attr('opacity', 0.9)
+
+    // Node labels
+    node.append('text')
+      .text(d => {
+        const label = d.label || d.id
+        return label.length > 25 ? label.substring(0, 22) + '...' : label
+      })
+      .attr('dy', d => -(NODE_SIZES[d.type] || 10) - 8)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', d => d.type === 'event' ? '12px' : '10px')
+      .attr('font-weight', d => d.type === 'event' ? '600' : '400')
+      .attr('fill', '#1e293b')
+      .attr('paint-order', 'stroke')
+      .attr('stroke', '#ffffff')
+      .attr('stroke-width', 3)
+
+    // Type emoji on nodes
+    node.append('text')
+      .text(d => {
+        if (d.type === 'event') return '⚠'
+        if (d.type === 'pattern') return '⚡'
+        if (d.type === 'paper') return '📄'
+        return ''
+      })
+      .attr('dy', 4)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', d => d.type === 'paper' ? '8px' : '10px')
+
+    // Simulation tick
+    simulation.on('tick', () => {
+      link
+        .attr('x1', (d: any) => d.source.x)
+        .attr('y1', (d: any) => d.source.y)
+        .attr('x2', (d: any) => d.target.x)
+        .attr('y2', (d: any) => d.target.y)
+
+      linkLabels
+        .attr('x', (d: any) => (d.source.x + d.target.x) / 2)
+        .attr('y', (d: any) => (d.source.y + d.target.y) / 2)
+
+      node.attr('transform', (d: any) => `translate(${d.x},${d.y})`)
+    })
+
+    // Drag functions
+    function dragstarted(event: any) {
+      if (!event.active) simulation.alphaTarget(0.3).restart()
+      event.subject.fx = event.subject.x
+      event.subject.fy = event.subject.y
     }
-    
-    setCockpitCommand('')
-  }
+
+    function dragged(event: any) {
+      event.subject.fx = event.x
+      event.subject.fy = event.y
+    }
+
+    function dragended(event: any) {
+      if (!event.active) simulation.alphaTarget(0)
+      event.subject.fx = null
+      event.subject.fy = null
+    }
+
+    // Cleanup
+    return () => {
+      simulation.stop()
+    }
+  }, [graphData])
 
   // Node details panel
   const NodeDetails = ({ node }: { node: GraphNode }) => {
     const Icon = NODE_ICONS[node.type] || Info
     
     return (
-      <div className="absolute right-4 top-4 w-80 bg-phi-base/95 backdrop-blur border border-phi-border rounded-lg shadow-xl overflow-hidden">
+      <div className="absolute right-4 top-4 w-80 bg-white/95 backdrop-blur border border-slate-200 rounded-lg shadow-xl overflow-hidden z-10">
         {/* Header */}
-        <div className="p-4 border-b border-phi-border" style={{ backgroundColor: NODE_COLORS[node.type] + '20' }}>
-          <div className="flex items-center gap-2">
-            <Icon size={20} style={{ color: NODE_COLORS[node.type] }} />
-            <span className="text-phi-xs uppercase tracking-wider text-phi-secondary">
-              {node.type}
-            </span>
+        <div 
+          className="p-4 border-b border-slate-200"
+          style={{ backgroundColor: NODE_COLORS[node.type] + '15' }}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Icon size={18} style={{ color: NODE_COLORS[node.type] }} />
+              <span className="text-xs uppercase tracking-wider text-slate-500">
+                {node.type}
+              </span>
+            </div>
+            <button 
+              onClick={() => setSelectedNode(null)}
+              className="p-1 hover:bg-slate-100 rounded"
+            >
+              <X size={16} />
+            </button>
           </div>
-          <h3 className="font-medium mt-2">{node.label}</h3>
+          <h3 className="font-semibold mt-2 text-slate-900">{node.label}</h3>
         </div>
         
         {/* Content */}
-        <div className="p-4 space-y-3 text-phi-sm">
+        <div className="p-4 space-y-3 text-sm">
           {node.date && (
-            <div className="flex items-center gap-2 text-phi-secondary">
+            <div className="flex items-center gap-2 text-slate-600">
               <Calendar size={14} />
               <span>{node.date}</span>
             </div>
           )}
           
           {(node.lat && node.lon) && (
-            <div className="flex items-center gap-2 text-phi-secondary">
+            <div className="flex items-center gap-2 text-slate-600">
               <MapPin size={14} />
-              <span>{node.lat.toFixed(2)}°, {node.lon.toFixed(2)}°</span>
+              <span>{node.lat.toFixed(2)}°N, {node.lon.toFixed(2)}°E</span>
             </div>
           )}
           
           {node.confidence && (
             <div className="flex items-center gap-2">
-              <span className="text-phi-secondary">Confidence:</span>
-              <div className="flex-1 h-2 bg-phi-subtle rounded-full overflow-hidden">
+              <span className="font-medium text-slate-600">Confidence:</span>
+              <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-phi-accent" 
-                  style={{ width: `${node.confidence * 100}%` }}
+                  className="h-full rounded-full" 
+                  style={{ 
+                    width: `${node.confidence * 100}%`,
+                    backgroundColor: NODE_COLORS[node.type]
+                  }}
                 />
               </div>
-              <span className="text-phi-xs">{(node.confidence * 100).toFixed(0)}%</span>
+              <span className="text-xs text-slate-500">{(node.confidence * 100).toFixed(0)}%</span>
             </div>
           )}
           
           {node.cluster && (
-            <div>
-              <span className="text-phi-secondary">Cluster:</span>
-              <span className="ml-2 px-2 py-0.5 bg-phi-subtle rounded text-phi-xs">{node.cluster}</span>
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-slate-600">Cluster:</span>
+              <span className="px-2 py-0.5 bg-slate-100 rounded text-xs">{node.cluster}</span>
             </div>
           )}
           
           {/* Metadata */}
           {node.metadata && Object.keys(node.metadata).length > 0 && (
-            <div className="pt-2 border-t border-phi-border">
+            <div className="pt-2 border-t border-slate-100">
               {node.metadata.description && (
-                <p className="text-phi-secondary text-phi-xs line-clamp-3">
+                <p className="text-slate-600 text-xs line-clamp-3">
                   {node.metadata.description}
                 </p>
               )}
-              {node.metadata.authors && (
-                <p className="text-phi-xs text-phi-muted mt-1">
+              {node.metadata.authors && node.metadata.authors.length > 0 && (
+                <p className="text-xs text-slate-500 mt-1">
+                  <span className="font-medium">Authors:</span>{' '}
                   {node.metadata.authors.slice(0, 3).join(', ')}
                   {node.metadata.authors.length > 3 && ' et al.'}
                 </p>
               )}
+              {node.metadata.abstract && (
+                <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                  {node.metadata.abstract}
+                </p>
+              )}
+              {node.metadata.doi && (
+                <a 
+                  href={`https://doi.org/${node.metadata.doi}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:underline mt-1 block"
+                >
+                  DOI: {node.metadata.doi}
+                </a>
+              )}
             </div>
           )}
-        </div>
-        
-        {/* Actions */}
-        <div className="p-3 border-t border-phi-border bg-phi-subtle/50 flex gap-2">
-          <button 
-            onClick={() => handleCockpitCommand()}
-            className="flex-1 px-3 py-1.5 bg-phi-accent text-white rounded text-phi-sm flex items-center justify-center gap-1"
-          >
-            <ChevronRight size={14} />
-            Expand
-          </button>
-          <button 
-            onClick={() => setSelectedNode(null)}
-            className="px-3 py-1.5 border border-phi-border rounded text-phi-sm"
-          >
-            Close
-          </button>
         </div>
       </div>
     )
   }
+  
+  // Tooltip for hovered elements
+  const Tooltip = () => {
+    if (hoveredLink) {
+      return (
+        <div className="absolute left-4 bottom-4 bg-slate-900 text-white px-3 py-2 rounded-lg shadow-lg text-sm z-10 max-w-xs">
+          <div className="font-medium">{hoveredLink.type.replace(/_/g, ' ')}</div>
+          <div className="text-slate-300 text-xs mt-1">
+            Strength: {(hoveredLink.strength * 100).toFixed(0)}%
+            {hoveredLink.label && ` • ${hoveredLink.label}`}
+          </div>
+        </div>
+      )
+    }
+    
+    if (hoveredNode && !selectedNode) {
+      return (
+        <div className="absolute left-4 bottom-4 bg-slate-900 text-white px-3 py-2 rounded-lg shadow-lg text-sm z-10 max-w-xs">
+          <div className="font-medium">{hoveredNode.label}</div>
+          <div className="text-slate-300 text-xs mt-1">
+            {hoveredNode.type} 
+            {hoveredNode.cluster && ` • ${hoveredNode.cluster}`}
+            {hoveredNode.confidence && ` • ${(hoveredNode.confidence * 100).toFixed(0)}% confidence`}
+          </div>
+          {hoveredNode.date && (
+            <div className="text-slate-400 text-xs">{hoveredNode.date}</div>
+          )}
+        </div>
+      )
+    }
+    
+    return null
+  }
 
   return (
-    <div className="h-full flex flex-col bg-phi-base">
+    <div className="h-full flex flex-col bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-phi-border flex items-center justify-between">
+      <div className="p-4 bg-white border-b border-slate-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Network className="text-phi-accent" size={20} />
-          <h2 className="font-semibold">Knowledge Graph Explorer</h2>
+          <Network className="text-blue-600" size={20} />
+          <h2 className="font-semibold text-slate-900">Knowledge Graph</h2>
           {graphData && (
-            <span className="text-phi-sm text-phi-secondary">
+            <span className="text-sm text-slate-500">
               {graphData.stats.total_nodes} nodes • {graphData.stats.total_links} links
             </span>
           )}
@@ -351,14 +495,24 @@ export function KnowledgeGraphView() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`p-2 rounded ${showFilters ? 'bg-phi-accent text-white' : 'hover:bg-phi-subtle'}`}
+            className={`p-2 rounded transition-colors ${
+              showFilters ? 'bg-blue-100 text-blue-600' : 'hover:bg-slate-100'
+            }`}
+            title="Toggle filters"
           >
             <Filter size={16} />
           </button>
-          <button onClick={fetchGraphData} className="p-2 hover:bg-phi-subtle rounded">
+          <button 
+            onClick={fetchGraphData} 
+            className="p-2 hover:bg-slate-100 rounded transition-colors"
+            title="Refresh"
+          >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
-          <button className="p-2 hover:bg-phi-subtle rounded">
+          <button 
+            className="p-2 hover:bg-slate-100 rounded transition-colors"
+            title="Fullscreen"
+          >
             <Maximize2 size={16} />
           </button>
         </div>
@@ -366,48 +520,48 @@ export function KnowledgeGraphView() {
       
       {/* Filters */}
       {showFilters && (
-        <div className="p-3 border-b border-phi-border bg-phi-subtle/30 flex items-center gap-4">
-          <span className="text-phi-sm text-phi-secondary">Show:</span>
+        <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center gap-6">
+          <span className="text-sm text-slate-600 font-medium">Show:</span>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={filters.showEvents}
               onChange={e => setFilters({ ...filters, showEvents: e.target.checked })}
-              className="rounded"
+              className="rounded border-slate-300"
             />
-            <AlertTriangle size={14} style={{ color: NODE_COLORS.event }} />
-            <span className="text-phi-sm">Events</span>
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: NODE_COLORS.event }} />
+            <span className="text-sm">Events ({graphData?.stats.events || 0})</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={filters.showPapers}
               onChange={e => setFilters({ ...filters, showPapers: e.target.checked })}
-              className="rounded"
+              className="rounded border-slate-300"
             />
-            <FileText size={14} style={{ color: NODE_COLORS.paper }} />
-            <span className="text-phi-sm">Papers</span>
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: NODE_COLORS.paper }} />
+            <span className="text-sm">Papers ({graphData?.stats.papers || 0})</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={filters.showPatterns}
               onChange={e => setFilters({ ...filters, showPatterns: e.target.checked })}
-              className="rounded"
+              className="rounded border-slate-300"
             />
-            <Zap size={14} style={{ color: NODE_COLORS.pattern }} />
-            <span className="text-phi-sm">Patterns</span>
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: NODE_COLORS.pattern }} />
+            <span className="text-sm">Patterns ({graphData?.stats.patterns || 0})</span>
           </label>
         </div>
       )}
       
       {/* Main Graph Area */}
-      <div className="flex-1 relative">
+      <div ref={containerRef} className="flex-1 relative min-h-[400px]">
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-phi-base/80 z-10">
+          <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-20">
             <div className="flex items-center gap-3">
-              <RefreshCw className="animate-spin text-phi-accent" size={24} />
-              <span>Loading knowledge graph...</span>
+              <RefreshCw className="animate-spin text-blue-600" size={24} />
+              <span className="text-slate-600">Loading knowledge graph...</span>
             </div>
           </div>
         )}
@@ -416,10 +570,10 @@ export function KnowledgeGraphView() {
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center p-6">
               <AlertTriangle className="mx-auto text-red-500 mb-3" size={32} />
-              <p className="text-red-500">{error}</p>
+              <p className="text-red-600 font-medium">{error}</p>
               <button
                 onClick={fetchGraphData}
-                className="mt-4 px-4 py-2 bg-phi-accent text-white rounded"
+                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Retry
               </button>
@@ -427,72 +581,63 @@ export function KnowledgeGraphView() {
           </div>
         )}
         
-        {!loading && !error && graphData && (
-          <>
-            {graphData.nodes.length > 0 ? (
-              <Cosmograph
-                points={cosmographPoints}
-                links={cosmographLinks}
-                {...cosmographConfig}
-              />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center p-6">
-                  <Network className="mx-auto text-phi-muted mb-3" size={48} />
-                  <p className="text-phi-secondary">No data in knowledge graph</p>
-                  <p className="text-phi-muted text-phi-sm mt-1">
-                    Run an investigation to populate the knowledge base
-                  </p>
-                </div>
-              </div>
-            )}
-          </>
+        {!loading && !error && graphData && graphData.nodes.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center p-6">
+              <Network className="mx-auto text-slate-300 mb-3" size={48} />
+              <p className="text-slate-500 font-medium">No data in knowledge graph</p>
+              <p className="text-slate-400 text-sm mt-1">
+                Run an investigation to populate the knowledge base
+              </p>
+            </div>
+          </div>
         )}
+        
+        <svg ref={svgRef} className="w-full h-full" />
         
         {/* Selected Node Details */}
         {selectedNode && <NodeDetails node={selectedNode} />}
         
+        {/* Hover Tooltip */}
+        <Tooltip />
+        
         {/* Legend */}
-        <div className="absolute left-4 bottom-4 bg-phi-base/90 backdrop-blur border border-phi-border rounded-lg p-3">
-          <div className="text-phi-xs text-phi-secondary mb-2">Legend</div>
+        <div className="absolute left-4 top-4 bg-white/95 backdrop-blur border border-slate-200 rounded-lg p-3 shadow-sm">
+          <div className="text-xs text-slate-500 font-medium mb-2">Legend</div>
           <div className="space-y-1.5">
-            {Object.entries(NODE_COLORS).slice(0, 3).map(([type, color]) => {
-              const Icon = NODE_ICONS[type] || Info
-              return (
-                <div key={type} className="flex items-center gap-2 text-phi-sm">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                  <Icon size={12} style={{ color }} />
-                  <span className="capitalize">{type}s</span>
-                  {graphData && (
-                    <span className="text-phi-muted">
-                      ({graphData.stats[type + 's' as keyof typeof graphData.stats] || 0})
-                    </span>
-                  )}
-                </div>
-              )
-            })}
+            <div className="flex items-center gap-2 text-sm">
+              <div className="w-5 h-5 rounded-full border-2 border-slate-800" style={{ backgroundColor: NODE_COLORS.event }} />
+              <span>Events</span>
+              <span className="text-slate-400 text-xs">({graphData?.stats.events || 0})</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <div className="w-3 h-3 rounded-full border-2 border-slate-800" style={{ backgroundColor: NODE_COLORS.paper }} />
+              <span>Papers</span>
+              <span className="text-slate-400 text-xs">({graphData?.stats.papers || 0})</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <div className="w-4 h-4 rounded-full border-2 border-slate-800" style={{ backgroundColor: NODE_COLORS.pattern }} />
+              <span>Patterns</span>
+              <span className="text-slate-400 text-xs">({graphData?.stats.patterns || 0})</span>
+            </div>
           </div>
-        </div>
-      </div>
-      
-      {/* LLM Cockpit */}
-      <div className="p-3 border-t border-phi-border bg-phi-subtle/30">
-        <div className="flex items-center gap-2">
-          <Search size={16} className="text-phi-secondary" />
-          <input
-            type="text"
-            value={cockpitCommand}
-            onChange={e => setCockpitCommand(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleCockpitCommand()}
-            placeholder="LLM Cockpit: expand geographically, find correlations, show precursors..."
-            className="flex-1 bg-transparent border-none outline-none text-phi-sm"
-          />
-          <button
-            onClick={handleCockpitCommand}
-            className="p-1.5 hover:bg-phi-subtle rounded"
-          >
-            <Send size={14} />
-          </button>
+          <div className="mt-3 pt-2 border-t border-slate-100">
+            <div className="text-xs text-slate-500 font-medium mb-1">Link Strength</div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-8 h-1 rounded" style={{ backgroundColor: '#059669' }} />
+                <span>Strong (≥70%)</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-6 h-0.5 rounded" style={{ backgroundColor: '#3b82f6' }} />
+                <span>Moderate (≥50%)</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-4 h-0.5 rounded" style={{ backgroundColor: '#94a3b8' }} />
+                <span>Weak</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
