@@ -3,7 +3,6 @@
  * Swiss Design System - Blue Emerald Oceanography
  */
 
-import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
@@ -11,6 +10,7 @@ import { CausalGraphView } from './components/CausalGraphView'
 import { DataPanel } from './components/DataPanel'
 import { ChatPanel } from './components/ChatPanel'
 import { KnowledgeSearch } from './components/KnowledgeSearch'
+import { KnowledgeGraphView } from './components/KnowledgeGraphView'
 import { HistoricalAnalysis } from './components/HistoricalAnalysis'
 import { useStore } from './store'
 
@@ -22,8 +22,6 @@ const queryClient = new QueryClient({
     },
   },
 })
-
-type ViewType = 'graph' | 'data' | 'knowledge' | 'chat' | 'historical'
 
 export default function App() {
   const { backend, setBackend, activeView, setActiveView } = useStore()
@@ -57,6 +55,12 @@ export default function App() {
             
             {activeView === 'knowledge' && (
               <KnowledgeSearch />
+            )}
+            
+            {activeView === 'knowledge-graph' && (
+              <div className="h-[calc(100vh-140px)]">
+                <KnowledgeGraphView />
+              </div>
             )}
             
             {activeView === 'historical' && (

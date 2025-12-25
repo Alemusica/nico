@@ -554,3 +554,275 @@ async def get_knowledge_stats(backend: str = "surrealdb"):
             detail=f"Failed to get stats: {str(e)}"
         )
 
+
+# ============== GRAPH EXPLORER ENDPOINTS ==============
+
+class GraphNode(BaseModel):
+    """Node for Cosmograph visualization."""
+    id: str
+    type: str  # paper, event, pattern, data_source, climate_index
+    label: str
+    date: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    confidence: Optional[float] = None
+    cluster: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class GraphLink(BaseModel):
+    """Link for Cosmograph visualization."""
+    source: str
+    target: str
+    type: str  # cited_by, caused_by, related_to, validates, uses_data
+    strength: float = 0.5
+    label: Optional[str] = None
+
+
+class GraphData(BaseModel):
+    """Full graph data for Cosmograph."""
+    nodes: List[GraphNode]
+    links: List[GraphLink]
+    stats: Dict[str, int]
+
+
+@router.get("/graph", response_model=GraphData)
+async def get_knowledge_graph(
+    backend: str = "surrealdb",
+    include_papers: bool = True,
+    include_events: bool = True,
+    include_patterns: bool = True,
+    limit_papers: int = 100,
+    limit_events: int = 50,
+):
+    """
+    Get knowledge graph data for Cosmograph visualization.
+    
+    Returns nodes (papers, events, patterns) and links between them.
+    Event-centric: events are the main focus, papers and patterns connect to them.
+    """
+    service = await get_knowledge_service(backend)
+    
+    nodes: List[GraphNode] = []
+    links: List[GraphLink] = []
+    node_ids = set()
+    
+    # Helper to access dict or object attributes
+    def get_attr(obj, key, default=None):
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
+    
+    # 1. Load Events (central nodes)
+    if include_events:
+        events = await service.list_events(limit=limit_events)
+        for event in events:
+            event_id = f"event:{get_attr(event, 'id')}"
+            node_ids.add(event_id)
+            
+            # Extract location if available
+            lat, lon = None, None
+            location = get_attr(event, 'location')
+            if location and isinstance(location, dict):
+                lat = location.get('lat') or location.get('latitude')
+                lon = location.get('lon') or location.get('longitude')
+            
+            # Handle severity (can be string or float)
+            severity = get_attr(event, 'severity')
+            if isinstance(severity, str):
+                severity_map = {'extreme': 1.0, 'severe': 0.8, 'moderate': 0.5, 'minor': 0.3}
+                severity = severity_map.get(severity.lower(), 0.5)
+            
+            nodes.append(GraphNode(
+                id=event_id,
+                type="event",
+                label=get_attr(event, 'name', 'Unknown Event'),
+                date=get_attr(event, 'start_date'),
+                lat=lat,
+                lon=lon,
+                confidence=severity,
+                cluster=get_attr(event, 'event_type'),
+                metadata={
+                    "description": get_attr(event, 'description'),
+                    "end_date": get_attr(event, 'end_date'),
+                    "source": get_attr(event, 'source'),
+                }
+            ))
+    
+    # 2. Load Papers
+    if include_papers:
+        papers = await service.list_papers(limit=limit_papers)
+        for paper in papers:
+            paper_id = f"paper:{get_attr(paper, 'id')}"
+            node_ids.add(paper_id)
+            
+            title = get_attr(paper, 'title', 'Unknown Paper')
+            year = get_attr(paper, 'year')
+            abstract = get_attr(paper, 'abstract', '')
+            keywords = get_attr(paper, 'keywords', [])
+            
+            nodes.append(GraphNode(
+                id=paper_id,
+                type="paper",
+                label=title[:60] + "..." if len(title) > 60 else title,
+                date=f"{year}-01-01" if year else None,
+                confidence=0.8,  # Papers are generally reliable
+                cluster=keywords[0] if keywords else "research",
+                metadata={
+                    "authors": get_attr(paper, 'authors', []),
+                    "journal": get_attr(paper, 'journal'),
+                    "doi": get_attr(paper, 'doi'),
+                    "abstract": abstract[:200] if abstract else None,
+                    "keywords": keywords,
+                }
+            ))
+            
+            # Link papers to events by keyword matching
+            for event_node in [n for n in nodes if n.type == "event"]:
+                event_name_lower = event_node.label.lower()
+                paper_text = f"{title} {abstract or ''}".lower()
+                
+                # Check for keyword overlap
+                if any(kw.lower() in paper_text for kw in [event_name_lower.split()[0]]):
+                    links.append(GraphLink(
+                        source=paper_id,
+                        target=event_node.id,
+                        type="related_to",
+                        strength=0.6,
+                        label="mentions"
+                    ))
+    
+    # 3. Load Patterns
+    if include_patterns:
+        patterns = await service.list_patterns(limit=50)
+        for pattern in patterns:
+            pattern_id = f"pattern:{get_attr(pattern, 'id')}"
+            node_ids.add(pattern_id)
+            
+            pattern_name = get_attr(pattern, 'name', 'Unknown Pattern')
+            pattern_type = get_attr(pattern, 'pattern_type', '')
+            strength = get_attr(pattern, 'strength')
+            confidence = get_attr(pattern, 'confidence')
+            lag_days = get_attr(pattern, 'lag_days')
+            
+            nodes.append(GraphNode(
+                id=pattern_id,
+                type="pattern",
+                label=pattern_name,
+                confidence=confidence or strength,
+                cluster=pattern_type,
+                metadata={
+                    "description": get_attr(pattern, 'description'),
+                    "variables": get_attr(pattern, 'variables', []),
+                    "lag_days": lag_days,
+                }
+            ))
+            
+            # Link patterns to events by type matching
+            for event_node in [n for n in nodes if n.type == "event"]:
+                if event_node.cluster and pattern_type:
+                    if event_node.cluster.lower() in pattern_type.lower():
+                        links.append(GraphLink(
+                            source=pattern_id,
+                            target=event_node.id,
+                            type="caused_by",
+                            strength=strength or 0.5,
+                            label=f"τ={lag_days}d" if lag_days else None
+                        ))
+    
+    # Stats
+    stats = {
+        "total_nodes": len(nodes),
+        "papers": len([n for n in nodes if n.type == "paper"]),
+        "events": len([n for n in nodes if n.type == "event"]),
+        "patterns": len([n for n in nodes if n.type == "pattern"]),
+        "total_links": len(links),
+    }
+    
+    return GraphData(nodes=nodes, links=links, stats=stats)
+
+
+@router.get("/graph/expand/{node_id}")
+async def expand_graph_node(
+    node_id: str,
+    backend: str = "surrealdb",
+    depth: int = 1,
+):
+    """
+    Expand a node to show its connections.
+    
+    Used for progressive exploration:
+    - Click event → show related papers, patterns
+    - Click paper → show cited papers, related events
+    - Click pattern → show causing/caused patterns
+    """
+    service = await get_knowledge_service(backend)
+    
+    # Parse node type and id
+    parts = node_id.split(":")
+    if len(parts) != 2:
+        raise HTTPException(400, "Invalid node_id format. Expected 'type:id'")
+    
+    node_type, entity_id = parts
+    
+    expanded_nodes: List[GraphNode] = []
+    expanded_links: List[GraphLink] = []
+    
+    if node_type == "event":
+        # Find related papers and patterns
+        event = await service.get_event(entity_id)
+        if event:
+            # Search papers mentioning this event
+            results = await service.search_papers(
+                query=f"{event.name} {event.event_type}",
+                limit=10
+            )
+            for r in results:
+                paper = r.item
+                expanded_nodes.append(GraphNode(
+                    id=f"paper:{paper.id}",
+                    type="paper",
+                    label=paper.title[:50] + "...",
+                    date=f"{paper.year}-01-01" if paper.year else None,
+                    confidence=r.score,
+                    cluster=paper.keywords[0] if paper.keywords else "research",
+                ))
+                expanded_links.append(GraphLink(
+                    source=f"paper:{paper.id}",
+                    target=node_id,
+                    type="related_to",
+                    strength=r.score,
+                ))
+    
+    elif node_type == "paper":
+        # Find events mentioned in paper
+        paper = await service.get_paper(entity_id)
+        if paper:
+            events = await service.list_events(limit=20)
+            for event in events:
+                # Check if event is mentioned in paper
+                paper_text = f"{paper.title} {paper.abstract or ''}".lower()
+                if event.name.lower() in paper_text:
+                    expanded_nodes.append(GraphNode(
+                        id=f"event:{event.id}",
+                        type="event",
+                        label=event.name,
+                        date=event.start_date,
+                        confidence=event.severity,
+                        cluster=event.event_type,
+                    ))
+                    expanded_links.append(GraphLink(
+                        source=node_id,
+                        target=f"event:{event.id}",
+                        type="related_to",
+                        strength=0.7,
+                    ))
+    
+    return {
+        "center_node": node_id,
+        "expanded_nodes": [n.dict() for n in expanded_nodes],
+        "expanded_links": [l.dict() for l in expanded_links],
+        "total_expanded": len(expanded_nodes),
+    }
+
+

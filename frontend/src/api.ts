@@ -8,7 +8,6 @@ import { config, getApiEndpoint, getLegacyEndpoint, getWsEndpoint } from './conf
 
 // Backward compatibility constants
 const API_BASE = config.fullApiUrl
-const WS_BASE = config.wsBaseUrl
 
 export type Backend = 'neo4j' | 'surrealdb'
 

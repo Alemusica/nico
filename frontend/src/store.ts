@@ -62,8 +62,8 @@ interface AppState {
   setPendingInvestigationResult: (result: any | null) => void
   
   // Navigation
-  activeView: 'graph' | 'data' | 'knowledge' | 'chat' | 'historical'
-  setActiveView: (view: 'graph' | 'data' | 'knowledge' | 'chat' | 'historical') => void
+  activeView: 'graph' | 'data' | 'knowledge' | 'knowledge-graph' | 'chat' | 'historical'
+  setActiveView: (view: 'graph' | 'data' | 'knowledge' | 'knowledge-graph' | 'chat' | 'historical') => void
   knowledgeSearchQuery: string | null
   setKnowledgeSearchQuery: (query: string | null) => void
   
