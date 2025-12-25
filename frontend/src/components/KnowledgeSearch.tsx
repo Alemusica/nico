@@ -27,7 +27,10 @@ import {
   searchEvents, 
   listClimateIndices,
   getKnowledgeStats,
-  compareBackends
+  compareBackends,
+  listPapers,
+  listPatterns,
+  listEvents
 } from '../api'
 import { DataExplorer } from './DataExplorer'
 
@@ -87,6 +90,27 @@ export function KnowledgeSearch() {
     enabled: activeTab === 'climate',
   })
 
+  // Papers list (auto-load on papers tab)
+  const { data: papersData } = useQuery({
+    queryKey: ['papers-list', backend],
+    queryFn: () => listPapers(50, backend),
+    enabled: activeTab === 'papers',
+  })
+
+  // Patterns list (auto-load on patterns tab)
+  const { data: patternsData } = useQuery({
+    queryKey: ['patterns-list', backend],
+    queryFn: () => listPatterns(50, backend),
+    enabled: activeTab === 'patterns',
+  })
+
+  // Events list (auto-load on events tab)
+  const { data: eventsData } = useQuery({
+    queryKey: ['events-list', backend],
+    queryFn: () => listEvents(50, backend),
+    enabled: activeTab === 'events',
+  })
+
   // Search handlers
   const handleSearch = async () => {
     if (!searchQuery.trim()) return
@@ -118,7 +142,7 @@ export function KnowledgeSearch() {
     }
   }
 
-  const statistics = stats?.statistics || {}
+  const statistics = stats?.stats || stats?.statistics || {}
 
   return (
     <div className="space-y-phi-xl">
@@ -282,6 +306,12 @@ export function KnowledgeSearch() {
               type={activeTab} 
               results={searchResults} 
             />
+          ) : activeTab === 'papers' && papersData?.papers?.length > 0 ? (
+            <PapersList papers={papersData.papers} />
+          ) : activeTab === 'patterns' && patternsData?.patterns?.length > 0 ? (
+            <PatternsList patterns={patternsData.patterns} />
+          ) : activeTab === 'events' && eventsData?.events?.length > 0 ? (
+            <EventsList events={eventsData.events} />
           ) : (
             <EmptyState type={activeTab} />
           )}
@@ -473,6 +503,153 @@ function ClimateIndicesList({ indices }: { indices: any[] }) {
             >
               Data Source <ExternalLink className="w-3 h-3" />
             </a>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Papers List Component (for browsing without search)
+function PapersList({ papers }: { papers: any[] }) {
+  return (
+    <div className="space-y-phi-md">
+      <div className="flex items-center justify-between mb-phi-md">
+        <p className="text-phi-sm text-slate-500">
+          Showing {papers.length} papers (sorted by year)
+        </p>
+      </div>
+      {papers.map((paper: any, i: number) => (
+        <div key={paper.id || i} className="knowledge-card">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <h5 className="text-phi-base font-semibold text-slate-900 line-clamp-2">
+                {paper.title || 'Untitled'}
+              </h5>
+              <p className="text-phi-sm text-slate-600 mt-phi-xs">
+                {paper.authors?.join(', ') || 'Unknown authors'}
+              </p>
+              <p className="text-phi-sm text-slate-500 mt-phi-sm line-clamp-2">
+                {paper.abstract || 'No abstract available'}
+              </p>
+              <div className="flex items-center gap-phi-md mt-phi-md">
+                <span className="badge badge-blue">{paper.year}</span>
+                {paper.journal && (
+                  <span className="text-phi-xs text-slate-500">{paper.journal}</span>
+                )}
+                {paper.keywords?.length > 0 && (
+                  <div className="flex gap-phi-xs ml-auto">
+                    {paper.keywords.slice(0, 3).map((kw: string) => (
+                      <span key={kw} className="badge badge-slate text-phi-xs">{kw}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            {paper.doi && (
+              <a
+                href={`https://doi.org/${paper.doi}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-ghost btn-sm"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Patterns List Component
+function PatternsList({ patterns }: { patterns: any[] }) {
+  return (
+    <div className="space-y-phi-md">
+      <div className="flex items-center justify-between mb-phi-md">
+        <p className="text-phi-sm text-slate-500">
+          Showing {patterns.length} patterns (sorted by confidence)
+        </p>
+      </div>
+      {patterns.map((pattern: any, i: number) => (
+        <div key={pattern.id || i} className="knowledge-card">
+          <div className="flex items-center gap-phi-md mb-phi-sm">
+            <span className="badge badge-emerald">{pattern.pattern_type || 'unknown'}</span>
+            {pattern.confidence && (
+              <span className="text-phi-xs text-slate-500">
+                Confidence: {(pattern.confidence * 100).toFixed(0)}%
+              </span>
+            )}
+            {pattern.strength && (
+              <span className="text-phi-xs text-blue-500">
+                Strength: {(pattern.strength * 100).toFixed(0)}%
+              </span>
+            )}
+          </div>
+          <h5 className="text-phi-base font-semibold text-slate-900">
+            {pattern.name || 'Unnamed Pattern'}
+          </h5>
+          <p className="text-phi-sm text-slate-600 mt-phi-xs">
+            {pattern.description || 'No description'}
+          </p>
+          <div className="flex flex-wrap gap-phi-xs mt-phi-md">
+            {pattern.variables?.map((v: string) => (
+              <span key={v} className="badge badge-slate">{v}</span>
+            ))}
+          </div>
+          {pattern.lag_days && (
+            <p className="text-phi-xs text-slate-400 mt-phi-sm">
+              Lag: {pattern.lag_days} days
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Events List Component
+function EventsList({ events }: { events: any[] }) {
+  return (
+    <div className="space-y-phi-md">
+      <div className="flex items-center justify-between mb-phi-md">
+        <p className="text-phi-sm text-slate-500">
+          Showing {events.length} events (sorted by date)
+        </p>
+      </div>
+      {events.map((event: any, i: number) => (
+        <div key={event.id || i} className="knowledge-card">
+          <div className="flex items-center gap-phi-md mb-phi-sm">
+            <span className="badge badge-blue">{event.event_type || 'event'}</span>
+            <span className="text-phi-xs text-slate-500">
+              {event.start_date?.split('T')[0] || 'No date'}
+            </span>
+            {event.severity && (
+              <span className={clsx(
+                'badge ml-auto',
+                event.severity > 0.7 ? 'badge-red' : 
+                event.severity > 0.4 ? 'badge-amber' : 'badge-slate'
+              )}>
+                Severity: {(event.severity * 100).toFixed(0)}%
+              </span>
+            )}
+          </div>
+          <h5 className="text-phi-base font-semibold text-slate-900">
+            {event.name || 'Unnamed Event'}
+          </h5>
+          <p className="text-phi-sm text-slate-600 mt-phi-xs">
+            {event.description || 'No description'}
+          </p>
+          {event.location && (
+            <p className="text-phi-xs text-slate-400 mt-phi-sm">
+              Location: {typeof event.location === 'object' ? JSON.stringify(event.location) : event.location}
+            </p>
+          )}
+          {event.source && (
+            <p className="text-phi-xs text-blue-500 mt-phi-xs">
+              Source: {event.source}
+            </p>
           )}
         </div>
       ))}

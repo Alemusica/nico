@@ -234,7 +234,9 @@ class DataCache:
         
         # Determine file path
         ext = "nc" if HAS_XARRAY and hasattr(data, 'to_netcdf') else "json"
-        file_path = self.cache_dir / source / f"{cache_id}.{ext}"
+        source_dir = self.cache_dir / source
+        source_dir.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
+        file_path = source_dir / f"{cache_id}.{ext}"
         
         # Save data
         if ext == "nc" and HAS_XARRAY:

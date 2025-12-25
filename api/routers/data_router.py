@@ -25,16 +25,15 @@ router = APIRouter(prefix="/data", tags=["data"])
 # Service availability flags
 DATA_MANAGER_AVAILABLE = False
 try:
-    from src.data_manager.manager import DataManager
-    from src.data_manager.models import (
+    from src.data_manager.manager import DataManager, InvestigationBriefing
+    from src.data_manager.config import (
         ResolutionConfig,
         TemporalResolution,
         SpatialResolution,
-        InvestigationBriefing,
     )
     DATA_MANAGER_AVAILABLE = True
-except ImportError:
-    pass
+except ImportError as e:
+    print(f"⚠️ DataManager not available: {e}")
 
 
 # ============== DEPENDENCY FUNCTIONS ==============

@@ -12,9 +12,12 @@ Design:
 """
 
 import asyncio
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
 from datetime import datetime
 import logging
+import uuid
+import json
+from pathlib import Path
 
 from .knowledge_service import (
     KnowledgeService,
@@ -31,22 +34,53 @@ logger = logging.getLogger(__name__)
 
 class MinimalKnowledgeService(KnowledgeService):
     """
-    Minimal in-memory implementation.
+    Minimal in-memory implementation with JSON persistence.
     Focuses on core paper storage functionality.
     """
     
-    def __init__(self):
+    def __init__(self, storage_path: str = "data/knowledge_cache.json"):
         self._papers: Dict[str, Paper] = {}
         self._events: Dict[str, HistoricalEvent] = {}
         self._patterns: Dict[str, CausalPattern] = {}
         self._indices: Dict[str, ClimateIndex] = {}
         self._connected = False
         self._lock = asyncio.Lock()
+        self._storage_path = Path(storage_path)
+        self._load_from_disk()
+        
+    def _load_from_disk(self):
+        """Load stored data from disk on startup."""
+        if self._storage_path.exists():
+            try:
+                with open(self._storage_path, 'r') as f:
+                    data = json.load(f)
+                    # Load papers
+                    for paper_dict in data.get('papers', []):
+                        paper = Paper(**paper_dict)
+                        self._papers[paper.id] = paper
+                    logger.info(f"📂 Loaded {len(self._papers)} papers from disk")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not load from disk: {e}")
+    
+    def _save_to_disk(self):
+        """Save current data to disk."""
+        try:
+            self._storage_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                'papers': [p.to_dict() for p in self._papers.values()],
+                'events': [],  # TODO: implement
+                'patterns': [],
+                'indices': []
+            }
+            with open(self._storage_path, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.error(f"❌ Could not save to disk: {e}")
         
     async def connect(self) -> bool:
         """Connect (no-op for in-memory)."""
         self._connected = True
-        logger.info("✅ Minimal knowledge service initialized (in-memory)")
+        logger.info(f"✅ Minimal knowledge service initialized ({len(self._papers)} papers loaded)")
         return True
     
     async def disconnect(self) -> None:
@@ -70,14 +104,38 @@ class MinimalKnowledgeService(KnowledgeService):
             self._papers[paper.id] = paper
             return paper.id
     
-    async def bulk_add_papers(self, papers: List[Paper]) -> int:
-        """Add multiple papers efficiently."""
+    async def bulk_add_papers(self, papers: List[Union[Paper, Dict]]) -> int:
+        """Add multiple papers efficiently. Accepts Paper objects or dicts."""
+        from api.services.knowledge_service import Paper as PaperClass
+        
         async with self._lock:
             added = 0
             for paper in papers:
-                if paper.id not in self._papers:
-                    self._papers[paper.id] = paper
+                # Convert dict to Paper object if needed
+                if isinstance(paper, dict):
+                    paper_obj = PaperClass(
+                        id=paper.get("id", str(uuid.uuid4())),
+                        title=paper.get("title", ""),
+                        authors=paper.get("authors", []),
+                        abstract=paper.get("abstract", ""),
+                        doi=paper.get("doi"),
+                        year=paper.get("year"),
+                        journal=paper.get("journal"),
+                        embedding=paper.get("embedding"),
+                        keywords=paper.get("keywords", []),
+                        domain=paper.get("domain", "oceanography")
+                    )
+                else:
+                    paper_obj = paper
+                
+                if paper_obj.id not in self._papers:
+                    self._papers[paper_obj.id] = paper_obj
                     added += 1
+            
+            # Save to disk after bulk add
+            if added > 0:
+                self._save_to_disk()
+                
             logger.info(f"💾 Saved {added} papers to in-memory store (total: {len(self._papers)})")
             return added
     

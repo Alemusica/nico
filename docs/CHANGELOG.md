@@ -4,7 +4,46 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [Unreleased]
+
+### Added - 2025-12-25
+
+#### 💾 Investigation Data Cache Integration
+- **DataCache Auto-Directory**: Creazione automatica subdirectory per ogni source (cmems_sla, era5, etc.)
+- **Investigation Agent Cache**: Satellite e reanalysis data ora persistiti automaticamente in `data/cache/`
+- **Cache Entries API**: GET `/api/v1/data/cache/entries` ritorna dataset scaricati
+
+#### 📊 Knowledge Base List Endpoints
+- **GET /papers**: Lista papers con ordinamento per anno
+- **GET /patterns**: Lista pattern con ordinamento per confidence  
+- **GET /events**: Lista eventi con ordinamento per data
+- **Frontend Auto-Load**: Tabs caricano automaticamente contenuto al click
+
+#### 🧠 Hypothesis Department (Dipartimento Ipotesi)
+- **Knowledge Enrichment**: `enrich_hypothesis_from_knowledge()` cerca papers e pattern correlati
+- **Async Score Event**: `score_event_async()` integra knowledge base per boost confidence
+- **Supporting Literature**: Papers rilevanti citati nelle findings
+
+#### 🔧 Production Infrastructure
+- **Connection Pool Manager**: Async pool con health checks e circuit breaker
+- **Embedding Service**: Semantic search con sentence-transformers
+- **Frontend Config**: Service discovery dinamico con environment variables
+- **start.sh**: Script produzione con cleanup processi zombie e health checks
+
+### Fixed - 2025-12-25
+- **DataCache mkdir**: Fix PermissionError - directory source create automaticamente
+- **DataManager Import**: Fix `src.data_manager.models` → `config` + `manager`
+- **Stats Response**: Frontend ora legge `stats.stats || stats.statistics`
+- **WebSocket URL**: Fix `/investigation/ws` → `/investigate/ws`
+
+### Documentation - 2025-12-25
+- **SENIOR_ENGINEER_REVIEW.md**: Code review completo con checklist produzione
+- **Frontend .env files**: Configurazione development/production/example
+
+---
+
+## [1.8.1] - 2024-12-25
 
 ### Added - 2025-12-25
 

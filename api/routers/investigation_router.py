@@ -47,8 +47,12 @@ def get_data_manager() -> DataManager:
 
 async def get_knowledge_service(backend: str = "surrealdb"):
     """Get knowledge service instance."""
-    from api.services.knowledge_service import create_knowledge_service
-    return await create_knowledge_service(backend)
+    from api.services.knowledge_service import create_knowledge_service, KnowledgeBackend
+    
+    # Convert string to enum
+    backend_enum = KnowledgeBackend.SURREALDB if backend == "surrealdb" else KnowledgeBackend.NEO4J
+    return create_knowledge_service(backend_enum)
+
 
 
 # ============== MODELS ==============
@@ -104,8 +108,13 @@ async def websocket_investigate(websocket: WebSocket):
         try:
             backend = request.get("backend", "surrealdb")
             knowledge_service = await get_knowledge_service(backend)
+            
+            # Connect to the service (important!)
+            await knowledge_service.connect()
+            print(f"✅ Knowledge service connected ({backend})")
         except Exception as e:
             print(f"Warning: Could not initialize knowledge service: {e}")
+            # Continue without knowledge service - papers won't be saved but investigation can proceed
         
         # Create agent and run streaming investigation
         agent = InvestigationAgent(knowledge_service=knowledge_service)

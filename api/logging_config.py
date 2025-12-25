@@ -1,11 +1,13 @@
 """
 📝 Structured Logging Configuration
 ====================================
-Structured logging with request ID tracking and JSON output.
+Structured logging with request ID tracking, JSON output, and log rotation.
+Production-grade configuration with buffering and rotation.
 """
 
 import structlog
 import logging
+import logging.handlers
 import sys
 from typing import Any, Dict
 from pathlib import Path
@@ -16,7 +18,9 @@ import uuid
 def configure_logging(
     log_level: str = "INFO",
     log_format: str = "json",
-    log_file: Path | None = None
+    log_file: Path | None = None,
+    max_bytes: int = 100 * 1024 * 1024,  # 100MB per file
+    backup_count: int = 5  # Keep 5 backup files
 ) -> None:
     """
     Configure structured logging for the application.
@@ -24,10 +28,43 @@ def configure_logging(
     Args:
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_format: Output format ("json" or "text")
-        log_file: Optional file path for logging
+        log_file: Optional file path for logging (will use rotation)
+        max_bytes: Maximum size per log file before rotation (default: 100MB)
+        backup_count: Number of backup files to keep (default: 5)
     """
     
     # Configure standard library logging
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, log_level.upper()))
+    
+    # Clear existing handlers
+    root_logger.handlers.clear()
+    
+    # Console handler (always present)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(getattr(logging, log_level.upper()))
+    console_handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    ))
+    root_logger.addHandler(console_handler)
+    
+    # File handler with rotation (if specified)
+    if log_file:
+        log_file = Path(log_file)
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # RotatingFileHandler for automatic log rotation
+        file_handler = logging.handlers.RotatingFileHandler(
+            filename=log_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding='utf-8'
+        )
+        file_handler.setLevel(getattr(logging, log_level.upper()))
+        file_handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        ))
+        root_logger.addHandler(file_handler)
     logging.basicConfig(
         format="%(message)s",
         level=getattr(logging, log_level.upper()),

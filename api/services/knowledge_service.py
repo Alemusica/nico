@@ -534,16 +534,46 @@ def create_knowledge_service(
         
     Returns:
         Configured KnowledgeService instance
-        
-    Note:
-        Currently uses MinimalKnowledgeService as stable default.
-        Full implementations available when needed.
     """
     logger.info(f"Creating knowledge service: {backend.value}")
     
-    # Use minimal service as default - production-ready and stable
-    # Full implementations can be enabled when needed
-    from .minimal_knowledge import MinimalKnowledgeService
+    if backend == KnowledgeBackend.SURREALDB:
+        try:
+            from .surrealdb_knowledge import SurrealDBKnowledgeService
+            
+            # SurrealDB config with defaults
+            url = config.get("url", "http://localhost:8001")
+            namespace = config.get("namespace", "nico")
+            database = config.get("database", "knowledge")
+            
+            logger.info(f"Using SurrealDBKnowledgeService at {url}")
+            return SurrealDBKnowledgeService(
+                url=url,
+                namespace=namespace,
+                database=database
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize SurrealDB: {e}. Falling back to MinimalKnowledgeService.")
+            from .minimal_knowledge import MinimalKnowledgeService
+            return MinimalKnowledgeService()
     
-    logger.info("Using MinimalKnowledgeService (in-memory, scalable)")
-    return MinimalKnowledgeService()
+    elif backend == KnowledgeBackend.NEO4J:
+        try:
+            from .neo4j_knowledge import Neo4jKnowledgeService
+            
+            uri = config.get("uri", "bolt://localhost:7687")
+            username = config.get("username", "neo4j")
+            password = config.get("password", "password")
+            
+            logger.info(f"Using Neo4jKnowledgeService at {uri}")
+            return Neo4jKnowledgeService(uri=uri, username=username, password=password)
+        except Exception as e:
+            logger.warning(f"Failed to initialize Neo4j: {e}. Falling back to MinimalKnowledgeService.")
+            from .minimal_knowledge import MinimalKnowledgeService
+            return MinimalKnowledgeService()
+    
+    else:
+        # Default fallback
+        logger.warning(f"Unknown backend {backend}, using MinimalKnowledgeService")
+        from .minimal_knowledge import MinimalKnowledgeService
+        return MinimalKnowledgeService()

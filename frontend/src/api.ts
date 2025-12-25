@@ -1,9 +1,14 @@
 /**
  * API Client for Causal Discovery Backend
+ * 
+ * Uses dynamic configuration from config.ts for intelligent endpoint discovery.
  */
 
-const API_BASE = 'http://localhost:8000/api/v1'
-const WS_BASE = 'ws://localhost:8000'
+import { config, getApiEndpoint, getLegacyEndpoint, getWsEndpoint } from './config'
+
+// Backward compatibility constants
+const API_BASE = config.fullApiUrl
+const WS_BASE = config.wsBaseUrl
 
 export type Backend = 'neo4j' | 'surrealdb'
 
@@ -139,7 +144,10 @@ export function investigateStreaming(
   onComplete: (result: InvestigateResponse) => void,
   onError: (error: string) => void,
 ): () => void {
-  const ws = new WebSocket(`${WS_BASE}/api/v1/investigation/ws`)
+  // Use dynamic WebSocket endpoint discovery
+  // Note: router prefix is /investigate (not /investigation)
+  const wsUrl = getWsEndpoint('/investigate/ws')
+  const ws = new WebSocket(wsUrl)
   
   ws.onopen = () => {
     ws.send(JSON.stringify(request))
@@ -195,7 +203,7 @@ export function investigateStreaming(
  * - "investigate floods in Po Valley 1994"
  */
 export async function investigate(request: InvestigateRequest): Promise<InvestigateResponse> {
-  const res = await fetch(`http://localhost:8000/investigate`, {
+  const res = await fetch(getLegacyEndpoint('/investigate'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
@@ -360,6 +368,13 @@ export async function addPaper(paper: Paper, backend: Backend = 'neo4j') {
   return res.json()
 }
 
+export async function listPapers(limit = 50, backend: Backend = 'surrealdb') {
+  const res = await fetch(
+    `${API_BASE}/knowledge/papers?limit=${limit}&backend=${backend}`
+  )
+  return res.json()
+}
+
 export async function searchPapers(query: string, limit = 10, backend: Backend = 'neo4j') {
   const res = await fetch(
     `${API_BASE}/knowledge/papers/search?query=${encodeURIComponent(query)}&limit=${limit}&backend=${backend}`
@@ -374,6 +389,13 @@ export async function addEvent(event: HistoricalEvent, backend: Backend = 'neo4j
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(event),
   })
+  return res.json()
+}
+
+export async function listEvents(limit = 50, backend: Backend = 'surrealdb') {
+  const res = await fetch(
+    `${API_BASE}/knowledge/events?limit=${limit}&backend=${backend}`
+  )
   return res.json()
 }
 
@@ -410,6 +432,13 @@ export async function addPattern(pattern: CausalPattern, backend: Backend = 'neo
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(pattern),
   })
+  return res.json()
+}
+
+export async function listPatterns(limit = 50, backend: Backend = 'surrealdb') {
+  const res = await fetch(
+    `${API_BASE}/knowledge/patterns?limit=${limit}&backend=${backend}`
+  )
   return res.json()
 }
 
@@ -464,7 +493,7 @@ export async function compareBackends() {
 // =========================================================================
 
 export async function checkHealth() {
-  const res = await fetch(`http://localhost:8000/api/v1/health`)
+  const res = await fetch(getApiEndpoint('/health'))
   return res.json()
 }
 
@@ -506,17 +535,17 @@ export interface AnalysisResult {
 }
 
 export async function listHistoricalEpisodes(): Promise<{ episodes: HistoricalEpisode[]; count: number }> {
-  const res = await fetch(`http://localhost:8000/historical/episodes`)
+  const res = await fetch(getLegacyEndpoint('/historical/episodes'))
   return res.json()
 }
 
 export async function getHistoricalEpisode(episodeId: string): Promise<HistoricalEpisode> {
-  const res = await fetch(`http://localhost:8000/historical/episodes/${episodeId}`)
+  const res = await fetch(getLegacyEndpoint(`/historical/episodes/${episodeId}`))
   return res.json()
 }
 
 export async function analyzeHistoricalEpisode(episodeId: string): Promise<AnalysisResult> {
-  const res = await fetch(`http://localhost:8000/historical/analyze/${episodeId}`, {
+  const res = await fetch(getLegacyEndpoint(`/historical/analyze/${episodeId}`), {
     method: 'POST',
   })
   return res.json()
@@ -533,7 +562,7 @@ export async function getCrossPatterns(): Promise<{
   }>
   recommendation: string
 }> {
-  const res = await fetch(`http://localhost:8000/historical/cross-patterns`)
+  const res = await fetch(getLegacyEndpoint('/historical/cross-patterns'))
   return res.json()
 }
 

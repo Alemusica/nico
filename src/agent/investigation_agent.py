@@ -425,10 +425,20 @@ class InvestigationAgent:
         llm_client: Any = None,  # LLM service for query understanding
         db_client: Any = None,   # Database client for storage
         knowledge_service: Any = None,  # KnowledgeService for storing papers
+        data_cache = None,  # DataCache for persisting downloaded data
     ):
         self.llm_client = llm_client
         self.db_client = db_client
         self.knowledge_service = knowledge_service
+        
+        # Initialize data cache for persisting downloads
+        self._data_cache = data_cache
+        if data_cache is None:
+            try:
+                from src.data_manager.cache import DataCache
+                self._data_cache = DataCache()
+            except ImportError:
+                self._data_cache = None
         
         self.query_parser = QueryParser()
         
@@ -960,7 +970,7 @@ class InvestigationAgent:
         ctx: EventContext,
         result: InvestigationResult,
     ):
-        """Collect satellite data (CMEMS)."""
+        """Collect satellite data (CMEMS) and save to cache."""
         if not self.cmems_client or not ctx.location:
             return
         
@@ -992,6 +1002,23 @@ class InvestigationAgent:
                     metadata={'dataset': 'sea_level_global'},
                 ))
                 print("      ✅ CMEMS data collected")
+                
+                # Save to cache if available
+                if self._data_cache and hasattr(ds, 'to_netcdf'):
+                    try:
+                        cache_entry = self._data_cache.add(
+                            data=ds,
+                            source="cmems_sla",
+                            variables=["sla"],
+                            lat_range=lat_range,
+                            lon_range=lon_range,
+                            time_range=(ctx.start_date, ctx.end_date),
+                            resolution_temporal=getattr(self, '_temporal_resolution', 'daily'),
+                            resolution_spatial=str(getattr(self, '_spatial_resolution', '0.25')),
+                        )
+                        print(f"      💾 Saved to cache: {cache_entry.id}")
+                    except Exception as cache_err:
+                        print(f"      ⚠️ Cache save warning: {cache_err}")
         except Exception as e:
             print(f"      ⚠️ CMEMS error: {e}")
     
@@ -1000,7 +1027,7 @@ class InvestigationAgent:
         ctx: EventContext,
         result: InvestigationResult,
     ):
-        """Collect reanalysis data (ERA5)."""
+        """Collect reanalysis data (ERA5) and save to cache."""
         if not self.era5_client or not ctx.location:
             return
         
@@ -1023,14 +1050,32 @@ class InvestigationAgent:
             )
             
             if ds is not None:
+                variables = list(ds.data_vars) if hasattr(ds, 'data_vars') else ['tp', 'msl', 'u10', 'v10']
                 result.data_sources.append(DataSource(
                     name="ERA5 Reanalysis",
                     source_type="reanalysis",
                     data=ds,
                     quality="validated",
-                    metadata={'variables': list(ds.data_vars)},
+                    metadata={'variables': variables},
                 ))
                 print("      ✅ ERA5 data collected")
+                
+                # Save to cache if available
+                if self._data_cache and hasattr(ds, 'to_netcdf'):
+                    try:
+                        cache_entry = self._data_cache.add(
+                            data=ds,
+                            source="era5",
+                            variables=variables,
+                            lat_range=lat_range,
+                            lon_range=lon_range,
+                            time_range=(ctx.start_date, ctx.end_date),
+                            resolution_temporal=getattr(self, '_temporal_resolution', 'daily'),
+                            resolution_spatial=str(getattr(self, '_spatial_resolution', '0.25')),
+                        )
+                        print(f"      💾 Saved to cache: {cache_entry.id}")
+                    except Exception as cache_err:
+                        print(f"      ⚠️ Cache save warning: {cache_err}")
         except Exception as e:
             print(f"      ⚠️ ERA5 error: {e}")
     

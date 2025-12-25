@@ -135,6 +135,7 @@ class KnowledgeScorer:
         refined_dir: Path = None,
         events_file: Path = None,
         output_dir: Path = None,
+        knowledge_service = None,  # KnowledgeService for enrichment
     ):
         base = Path(__file__).parent.parent.parent.parent / "data" / "pipeline"
         self.correlations_dir = correlations_dir or base / "correlations"
@@ -142,10 +143,101 @@ class KnowledgeScorer:
         self.events_file = events_file or base / "events.json"
         self.output_dir = output_dir or base / "knowledge"
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.knowledge_service = knowledge_service
         
         print(f"🧠 KnowledgeScorer initialized")
         print(f"   📂 Correlations: {self.correlations_dir}")
         print(f"   📂 Output: {self.output_dir}")
+        if knowledge_service:
+            print(f"   🔗 Knowledge Service: connected")
+    
+    # =========================================================================
+    # Knowledge Base Enrichment (Dipartimento Ipotesi)
+    # =========================================================================
+    
+    async def enrich_hypothesis_from_knowledge(
+        self,
+        hypothesis_type: str,
+        variables: List[str],
+        event_type: str = None,
+    ) -> Dict[str, Any]:
+        """
+        Enrich hypothesis using knowledge base papers and patterns.
+        
+        This is the "Hypothesis Department" - uses stored knowledge
+        to validate and enrich causal hypotheses.
+        
+        Args:
+            hypothesis_type: precursor, concurrent, consequence
+            variables: Variables involved (temperature, sea_ice, etc)
+            event_type: Type of event (storm, ice_event, etc)
+            
+        Returns:
+            Enrichment with supporting papers, similar patterns, confidence boost
+        """
+        if not self.knowledge_service:
+            return {"papers": [], "patterns": [], "confidence_boost": 0.0}
+        
+        enrichment = {
+            "papers": [],
+            "patterns": [],
+            "confidence_boost": 0.0,
+            "reasoning": []
+        }
+        
+        try:
+            # Search for relevant papers
+            query_terms = variables + ([event_type] if event_type else [])
+            search_query = " ".join(query_terms[:3])  # Use top 3 terms
+            
+            papers = await self.knowledge_service.search_papers(
+                query=search_query,
+                limit=5
+            )
+            
+            if papers:
+                enrichment["papers"] = [
+                    {
+                        "title": p.item.title if hasattr(p.item, 'title') else p.get('title', ''),
+                        "score": p.score if hasattr(p, 'score') else 0.5,
+                        "relevance": "supporting"
+                    }
+                    for p in papers[:3]
+                ]
+                enrichment["confidence_boost"] += 0.1 * len(enrichment["papers"])
+                enrichment["reasoning"].append(
+                    f"Found {len(enrichment['papers'])} supporting papers"
+                )
+            
+            # Search for similar patterns
+            patterns = await self.knowledge_service.search_patterns(
+                variables=variables,
+                limit=5
+            )
+            
+            if patterns:
+                enrichment["patterns"] = [
+                    {
+                        "name": p.item.name if hasattr(p.item, 'name') else p.get('name', ''),
+                        "pattern_type": p.item.pattern_type if hasattr(p.item, 'pattern_type') else '',
+                        "confidence": p.item.confidence if hasattr(p.item, 'confidence') else 0.5
+                    }
+                    for p in patterns[:3]
+                ]
+                
+                # Boost confidence if we found similar patterns
+                avg_pattern_conf = sum(
+                    p.get('confidence', 0.5) for p in enrichment["patterns"]
+                ) / len(enrichment["patterns"])
+                enrichment["confidence_boost"] += 0.15 * avg_pattern_conf
+                enrichment["reasoning"].append(
+                    f"Found {len(enrichment['patterns'])} similar causal patterns"
+                )
+            
+        except Exception as e:
+            enrichment["reasoning"].append(f"Knowledge enrichment error: {str(e)}")
+        
+        return enrichment
     
     # =========================================================================
     # Factor Scoring
@@ -293,6 +385,52 @@ class KnowledgeScorer:
     # =========================================================================
     # Main Scoring Process
     # =========================================================================
+    
+    async def score_event_async(
+        self,
+        event: OceanEvent,
+        correlations: List[Correlation],
+        items: List[RefinedItem],
+    ) -> ScoredKnowledge:
+        """Score knowledge for a single event with knowledge base enrichment."""
+        
+        # Get base scored knowledge
+        knowledge = self.score_event(event, correlations, items)
+        
+        # Enrich with knowledge base if available
+        if self.knowledge_service:
+            # Get variables from items
+            all_topics = []
+            event_items = [i for i in items if i.id in {c.item_id for c in correlations if c.event_id == event.id}]
+            for item in event_items:
+                all_topics.extend(item.topics)
+            unique_topics = list(set(all_topics))[:5]
+            
+            # Get enrichment from knowledge base (Dipartimento Ipotesi)
+            enrichment = await self.enrich_hypothesis_from_knowledge(
+                hypothesis_type="mixed",
+                variables=unique_topics,
+                event_type=event.event_type
+            )
+            
+            # Apply confidence boost from knowledge base
+            if enrichment["confidence_boost"] > 0:
+                knowledge.confidence = min(1.0, knowledge.confidence + enrichment["confidence_boost"])
+                knowledge.key_findings.extend(enrichment["reasoning"])
+                
+                # Add paper references to findings
+                if enrichment["papers"]:
+                    knowledge.key_findings.append(
+                        f"📚 Supporting literature: {', '.join(p['title'][:40] + '...' for p in enrichment['papers'][:2])}"
+                    )
+                
+                # Add pattern references
+                if enrichment["patterns"]:
+                    knowledge.key_findings.append(
+                        f"🔗 Similar patterns: {', '.join(p['name'] for p in enrichment['patterns'][:2])}"
+                    )
+        
+        return knowledge
     
     def score_event(
         self,

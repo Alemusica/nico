@@ -19,7 +19,11 @@ try:
     TIGRAMITE_AVAILABLE = True
 except ImportError:
     TIGRAMITE_AVAILABLE = False
-    print("Warning: tigramite not available, using correlation fallback")
+    # Silent import - warning only on first use
+    pp = None
+    PCMCI = None
+    ParCorr = None
+    GPDC = None
 
 # NetworkX for graph representation
 import networkx as nx

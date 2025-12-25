@@ -1,0 +1,19 @@
+{
+  "name": "Piemonte",
+  "lat": 45.060735,
+  "lon": 7.923549,
+  "bbox": [
+    44.0597158,
+    46.4642213,
+    6.6272658,
+    9.2142404
+  ],
+  "country": "Italia",
+  "region": "Piemonte",
+  "place_type": "administrative",
+  "osm_id": 44874,
+  "area_km2": null,
+  "elevation_m": null,
+  "original_query": "Piemonte",
+  "confidence": 0.7677508389024132
+}

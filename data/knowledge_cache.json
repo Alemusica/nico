@@ -1,0 +1,678 @@
+{
+  "papers": [
+    {
+      "id": "ac6299b5-7cd1-45ad-9a4c-dab29a519e7e",
+      "title": "Modeling and simulation of the R5912 photomultiplier for the LAGO project",
+      "authors": [
+        "S. Hern\u00e1ndez-Barajas",
+        "Y. Le\u00f3n-Carre\u00f1o",
+        "J. Pe\u00f1a-Rodr\u00edguez",
+        "L. A. N\u00fa\u00f1ez",
+        "LAGO collaboration"
+      ],
+      "abstract": "We present the results of modeling and simulating the Hamamatsu R5912 photomultiplier tube that is used in most of the sites of the Latin American Giant Observatory (LAGO). The model was compared with data of in-operation water Cherenkov detectors (WCD) installed at Bucaramanga-Colombia and Bariloche-Argentina. The LAGO project is an international experiment that spans across Latin America at different altitudes joining more than 35 institutions of 11 countries. It is mainly oriented to basic research on gamma-ray bursts and space weather phenomena. The LAGO network consists of single or small arrays of WCDs composed mainly by a photomultiplier tube and a readout electronics that acquires single-particle or extensive air shower events triggered by the interaction of cosmic rays with the Earth atmosphere.",
+      "doi": "",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "67e2ec78-d6e3-4a43-9b6f-a9c2222b7385",
+      "title": "Robust blue-green urban flood risk management optimised with a genetic algorithm for multiple rainstorm return periods",
+      "authors": [
+        "Asid Ur Rehman",
+        "Vassilis Glenis",
+        "Elizabeth Lewis",
+        "Chris Kilsby",
+        "Claire Walsh"
+      ],
+      "abstract": "Flood risk managers seek to optimise Blue-Green Infrastructure (BGI) designs to maximise return on investment. Current systems often use optimisation algorithms and detailed flood models to maximise benefit-cost ratios for single rainstorm return periods. However, these schemes may lack robustness in mitigating flood risks across different storm magnitudes. For example, a BGI scheme optimised for a 100-year return period may differ from one optimised for a 10-year return period. This study introduces a novel methodology incorporating five return periods (T = 10, 20, 30, 50, and 100 years) into a multi-objective BGI optimisation framework. The framework combines a Non-dominated Sorting Genetic Algorithm II (NSGA-II) with a fully distributed hydrodynamic model to optimise the spatial placement and combined size of BGI features. For the first time, direct damage cost (DDC) and expected annual damage (EAD), calculated for various building types, are used as risk objective functions, transforming a many-objective problem into a multi-objective one. Performance metrics such as Median Risk Difference (MedRD), Maximum Risk Difference (MaxRD), and Area Under Pareto Front (AUPF) reveal that a 100-year optimised BGI design performs poorly when evaluated for other return periods, particularly shorter ones. In contrast, a BGI design optimised using composite return periods enhances performance metrics across all return periods, with the greatest improvements observed in MedRD (22%) and AUPF (73%) for the 20-year return period, and MaxRD (23%) for the 50-year return period. Furthermore, climate uplift stress testing confirms the robustness of the proposed design to future rainfall extremes. This study advocates a paradigm shift in flood risk management, moving from single maximum to multiple rainstorm return period-based designs to enhance resilience and adaptability to future climate extremes.",
+      "doi": "10.1111/jfr3.70118",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "7dd135dd-d5fa-42aa-9c58-c0e6c00f5ff3",
+      "title": "Evaluating the weight sensitivity in AHP-based flood risk estimation models",
+      "authors": [
+        "Hongping Zhang",
+        "Zhenfeng Shao",
+        "Bin Hua",
+        "Xiao Huang",
+        "Jinqi Zhao",
+        "Wenfu Wu",
+        "Yewen Fan"
+      ],
+      "abstract": "In the analytic hierarchy process (AHP) based flood risk estimation models, it is widely acknowledged that different weighting criteria can lead to different results. In this study, we evaluated and discussed the sensitivity of flood risk estimation brought by judgment matrix definition by investigating the performance of pixel-based and sub-watershed-based AHP models. Taking a flood event that occurred in July 2020 in Chaohu basin, Anhui province, China, as a study case, we used the flood areas extracted from remote sensing images to construct ground truth for validation purposes. The results suggest that the performance of the pixel-based AHP model fluctuates intensively given different definitions of judgment matrixes, while the performance of sub-watershed-based AHP models fluctuates considerably less than that of the pixel-based AHP model. Specifically, sub-watershed delimitated via multiple flow direction (MFD) always achieves increases in the correct ratio and the fit ratio by >35% and >5% with the pixel-based AHP model, respectively.",
+      "doi": "",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "e41f2e2d-4851-4654-bf3e-4f2a7d63892b",
+      "title": "Exploiting ConvNet Diversity for Flooding Identification",
+      "authors": [
+        "Keiller Nogueira",
+        "Samuel G. Fadel",
+        "\u00cdcaro C. Dourado",
+        "Rafael de O. Werneck",
+        "Javier A. V. Mu\u00f1oz",
+        "Ot\u00e1vio A. B. Penatti",
+        "Rodrigo T. Calumby",
+        "Lin Tzy Li",
+        "Jefersson A. dos Santos",
+        "Ricardo da S. Torres"
+      ],
+      "abstract": "Flooding is the world's most costly type of natural disaster in terms of both economic losses and human causalities. A first and essential procedure towards flood monitoring is based on identifying the area most vulnerable to flooding, which gives authorities relevant regions to focus. In this work, we propose several methods to perform flooding identification in high-resolution remote sensing images using deep learning. Specifically, some proposed techniques are based upon unique networks, such as dilated and deconvolutional ones, while other was conceived to exploit diversity of distinct networks in order to extract the maximum performance of each classifier. Evaluation of the proposed algorithms were conducted in a high-resolution remote sensing dataset. Results show that the proposed algorithms outperformed several state-of-the-art baselines, providing improvements ranging from 1 to 4% in terms of the Jaccard Index.",
+      "doi": "10.1109/LGRS.2018.2845549",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "d336ebf0-ea48-4d25-9c52-ef4b3922f0da",
+      "title": "A Simple Flood Forecasting Scheme Using Wireless Sensor Networks",
+      "authors": [
+        "Victor Seal",
+        "Arnab Raha",
+        "Shovan Maity",
+        "Souvik Kr Mitra",
+        "Amitava Mukherjee",
+        "Mrinal Kanti Naskar"
+      ],
+      "abstract": "This paper presents a forecasting model designed using WSNs (Wireless Sensor Networks) to predict flood in rivers using simple and fast calculations to provide real-time results and save the lives of people who may be affected by the flood. Our prediction model uses multiple variable robust linear regression which is easy to understand and simple and cost effective in implementation, is speed efficient, but has low resource utilization and yet provides real time predictions with reliable accuracy, thus having features which are desirable in any real world algorithm. Our prediction model is independent of the number of parameters, i.e. any number of parameters may be added or removed based on the on-site requirements. When the water level rises, we represent it using a polynomial whose nature is used to determine if the water level may exceed the flood line in the near future. We compare our work with a contemporary algorithm to demonstrate our improvements over it. Then we present our simulation results for the predicted water level compared to the actual water level.",
+      "doi": "10.5121/ijasuc.2012.3105",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "bed523d0-47a5-46b3-acab-86fd7dc9f348",
+      "title": "An extended watershed-based zonal statistical AHP model for flood risk estimation: Constraining runoff converging related indicators by sub-watersheds",
+      "authors": [
+        "Hongping Zhang",
+        "Zhenfeng Shao",
+        "Jinqi Zhao",
+        "Xiao Huang",
+        "Jie Yang",
+        "Bin Hu",
+        "Wenfu Wu"
+      ],
+      "abstract": "Floods are highly uncertain events, occurring in different regions, with varying prerequisites and intensities. A highly reliable flood disaster risk map can help reduce the impact of floods for flood management, disaster decreasing, and urbanization resilience. In flood risk estimation, the widely used analytic hierarchy process (AHP) usually adopts pixel as a basic unit, it cannot capture the similar threaten caused by neighborhood source flooding cells at sub-watershed scale. Thus, an extended watershed-based zonal statistical AHP model constraining runoff converging related indicators by sub-watersheds (WZSAHP-Slope & Stream) is proposed to fill this gap. Taking the Chaohu basin as test case, we validated the proposed method with a real-flood area extracted in July 2020. The results indicate that the WZSAHP-Slope & Stream model using multiple flow direction division watersheds to calculate statistics of distance from stream and slope by maximum statistic method outperformed other tested methods. Compering with pixel-based AHP method, the proposed method can improve the correct ratio by 16% (from 67% to 83%) and fit ratio by 1% (from 13% to 14%) as in validation 1, and improve the correct ratio by 37% (from 23% to 60%) and fit ratio by 6% (from 12% to 18%) as in validation 2.",
+      "doi": "",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "9fa21349-cf0e-47fc-a43a-5eb7dd59841d",
+      "title": "Reconstruction and simulation of an extreme flood event in the Lago Maggiore catchment in 1868",
+      "authors": [
+        "P. Stucki",
+        "Moritz Bandhauer",
+        "U. Heikkil\u00e4",
+        "O. R\u00f6ssler",
+        "M. Zappa",
+        "Lucas Pfister",
+        "Melanie Salvisberg",
+        "P. Froidevaux",
+        "O. Martius",
+        "L. Panziera",
+        "S. Br\u00f6nnimann"
+      ],
+      "abstract": "Abstract. Heavy precipitation on the south side of the central Alps\nproduced a catastrophic flood in October\u00a01868. We assess the damage and\nsocietal impacts, as well as the atmospheric and hydrological drivers using\ndocumentary evidence, observations and novel numerical weather and runoff\nsimulations. The greatest damage was concentrated close to the Alpine divide and Lago\nMaggiore. An atmospheric reanalysis emphasizes the repeated occurrence of\nstreamers of high potential vorticity as precursors of heavy precipitation.\nDynamical downscaling indicates high freezing levels (4000\u2009m\u2009a.s.l.),\nextreme precipitation rates (max.\u00a0270\u2009mm\u200924\u2009h\u22121) and weather dynamics that agree well with observed\nprecipitation and damage, and with existing concepts of forced low-level\nconvergence, mid-level uplift and iterative northeastward propagation of\nconvective cells. Simulated and observed peak levels of Lago Maggiore differ\nby 2\u2009m, possibly because the exact cross section of the lake outflow is\nunknown. The extreme response of Lago Maggiore cannot be attributed to low\nforest cover. Nevertheless, such a paradigm was adopted by policy makers\nfollowing the 1868 flood, and used to implement nationwide afforestation\npolicies and hydraulic structures. These findings illustrate the potential of high-resolution,\nhydrometeorological models \u2013 strongly supported by historical methods \u2013\nto shed new light on weather events and their socio-economic implications in\nthe 19th century.",
+      "doi": "10.5194/NHESS-18-2717-2018",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "a8673543-9b88-4bd5-9f42-bf6b8266acaa",
+      "title": "Detrital layers marking flood events in recent sediments of Lago Maggiore (N. Italy) and their comparison with instrumental data",
+      "authors": [
+        "L. K\u00e4mpf",
+        "A. Brauer",
+        "P. Dulski",
+        "A. Lami",
+        "A. Marchetto",
+        "S. Gerli",
+        "W. Ambrosetti",
+        "P. Guilizzoni"
+      ],
+      "abstract": "",
+      "doi": "10.1111/J.1365-2427.2012.02796.X",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "adf49825-f15e-4c5d-85b5-04896a3083e2",
+      "title": "The extreme flood event of Lago Maggiore in September 1993",
+      "authors": [
+        "P. Stucki",
+        "O. Martius",
+        "S. Br\u00f6nnimann",
+        "J. Franke"
+      ],
+      "abstract": "",
+      "doi": "10.4480/GB2013.G89.06",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "ad6ee6b0-2ce2-4664-ae2b-ddb3a7bbd34f",
+      "title": "Mesoscale organization and structure of orographic precipitation producing flash floods in the Lago Maggiore region",
+      "authors": [
+        "L. Panziera",
+        "Curtis N. James",
+        "U. Germann"
+      ],
+      "abstract": "",
+      "doi": "10.1002/qj.2351",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "ba0a86ce-986d-4233-9e3b-8b12d7be67f7",
+      "title": "A historical geomorphological approach to flood hazard management along the shore of an alpine lake (northern Italy)",
+      "authors": [
+        "F. Luino",
+        "A. Belloni",
+        "L. Turconi",
+        "F. Faccini",
+        "A. Mantovani",
+        "P. Fassi",
+        "F. Marincioni",
+        "G. Caldiroli"
+      ],
+      "abstract": "",
+      "doi": "10.1007/s11069-018-3398-5",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "d6e633f5-152b-45ef-85e6-2c78adf799ee",
+      "title": "The 1978 Heavy Precipitation and Flood Event in Switzerland",
+      "authors": [
+        "P. Stucki",
+        "A. Baumann",
+        "D. Bucher"
+      ],
+      "abstract": "",
+      "doi": "10.4480/GB2017.G92.06",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "09714eb6-a1b6-47ce-9cb4-f5f5d0d8ac6b",
+      "title": "Modeling and simulation of the R5912 photomultiplier for the LAGO project",
+      "authors": [
+        "S. Hern\u00e1ndez-Barajas",
+        "Y. Le\u00f3n-Carre\u00f1o",
+        "J. Pe\u00f1a-Rodr\u00edguez",
+        "L. A. N\u00fa\u00f1ez",
+        "LAGO collaboration"
+      ],
+      "abstract": "We present the results of modeling and simulating the Hamamatsu R5912 photomultiplier tube that is used in most of the sites of the Latin American Giant Observatory (LAGO). The model was compared with data of in-operation water Cherenkov detectors (WCD) installed at Bucaramanga-Colombia and Bariloche-Argentina. The LAGO project is an international experiment that spans across Latin America at different altitudes joining more than 35 institutions of 11 countries. It is mainly oriented to basic research on gamma-ray bursts and space weather phenomena. The LAGO network consists of single or small arrays of WCDs composed mainly by a photomultiplier tube and a readout electronics that acquires single-particle or extensive air shower events triggered by the interaction of cosmic rays with the Earth atmosphere.",
+      "doi": "",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "a6785823-a0d2-4731-86fa-61ba17a52b0d",
+      "title": "On the Extrapolation of Generative Adversarial Networks for downscaling precipitation extremes in warmer climates",
+      "authors": [
+        "Neelesh Rampal",
+        "Peter B. Gibson",
+        "Steven Sherwood",
+        "Gab Abramowitz"
+      ],
+      "abstract": "While deep-learning downscaling algorithms can generate fine-scale climate projections cost-effectively, it is still unclear how well they will extrapolate to unobserved climates. We assess the extrapolation capabilities of a deterministic Convolutional Neural Network baseline and a Generative Adversarial Network (GAN) built with this baseline, trained to predict daily precipitation simulated by a Regional Climate Model (RCM). Both approaches emulate future changes in annual mean precipitation well, even when trained on historical data, though training on a future climate improves performance. For extreme precipitation (99.5th percentile), RCM simulations predict a robust end-of-century increase with future warming (~5.8%/\u00b0C on average from five simulations). When trained on a future climate, GANs capture 97% of the warming-driven increase in extreme precipitation compared to 65% in a deterministic baseline. Even GANs trained historically capture 77% of this increase. Overall, GANs offer better generalization for downscaling extremes, which is important in applications relying on historical data.",
+      "doi": "10.1029/2024GL112492",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "f2d58e26-a602-4ad9-88ff-7ae01b91e1f7",
+      "title": "Theory of a quodon gas. With application to precipitation kinetics in solids under irradiation",
+      "authors": [
+        "Vladimir Dubinko",
+        "Roman Shapovalov"
+      ],
+      "abstract": "Rate theory of the radiation-induced precipitation in solids is modified with account of non-equilibrium fluctuations driven by the gas of lattice solitons (a.k.a. quodons) produced by irradiation. According to quantitative estimations, a steady-state density of the quodon gas under sufficiently intense irradiation can be as high as the density of phonon gas. The quodon gas may be a powerful driver of the chemical reaction rates under irradiation, the strength of which exponentially increases with irradiation flux and may be comparable with strength of the phonon gas that exponentially increases with temperature. The modified rate theory is applied to modelling of copper precipitation in FeCu binary alloys under electron irradiation. In contrast to the classical rate theory, which disagrees strongly with experimental data on all precipitation parameters, the modified rate theory describes quite well both the evolution of precipitates and the matrix concentration of copper measured by different methods",
+      "doi": "10.1007/978-3-319-02057-0_14",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "a2c45506-a4a2-4bcc-98e2-733b95f15ab2",
+      "title": "Statistical tests for extreme precipitation volumes",
+      "authors": [
+        "V. Yu. Korolev",
+        "A. K. Gorshenin",
+        "K. P. Belyaev"
+      ],
+      "abstract": "The approaches, based on the negative binomial model for the distribution of duration of the wet periods measured in days, are proposed to the definition of extreme precipitation. This model demonstrates excellent fit with real data and provides a theoretical base for the determination of asymptotic approximations to the distributions of the maximum daily precipitation volume within a wet period as well as the total precipitation volume over a wet period. The first approach to the definition (and determination) of extreme precipitation is based on the tempered Snedecor-Fisher distribution of the maximum daily precipitation. According to this approach, a daily precipitation volume is considered to be extreme, if it exceeds a certain (pre-defined) quantile of the tempered Snedecor--Fisher distribution. The second approach is based on that the total precipitation volume for a wet period has the gamma distribution. Hence, the hypothesis that the total precipitation volume during a certain wet period is extremely large can be formulated as the homogeneity hypothesis of a sample from the gamma distribution. Two equivalent tests are proposed for testing this hypothesis. Both of these tests deal with the relative contribution of the total precipitation volume for a wet period to the considered set (sample) of successive wet periods. Within the second approach it is possible to introduce the notions of relatively and absolutely extreme precipitation volumes. The results of the application of these tests to real data are presented yielding the conclusion that the intensity of wet periods with extreme large precipitation volume increases.",
+      "doi": "",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "cd2b0941-2881-4528-b310-195e56470126",
+      "title": "GPC/m: Global Precipitation Climatology by Machine Learning; Quasi-global, Daily, and One Degree Spatial Resolution",
+      "authors": [
+        "Hiroshi G. Takahashi"
+      ],
+      "abstract": "This paper presents a new precipitation dataset that is daily, has a spatial resolution of one degree on a quasi-global scale, and spans more than 42 years, using machine learning techniques. The ultimate goal of this dataset is to provide a homogeneous daily precipitation dataset for several decades without gaps, which is suitable for climate analysis. As a first step, 42 years of daily precipitation data was generated using machine learning techniques. The machine learning methods are supervised learning, and the reference data are estimated precipitation datasets from 2001 to 2020. The three machine learning methods are random forest, gradient-boosted decision trees, and convolutional neural networks. The input data are satellite observations and atmospheric circulations from reanalysis, which are somewhat modified based on knowledge of the climatological background. Using the trained statistical models, we predict back to 1979, when daily precipitation data was almost unavailable globally. The detailed procedures are described in this paper. The produced data have been partially evaluated. However, additional evaluations from different perspectives are needed. The advantages and disadvantages of this precipitation dataset are also discussed. Currently, this GPC/m precipitation dataset version is GPC/m-v1-2024.",
+      "doi": "",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "9bceeb8f-b469-4afc-9177-85ea17a9f41c",
+      "title": "Machine learning emulation of precipitation from km-scale regional climate simulations using a diffusion model",
+      "authors": [
+        "Henry Addison",
+        "Elizabeth Kendon",
+        "Suman Ravuri",
+        "Laurence Aitchison",
+        "Peter AG Watson"
+      ],
+      "abstract": "High-resolution climate simulations are valuable for understanding climate change impacts. This has motivated use of regional convection-permitting climate models (CPMs), but these are very computationally expensive. We present a convection-permitting model generative emulator (CPMGEM), to skilfully emulate precipitation simulations by a 2.2km-resolution regional CPM at much lower cost. This utilises a generative machine learning approach, a diffusion model. It takes inputs at the 60km resolution of the driving global climate model and downscales these to 8.8km, with daily-mean time resolution, capturing the effect of convective processes represented in the CPM at these scales. The emulator is trained on simulations over England and Wales from the United Kingdom Climate Projections Local product, covering years between 1980 and 2080 following a high emissions scenario. The output precipitation has a similarly realistic spatial structure and intensity distribution to the CPM simulations. The emulator is stochastic, which improves the realism of samples. We show evidence that the emulator has skill for extreme events with ~100 year return times. It captures the main features of the simulated 21st century climate change, but exhibits some error in the magnitude. We demonstrate successful transfer from a \"perfect model\" training setting to application using GCM variable inputs. We also show that the method can be useful in situations with limited amounts of high-resolution data. Potential applications include producing high-resolution precipitation predictions for large-ensemble climate simulations and producing output based on different GCMs and climate change scenarios to better sample uncertainty.",
+      "doi": "",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "7482df28-477c-4991-bdc5-0d7f0deea1dd",
+      "title": "Reconstruction and simulation of an extreme flood event in the Lago Maggiore catchment in 1868",
+      "authors": [
+        "P. Stucki",
+        "Moritz Bandhauer",
+        "U. Heikkil\u00e4",
+        "O. R\u00f6ssler",
+        "M. Zappa",
+        "Lucas Pfister",
+        "Melanie Salvisberg",
+        "P. Froidevaux",
+        "O. Martius",
+        "L. Panziera",
+        "S. Br\u00f6nnimann"
+      ],
+      "abstract": "Abstract. Heavy precipitation on the south side of the central Alps\nproduced a catastrophic flood in October\u00a01868. We assess the damage and\nsocietal impacts, as well as the atmospheric and hydrological drivers using\ndocumentary evidence, observations and novel numerical weather and runoff\nsimulations. The greatest damage was concentrated close to the Alpine divide and Lago\nMaggiore. An atmospheric reanalysis emphasizes the repeated occurrence of\nstreamers of high potential vorticity as precursors of heavy precipitation.\nDynamical downscaling indicates high freezing levels (4000\u2009m\u2009a.s.l.),\nextreme precipitation rates (max.\u00a0270\u2009mm\u200924\u2009h\u22121) and weather dynamics that agree well with observed\nprecipitation and damage, and with existing concepts of forced low-level\nconvergence, mid-level uplift and iterative northeastward propagation of\nconvective cells. Simulated and observed peak levels of Lago Maggiore differ\nby 2\u2009m, possibly because the exact cross section of the lake outflow is\nunknown. The extreme response of Lago Maggiore cannot be attributed to low\nforest cover. Nevertheless, such a paradigm was adopted by policy makers\nfollowing the 1868 flood, and used to implement nationwide afforestation\npolicies and hydraulic structures. These findings illustrate the potential of high-resolution,\nhydrometeorological models \u2013 strongly supported by historical methods \u2013\nto shed new light on weather events and their socio-economic implications in\nthe 19th century.",
+      "doi": "10.5194/NHESS-18-2717-2018",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "3aed234d-bdfb-45a8-9d15-afd304955c69",
+      "title": "Landslides along the Lago Maggiore western coast (northern Italy): intense rainfall as trigger or concomitant cause?",
+      "authors": [
+        "M. Ciampittiello",
+        "H. Saidi",
+        "C. Dresti",
+        "M. Coluccino",
+        "L. Turconi",
+        "W. W. Little",
+        "F. Luino"
+      ],
+      "abstract": "",
+      "doi": "10.1007/s11069-021-04626-8",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "ee65f309-9ae0-4fa4-85d9-9dba38160198",
+      "title": "The extreme flood event of Lago Maggiore in September 1993",
+      "authors": [
+        "P. Stucki",
+        "O. Martius",
+        "S. Br\u00f6nnimann",
+        "J. Franke"
+      ],
+      "abstract": "",
+      "doi": "10.4480/GB2013.G89.06",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "3dc69c1c-5fe9-4d33-86ba-9036633d8334",
+      "title": "THE CLIMATE OF LAGO MAGGIORE AREA DURING THE LAST FIFTY YEARS",
+      "authors": [
+        "W. Ambrosetti",
+        "L. Barbanti",
+        "A. Rolla"
+      ],
+      "abstract": "Data collected in over 50 years' activity at the C.N.R. meteorological station of Pallanza were analysed to see whether any changes have taken place in some climatic elements and to quantify the extent of such changes. A statistical analysis of the respective historical series was performed on nine meteorological parameters (solar radiation, insolation, air temperature, atmospheric pressure, humidity, cloud cover, precipitation, evaporation and wind), and on two other strictly limnological features: the level of Lago Maggiore and its water temperature at six different depths. In particular, we evaluated the means and the extremes (maxima and minima) on an annual, seasonal, monthly and daily level, with the results presented uniformly for all the parameters, also in graphic form. We especially highlighted the trend lines, even though they were not always statistically significant owing to the extreme variability of the meteorological data; in the absence of statistical validity, their significance is an approximate indication of their increasing or decreasing trend. Results showed that insolation, air temperature and atmospheric pressure had increased markedly over time, at least on an annual level, with the trends for solar radiation, humidity and cloud cover also showing an increase, though very slight. Evaporation and wind showed a steady, marked decrease, while precipitation and lake level were essentially stable. Water temperature showed a more varied picture, with the temperature of the topmost levels (to a depth of 10 m) continuing to increase.",
+      "doi": "10.4081/JLIMNOL.2006.S1.1",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "0a37be8f-e0c4-4ff3-bca1-08a74088297a",
+      "title": "IL CLIMA DELL'AREALE DEL LAGO MAGGIORE DURANTE GLI ULTIMI CINQUANT'ANNI THE CLIMATE OF LAGO MAGGIORE AREA DURING THE LAST FIFTY YEARS",
+      "authors": [
+        "Walter Ambrosetti",
+        "L. Barbanti",
+        "A. Rolla"
+      ],
+      "abstract": "",
+      "doi": "",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "09f5979f-5dc8-4350-a131-ea39b88caa00",
+      "title": "Tripple Doppler radar analysis of the heavy rain event observed in Lago Maggiore region during MAP IOP 2B",
+      "authors": [
+        "J. Georgis",
+        "Frank Roux",
+        "Michel Chong",
+        "S. Pradier"
+      ],
+      "abstract": "",
+      "doi": "",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "5b9011ac-a141-4fca-ab53-0ab9f42908f3",
+      "title": "Modeling and simulation of the R5912 photomultiplier for the LAGO project",
+      "authors": [
+        "S. Hern\u00e1ndez-Barajas",
+        "Y. Le\u00f3n-Carre\u00f1o",
+        "J. Pe\u00f1a-Rodr\u00edguez",
+        "L. A. N\u00fa\u00f1ez",
+        "LAGO collaboration"
+      ],
+      "abstract": "We present the results of modeling and simulating the Hamamatsu R5912 photomultiplier tube that is used in most of the sites of the Latin American Giant Observatory (LAGO). The model was compared with data of in-operation water Cherenkov detectors (WCD) installed at Bucaramanga-Colombia and Bariloche-Argentina. The LAGO project is an international experiment that spans across Latin America at different altitudes joining more than 35 institutions of 11 countries. It is mainly oriented to basic research on gamma-ray bursts and space weather phenomena. The LAGO network consists of single or small arrays of WCDs composed mainly by a photomultiplier tube and a readout electronics that acquires single-particle or extensive air shower events triggered by the interaction of cosmic rays with the Earth atmosphere.",
+      "doi": "",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "4d59ad7f-7395-43f3-abbd-ae1a3ba65cbe",
+      "title": "Robust blue-green urban flood risk management optimised with a genetic algorithm for multiple rainstorm return periods",
+      "authors": [
+        "Asid Ur Rehman",
+        "Vassilis Glenis",
+        "Elizabeth Lewis",
+        "Chris Kilsby",
+        "Claire Walsh"
+      ],
+      "abstract": "Flood risk managers seek to optimise Blue-Green Infrastructure (BGI) designs to maximise return on investment. Current systems often use optimisation algorithms and detailed flood models to maximise benefit-cost ratios for single rainstorm return periods. However, these schemes may lack robustness in mitigating flood risks across different storm magnitudes. For example, a BGI scheme optimised for a 100-year return period may differ from one optimised for a 10-year return period. This study introduces a novel methodology incorporating five return periods (T = 10, 20, 30, 50, and 100 years) into a multi-objective BGI optimisation framework. The framework combines a Non-dominated Sorting Genetic Algorithm II (NSGA-II) with a fully distributed hydrodynamic model to optimise the spatial placement and combined size of BGI features. For the first time, direct damage cost (DDC) and expected annual damage (EAD), calculated for various building types, are used as risk objective functions, transforming a many-objective problem into a multi-objective one. Performance metrics such as Median Risk Difference (MedRD), Maximum Risk Difference (MaxRD), and Area Under Pareto Front (AUPF) reveal that a 100-year optimised BGI design performs poorly when evaluated for other return periods, particularly shorter ones. In contrast, a BGI design optimised using composite return periods enhances performance metrics across all return periods, with the greatest improvements observed in MedRD (22%) and AUPF (73%) for the 20-year return period, and MaxRD (23%) for the 50-year return period. Furthermore, climate uplift stress testing confirms the robustness of the proposed design to future rainfall extremes. This study advocates a paradigm shift in flood risk management, moving from single maximum to multiple rainstorm return period-based designs to enhance resilience and adaptability to future climate extremes.",
+      "doi": "10.1111/jfr3.70118",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "ed05bc71-ad2f-4c22-bfa3-2858066a2472",
+      "title": "Evaluating the weight sensitivity in AHP-based flood risk estimation models",
+      "authors": [
+        "Hongping Zhang",
+        "Zhenfeng Shao",
+        "Bin Hua",
+        "Xiao Huang",
+        "Jinqi Zhao",
+        "Wenfu Wu",
+        "Yewen Fan"
+      ],
+      "abstract": "In the analytic hierarchy process (AHP) based flood risk estimation models, it is widely acknowledged that different weighting criteria can lead to different results. In this study, we evaluated and discussed the sensitivity of flood risk estimation brought by judgment matrix definition by investigating the performance of pixel-based and sub-watershed-based AHP models. Taking a flood event that occurred in July 2020 in Chaohu basin, Anhui province, China, as a study case, we used the flood areas extracted from remote sensing images to construct ground truth for validation purposes. The results suggest that the performance of the pixel-based AHP model fluctuates intensively given different definitions of judgment matrixes, while the performance of sub-watershed-based AHP models fluctuates considerably less than that of the pixel-based AHP model. Specifically, sub-watershed delimitated via multiple flow direction (MFD) always achieves increases in the correct ratio and the fit ratio by >35% and >5% with the pixel-based AHP model, respectively.",
+      "doi": "",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "1a34480f-7976-4f01-a6e5-bc069c12877a",
+      "title": "A Simple Flood Forecasting Scheme Using Wireless Sensor Networks",
+      "authors": [
+        "Victor Seal",
+        "Arnab Raha",
+        "Shovan Maity",
+        "Souvik Kr Mitra",
+        "Amitava Mukherjee",
+        "Mrinal Kanti Naskar"
+      ],
+      "abstract": "This paper presents a forecasting model designed using WSNs (Wireless Sensor Networks) to predict flood in rivers using simple and fast calculations to provide real-time results and save the lives of people who may be affected by the flood. Our prediction model uses multiple variable robust linear regression which is easy to understand and simple and cost effective in implementation, is speed efficient, but has low resource utilization and yet provides real time predictions with reliable accuracy, thus having features which are desirable in any real world algorithm. Our prediction model is independent of the number of parameters, i.e. any number of parameters may be added or removed based on the on-site requirements. When the water level rises, we represent it using a polynomial whose nature is used to determine if the water level may exceed the flood line in the near future. We compare our work with a contemporary algorithm to demonstrate our improvements over it. Then we present our simulation results for the predicted water level compared to the actual water level.",
+      "doi": "10.5121/ijasuc.2012.3105",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "3d88f005-a1f4-46be-bbb8-51529dac222b",
+      "title": "Exploiting ConvNet Diversity for Flooding Identification",
+      "authors": [
+        "Keiller Nogueira",
+        "Samuel G. Fadel",
+        "\u00cdcaro C. Dourado",
+        "Rafael de O. Werneck",
+        "Javier A. V. Mu\u00f1oz",
+        "Ot\u00e1vio A. B. Penatti",
+        "Rodrigo T. Calumby",
+        "Lin Tzy Li",
+        "Jefersson A. dos Santos",
+        "Ricardo da S. Torres"
+      ],
+      "abstract": "Flooding is the world's most costly type of natural disaster in terms of both economic losses and human causalities. A first and essential procedure towards flood monitoring is based on identifying the area most vulnerable to flooding, which gives authorities relevant regions to focus. In this work, we propose several methods to perform flooding identification in high-resolution remote sensing images using deep learning. Specifically, some proposed techniques are based upon unique networks, such as dilated and deconvolutional ones, while other was conceived to exploit diversity of distinct networks in order to extract the maximum performance of each classifier. Evaluation of the proposed algorithms were conducted in a high-resolution remote sensing dataset. Results show that the proposed algorithms outperformed several state-of-the-art baselines, providing improvements ranging from 1 to 4% in terms of the Jaccard Index.",
+      "doi": "10.1109/LGRS.2018.2845549",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "cd8f260b-de9d-4457-ad33-101f987fe611",
+      "title": "An extended watershed-based zonal statistical AHP model for flood risk estimation: Constraining runoff converging related indicators by sub-watersheds",
+      "authors": [
+        "Hongping Zhang",
+        "Zhenfeng Shao",
+        "Jinqi Zhao",
+        "Xiao Huang",
+        "Jie Yang",
+        "Bin Hu",
+        "Wenfu Wu"
+      ],
+      "abstract": "Floods are highly uncertain events, occurring in different regions, with varying prerequisites and intensities. A highly reliable flood disaster risk map can help reduce the impact of floods for flood management, disaster decreasing, and urbanization resilience. In flood risk estimation, the widely used analytic hierarchy process (AHP) usually adopts pixel as a basic unit, it cannot capture the similar threaten caused by neighborhood source flooding cells at sub-watershed scale. Thus, an extended watershed-based zonal statistical AHP model constraining runoff converging related indicators by sub-watersheds (WZSAHP-Slope & Stream) is proposed to fill this gap. Taking the Chaohu basin as test case, we validated the proposed method with a real-flood area extracted in July 2020. The results indicate that the WZSAHP-Slope & Stream model using multiple flow direction division watersheds to calculate statistics of distance from stream and slope by maximum statistic method outperformed other tested methods. Compering with pixel-based AHP method, the proposed method can improve the correct ratio by 16% (from 67% to 83%) and fit ratio by 1% (from 13% to 14%) as in validation 1, and improve the correct ratio by 37% (from 23% to 60%) and fit ratio by 6% (from 12% to 18%) as in validation 2.",
+      "doi": "",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "f57a95cf-8f9d-46a0-9e3f-5718990d4382",
+      "title": "Reconstruction and simulation of an extreme flood event in the Lago Maggiore catchment in 1868",
+      "authors": [
+        "P. Stucki",
+        "Moritz Bandhauer",
+        "U. Heikkil\u00e4",
+        "O. R\u00f6ssler",
+        "M. Zappa",
+        "Lucas Pfister",
+        "Melanie Salvisberg",
+        "P. Froidevaux",
+        "O. Martius",
+        "L. Panziera",
+        "S. Br\u00f6nnimann"
+      ],
+      "abstract": "Abstract. Heavy precipitation on the south side of the central Alps\nproduced a catastrophic flood in October\u00a01868. We assess the damage and\nsocietal impacts, as well as the atmospheric and hydrological drivers using\ndocumentary evidence, observations and novel numerical weather and runoff\nsimulations. The greatest damage was concentrated close to the Alpine divide and Lago\nMaggiore. An atmospheric reanalysis emphasizes the repeated occurrence of\nstreamers of high potential vorticity as precursors of heavy precipitation.\nDynamical downscaling indicates high freezing levels (4000\u2009m\u2009a.s.l.),\nextreme precipitation rates (max.\u00a0270\u2009mm\u200924\u2009h\u22121) and weather dynamics that agree well with observed\nprecipitation and damage, and with existing concepts of forced low-level\nconvergence, mid-level uplift and iterative northeastward propagation of\nconvective cells. Simulated and observed peak levels of Lago Maggiore differ\nby 2\u2009m, possibly because the exact cross section of the lake outflow is\nunknown. The extreme response of Lago Maggiore cannot be attributed to low\nforest cover. Nevertheless, such a paradigm was adopted by policy makers\nfollowing the 1868 flood, and used to implement nationwide afforestation\npolicies and hydraulic structures. These findings illustrate the potential of high-resolution,\nhydrometeorological models \u2013 strongly supported by historical methods \u2013\nto shed new light on weather events and their socio-economic implications in\nthe 19th century.",
+      "doi": "10.5194/NHESS-18-2717-2018",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "4ef5d033-2917-4eca-a6f2-ed4bebdf600e",
+      "title": "Detrital layers marking flood events in recent sediments of Lago Maggiore (N. Italy) and their comparison with instrumental data",
+      "authors": [
+        "L. K\u00e4mpf",
+        "A. Brauer",
+        "P. Dulski",
+        "A. Lami",
+        "A. Marchetto",
+        "S. Gerli",
+        "W. Ambrosetti",
+        "P. Guilizzoni"
+      ],
+      "abstract": "",
+      "doi": "10.1111/J.1365-2427.2012.02796.X",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "22d22dc7-f780-4303-b347-3a860dbf2dda",
+      "title": "The extreme flood event of Lago Maggiore in September 1993",
+      "authors": [
+        "P. Stucki",
+        "O. Martius",
+        "S. Br\u00f6nnimann",
+        "J. Franke"
+      ],
+      "abstract": "",
+      "doi": "10.4480/GB2013.G89.06",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "4e26e16f-dad5-4ce0-b13d-2d8dfed2fe5a",
+      "title": "Mesoscale organization and structure of orographic precipitation producing flash floods in the Lago Maggiore region",
+      "authors": [
+        "L. Panziera",
+        "Curtis N. James",
+        "U. Germann"
+      ],
+      "abstract": "",
+      "doi": "10.1002/qj.2351",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "0f212709-c574-4b63-bf46-1238c36ba523",
+      "title": "Evaluation of WRF model performance with different microphysics schemes for extreme rainfall prediction in Lagos, Nigeria: Implications for urban flood risk management",
+      "authors": [
+        "Oluwatobi Oyegbile",
+        "Andy Chan",
+        "M. Ooi",
+        "Parvez Anwar",
+        "Abdullahi Ali Mohamed",
+        "Li Li"
+      ],
+      "abstract": "In Nigeria, particularly in urban areas like Lagos, flooding is a frequent natural hazard. In 2011, Lagos experienced one of its worst floods resulting in significant economic losses and displacement of people. In recent years, Lagos has continued to grapple with flooding challenges, with an equally significant flood episode occurring in 2021. This study focuses on predicting floods and forecasting extremely heavy rainfall in West Africa's equatorial zone using the Weather Research and Forecasting (WRF) model, particularly in humid tropical environments like Lagos. The study discusses the need to review existing flood models and adopt alternative flood models to address the limitations of flood prediction. As potential causes of these rainfall episodes, the interconnections between synoptic systems such as tropical easterly waves, southwesterly winds related to the West African Monsoon, and local topography and oceanic conditions are investigated. Three key metrics: root mean square error (RMSE), mean bias (MB), and mean absolute error (MAE) are used to assess the effectiveness of the computational model. Results indicate that the WRF model, specifically when using the Thompson parameterisation, can estimate the amount of rainfall accumulated over a 24-h period. This suggests that the model can predict the size of daily precipitation during intense rain events. The Thompson scheme shows better performance compared to the WSM6 scheme while evaluating the stations and episodes. During the rainfall episode on July 10, 2011, Thompson's spatial rainfall predictions were better than WSM6, resulting in a decrease in root mean square error (RMSE) of 15\u201331% depending on the area. Simulations of the July 2021 episode also show better performance, with a decrease in RMSE of 11\u201325% when comparing Thompson to WSM6 scheme. The Thompson scheme\u2019s improved ability is directly linked to a more accurate depiction of the microphysical mechanisms that control the rainfall formation. By explicitly simulating the dynamics of ice crystals and graupel, it is possible to accurately replicate the processes of orographic lifting and moist convection that are responsible for driving intense monsoon precipitation. In addition, Thompson scheme shows a reduced degree of systemic bias in comparison to WSM6, with a 75% reduction in the average bias in rainfall accumulation over the research area. The combination of the advanced Thompson microphysics method and WRF's atmospheric dynamics shows a high level of accuracy in predicting intense rainfall and the risk of floods in this area with diverse tropical topography.",
+      "doi": "10.1007/s42865-024-00081-y",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    },
+    {
+      "id": "9fc4a399-3952-4dbf-9dcb-e3b0870f2a05",
+      "title": "Extreme Rainfall Forecast and Flood Prediction in Equatorial Zone of West Africa: Port Harcourt, Nigeria in Focus",
+      "authors": [
+        "Budnukaeku Alexander Chinago",
+        "V. E. Weli"
+      ],
+      "abstract": "Purpose: Rainfall is the most important element of climate in the tropics, it dictate human outdoor activities, recharge underground water and streams, dictate agricultural calendar and many cultural activities. More recently the incidence of extreme rainfall leading to urban flood in the city of Port Harcourt is increasingly becoming a looming disaster. Despite the importance of rainfall in the tropic, the fact that it varies significantly is worrisome to both scholars and the stakeholders. This study focused on extreme rainfall forecast and flood prediction in equatorial zone of West Africa especially in a humid tropic environment like Port Harcourt. \nMethodology: Statistical Time Series Model performed very well in rainfall forecast, but did better in flood prediction. Secondary data extracted from Nigeria Meteorological Agency, Oshodi, Lagos form 100/3 of the agency record servers as main source of data for this work. Descriptive statistics and inferential statistics were used, among which are mean, standard deviation, and coefficient of variation; Pearson product moment correlation and structural time series model. \nFindings: The study discovered that rainfall distribution has reduced over the years, besides the dry spell in the month of August has deduced gradually but steadily over the years. It also shown that flood cannot occur in the first 6 months of the year. Rainfall distribution varies significantly over the climatic period. \nConclusion: There is a significant variation in rainfall distribution over Port Harcourt. August dry spell is steadily disappearing, giving raise to excessive run-off that triggers flood during late September to October. Flood will likely occur whenever the forecasted rainfall exceeds the generated level output during the seasonal peak. Structural Time Series Model performed well in flood prediction than in rainfall forecast. \nRecommendations: Extreme RF forecast by the authorities should be taken serious by inhabitants and warning be given and adhered to by residences. Also, structural time series model should be used for long time forecast since it performed very well, but this should be done with large data.",
+      "doi": "10.58425/jegs.v1i1.82",
+      "year": null,
+      "journal": null,
+      "embedding": null,
+      "keywords": [],
+      "domain": "oceanography"
+    }
+  ],
+  "events": [],
+  "patterns": [],
+  "indices": []
+}

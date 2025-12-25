@@ -30,12 +30,8 @@ router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 _knowledge_services: Dict[str, Any] = {}
 
 
-async def get_knowledge_service(backend: str = "neo4j"):
+async def get_knowledge_service(backend: str = "surrealdb"):
     """Get or create knowledge service instance."""
-    # SurrealDB is not fully implemented, fallback to neo4j
-    if backend == "surrealdb":
-        print("⚠️ SurrealDB not fully implemented, falling back to neo4j")
-        backend = "neo4j"
     
     if backend not in _knowledge_services:
         try:
@@ -135,11 +131,24 @@ class LinkIndexPattern(BaseModel):
 
 # ============== PAPER ENDPOINTS ==============
 
+@router.get("/papers")
+async def list_papers(
+    limit: int = 50,
+    backend: str = "surrealdb",
+):
+    """List all papers from the knowledge base."""
+    service = await get_knowledge_service(backend)
+    papers = await service.list_papers(limit=limit)
+    return {"papers": papers, "count": len(papers), "backend": backend}
+
+
 @router.post("/papers")
-async def add_paper(paper: PaperCreate, backend: str = "neo4j"):
+async def add_paper(paper: PaperCreate, backend: str = "surrealdb"):
     """Add a research paper to the knowledge base."""
+    from uuid import uuid4
     service = await get_knowledge_service(backend)
     paper_obj = Paper(
+        id=f"paper_{uuid4().hex[:12]}",
         title=paper.title,
         authors=paper.authors,
         abstract=paper.abstract,
@@ -153,21 +162,11 @@ async def add_paper(paper: PaperCreate, backend: str = "neo4j"):
     return {"id": paper_id, "backend": backend}
 
 
-@router.get("/papers/{paper_id}")
-async def get_paper(paper_id: str, backend: str = "neo4j"):
-    """Get a paper by ID."""
-    service = await get_knowledge_service(backend)
-    paper = await service.get_paper(paper_id)
-    if not paper:
-        raise HTTPException(404, f"Paper '{paper_id}' not found")
-    return paper.__dict__
-
-
 @router.get("/papers/search")
 async def search_papers(
     query: str,
     limit: int = 10,
-    backend: str = "neo4j",
+    backend: str = "surrealdb",
 ):
     """Search papers by text or vector similarity."""
     service = await get_knowledge_service(backend)
@@ -177,12 +176,22 @@ async def search_papers(
             {
                 "paper": r.item.__dict__,
                 "score": r.score,
-                "source": r.source,
+                "type": r.item_type,
             }
             for r in results
         ],
-        "backend": backend,
+        "total": len(results),
     }
+
+
+@router.get("/papers/{paper_id}")
+async def get_paper(paper_id: str, backend: str = "surrealdb"):
+    """Get a paper by ID."""
+    service = await get_knowledge_service(backend)
+    paper = await service.get_paper(paper_id)
+    if not paper:
+        raise HTTPException(404, f"Paper '{paper_id}' not found")
+    return paper.__dict__
 
 
 @router.post("/papers/bulk")
@@ -211,6 +220,17 @@ async def bulk_add_papers(papers: List[PaperCreate], backend: str = "neo4j"):
 
 
 # ============== EVENT ENDPOINTS ==============
+
+@router.get("/events")
+async def list_events(
+    limit: int = 50,
+    backend: str = "surrealdb",
+):
+    """List all events from the knowledge base."""
+    service = await get_knowledge_service(backend)
+    events = await service.list_events(limit=limit)
+    return {"events": events, "count": len(events), "backend": backend}
+
 
 @router.post("/events")
 async def add_event(event: EventCreate, backend: str = "neo4j"):
@@ -332,6 +352,17 @@ async def get_climate_index(index_id: str, backend: str = "neo4j"):
 
 
 # ============== PATTERN ENDPOINTS ==============
+
+@router.get("/patterns")
+async def list_patterns(
+    limit: int = 50,
+    backend: str = "surrealdb",
+):
+    """List all patterns from the knowledge base."""
+    service = await get_knowledge_service(backend)
+    patterns = await service.list_patterns(limit=limit)
+    return {"patterns": patterns, "count": len(patterns), "backend": backend}
+
 
 @router.post("/patterns")
 async def add_pattern(pattern: PatternCreate, backend: str = "neo4j"):
