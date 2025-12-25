@@ -10,7 +10,7 @@ import { CausalGraphView } from './components/CausalGraphView'
 import { DataPanel } from './components/DataPanel'
 import { ChatPanel } from './components/ChatPanel'
 import { KnowledgeSearch } from './components/KnowledgeSearch'
-import { KnowledgeGraphView } from './components/KnowledgeGraphView'
+import { KnowledgeGraph3DView } from './components/KnowledgeGraph3DView'
 import { HistoricalAnalysis } from './components/HistoricalAnalysis'
 import { useStore } from './store'
 
@@ -59,7 +59,7 @@ export default function App() {
             
             {activeView === 'knowledge-graph' && (
               <div className="h-[calc(100vh-140px)]">
-                <KnowledgeGraphView />
+                <KnowledgeGraph3DView />
               </div>
             )}
             
