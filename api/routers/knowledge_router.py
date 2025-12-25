@@ -504,3 +504,22 @@ async def link_index_pattern(link: LinkIndexPattern, backend: str = "neo4j"):
         period=link.period,
     )
     return {"success": success, "backend": backend}
+
+
+@router.get("/stats")
+async def get_knowledge_stats(backend: str = "surrealdb"):
+    """Get knowledge base statistics."""
+    try:
+        service = await get_knowledge_service(backend)
+        stats = await service.get_stats()
+        return {
+            "backend": backend,
+            "stats": stats,
+            "status": "healthy"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get stats: {str(e)}"
+        )
+

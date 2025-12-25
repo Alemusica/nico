@@ -1,0 +1,151 @@
+{
+  "summary": {
+    "timestamp": "2025-12-25T16:51:15.964704",
+    "total_agents": 1,
+    "total_checks": 13,
+    "passed": 11,
+    "failed": 0,
+    "warnings": 2,
+    "pass_rate": "84.6%",
+    "agents_with_errors": 0
+  },
+  "agents": {
+    "DataFlowAuditor": {
+      "scope": "CMEMS, ERA5, Climate Indices, Cache",
+      "total_checks": 13,
+      "passed": 11,
+      "failed": 0,
+      "warnings": 2,
+      "duration_ms": 857.008,
+      "error": null,
+      "checks": [
+        {
+          "name": "backend_health",
+          "passed": true,
+          "severity": "critical",
+          "message": "Backend API accessible",
+          "details": {
+            "url": "http://localhost:8000/api/v1/health",
+            "status_code": 200
+          }
+        },
+        {
+          "name": "backend_components",
+          "passed": true,
+          "severity": "high",
+          "message": "Backend components reported",
+          "details": {
+            "components": {
+              "llm": {
+                "status": "available",
+                "model": "qwen3-coder:30b"
+              },
+              "causal_discovery": {
+                "status": "available",
+                "method": "PCMCI"
+              },
+              "databases": {
+                "neo4j": "fallback (in-memory)",
+                "surrealdb": "available (not connected)"
+              }
+            }
+          }
+        },
+        {
+          "name": "cmems_import",
+          "passed": true,
+          "severity": "high",
+          "message": "CMEMSClient module imports successfully",
+          "details": {}
+        },
+        {
+          "name": "cmems_instantiation",
+          "passed": true,
+          "severity": "high",
+          "message": "CMEMSClient instantiates without errors",
+          "details": {}
+        },
+        {
+          "name": "era5_import",
+          "passed": true,
+          "severity": "high",
+          "message": "ERA5Client module imports successfully",
+          "details": {}
+        },
+        {
+          "name": "era5_instantiation",
+          "passed": true,
+          "severity": "high",
+          "message": "ERA5Client instantiates without errors",
+          "details": {}
+        },
+        {
+          "name": "era5_humidity_vars",
+          "passed": false,
+          "severity": "medium",
+          "message": "Humidity vars not verified",
+          "details": {
+            "expected_vars": [
+              "dewpoint_2m",
+              "specific_humidity_850",
+              "relative_humidity_850"
+            ]
+          }
+        },
+        {
+          "name": "climate_indices_import",
+          "passed": true,
+          "severity": "medium",
+          "message": "ClimateIndicesClient module imports successfully",
+          "details": {}
+        },
+        {
+          "name": "climate_indices_instantiation",
+          "passed": true,
+          "severity": "medium",
+          "message": "ClimateIndicesClient instantiates without errors",
+          "details": {}
+        },
+        {
+          "name": "cache_stats_endpoint",
+          "passed": false,
+          "severity": "medium",
+          "message": "Cache stats returns 503 - DataManager issue",
+          "details": {
+            "status_code": 503
+          }
+        },
+        {
+          "name": "data_manager_import",
+          "passed": true,
+          "severity": "high",
+          "message": "DataManager module imports successfully",
+          "details": {}
+        },
+        {
+          "name": "data_manager_instantiation",
+          "passed": true,
+          "severity": "high",
+          "message": "DataManager instantiates without errors",
+          "details": {}
+        },
+        {
+          "name": "file_formats_support",
+          "passed": true,
+          "severity": "medium",
+          "message": "File formats: 3/3 supported",
+          "details": {
+            "supported": [
+              "NetCDF",
+              "ZARR (via xarray)",
+              "CSV"
+            ],
+            "missing": []
+          }
+        }
+      ]
+    }
+  },
+  "critical_issues": [],
+  "recommendations": []
+}
