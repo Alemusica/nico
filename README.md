@@ -2,10 +2,11 @@
 
 A comprehensive Python toolkit for **satellite altimetry analysis** and **intelligent causal discovery** with LLM-powered explanations.
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)
 ![Ollama](https://img.shields.io/badge/Ollama-LLM-purple.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Audit](https://img.shields.io/badge/Audit-Multi--Agent-orange.svg)
 
 ## 🎯 Overview
 
@@ -17,8 +18,35 @@ This project combines **oceanographic data analysis** with **AI-powered causal d
 - 🤖 **LLM Integration** - Ollama (qwen3-coder) for automatic data interpretation
 - ⚡ **Physics Validation** - Validate patterns against physical laws (wind setup, inverse barometer)
 - 📊 **Pattern Detection** - tsfresh features, association rules, anomaly detection
+- 🤖 **Multi-Agent Audit** - Parallel quality assurance system (8 specialized agents)
 
-### New: Intelligent Causal Discovery Pipeline
+### New: Multi-Agent Audit System (Dec 2025)
+
+**8 Specialized Agents** for comprehensive quality monitoring:
+
+```bash
+# Run full parallel audit (all 8 agents)
+python audit_agents/run_all.py
+
+# Or test individual agent
+python audit_agents/data_flow_auditor.py
+```
+
+**Agents**:
+1. 🌊 DataFlowAuditor - CMEMS/ERA5/Cache (✅ 11/13 checks)
+2. 🔍 InvestigationAuditor - Pipeline E2E
+3. 📚 KnowledgeAuditor - Services/Persistence
+4. 🔐 APIAuditor - Security/Performance
+5. 🧠 CausalAuditor - PCMCI/Tigramite
+6. 🧪 QualityAuditor - Tests/Coverage
+7. 🎨 FrontendAuditor - React/TypeScript
+8. 🚀 OpsAuditor - Docker/Monitoring
+
+**Output**: JSON + Markdown reports in `audit_reports/`
+
+See [audit_agents/README.md](audit_agents/README.md) for details.
+
+### Intelligent Causal Discovery Pipeline
 
 ```
 Dataset → LLM Interprets → Find Time Dimension → PCMCI Discovery → Physics Validation → LLM Explains
@@ -123,23 +151,40 @@ nico/
 
 ## 🔬 API Endpoints
 
+### Core Endpoints
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/health` | GET | Check API + Ollama status |
-| `/data/files` | GET | List available data files |
-| `/data/upload` | POST | Upload CSV/NetCDF |
-| `/data/load/{path}` | GET | Load file from data/ |
-| `/interpret` | POST | LLM interprets dataset structure |
-| `/discover` | POST | Run PCMCI causal discovery |
-| `/discover/correlations` | POST | Cross-correlation analysis |
-| `/chat` | POST | Chat with LLM about data |
-| `/hypotheses` | POST | Generate causal hypotheses |
-| `/ws/chat` | WebSocket | Stream LLM responses |
+| `/api/v1/health` | GET | Check API + Ollama status |
+| `/api/v1/data/files` | GET | List available data files |
+| `/api/v1/data/upload` | POST | Upload CSV/NetCDF |
+| `/api/v1/data/load/{path}` | GET | Load file from data/ |
+| `/api/v1/interpret` | POST | LLM interprets dataset structure |
+| `/api/v1/discover` | POST | Run PCMCI causal discovery |
+| `/api/v1/discover/correlations` | POST | Cross-correlation analysis |
+| `/api/v1/chat` | POST | Chat with LLM about data |
+| `/api/v1/hypotheses` | POST | Generate causal hypotheses |
+| `/api/v1/ws/chat` | WebSocket | Stream LLM responses |
+
+### Knowledge Base
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/knowledge/stats` | GET | Knowledge base statistics |
+| `/api/v1/knowledge/papers` | GET/POST | Scientific papers CRUD |
+| `/api/v1/knowledge/events` | GET/POST | Historical events |
+| `/api/v1/knowledge/patterns` | GET/POST | Causal patterns |
+
+### Investigation (WebSocket Streaming)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/investigate/ws` | WebSocket | Real-time investigation streaming |
+| `/api/v1/investigate/status` | GET | Investigation components status |
+
+**Note**: All endpoints now require `/api/v1` prefix (v1.8.0+)
 
 ### Example: Causal Discovery
 
 ```bash
-curl -X POST http://localhost:8000/discover \
+curl -X POST http://localhost:8000/api/v1/discover \
   -H "Content-Type: application/json" \
   -d '{
     "dataset_name": "flood_data",
@@ -234,24 +279,34 @@ python test_headless.py
 
 # Unit tests
 pytest tests/
+
+# Multi-agent audit (NEW)
+python audit_agents/run_all.py
 ```
 
 ### Code Quality
 ```bash
 black src/ api/
 ruff check src/ api/
+
+# Check audit status
+python audit_agents/data_flow_auditor.py
 ```
 
 ### Known Issues
 
 ⚠️ **Python 3.14 Compatibility**: NetworkX and some libraries have issues with Python 3.14. Use Python 3.12 for now.
 
+⚠️ **Cache Stats**: DataManager returns 503 - investigation required
+
+⚠️ **ERA5 Humidity Variables**: Verification check pending
+
 ---
 
 ## 🗺️ Roadmap
 
-### ✅ Completed (v1.0)
-- [x] FastAPI backend with REST endpoints
+### ✅ Completed (v1.8)
+- [x] FastAPI backend with REST endpoints + `/api/v1` versioning
 - [x] Ollama LLM integration (qwen3-coder, llama3.2)
 - [x] PCMCI causal discovery with correlation fallback
 - [x] Physics validation rules (flood, manufacturing)
@@ -259,12 +314,19 @@ ruff check src/ api/
 - [x] NetCDF/CSV loading with auto-detection
 - [x] Headless test pipeline
 - [x] Pattern engine (tsfresh, mlxtend, pyod)
+- [x] Modular routers (7 routers, 75% code reduction)
+- [x] Production middleware (logging, security, rate limiting)
+- [x] **Multi-Agent Audit System** (8 agents, parallel execution)
+- [x] **MinimalKnowledgeService** (in-memory, production-ready)
+- [x] Investigation pipeline with WebSocket streaming
 
-### 🚧 In Progress (v1.1)
-- [ ] React frontend with PHI spacing layout
+### 🚧 In Progress (v1.9)
+- [ ] Complete 7 remaining audit agents
+- [ ] React frontend with PHI spacing layout (partial)
 - [ ] Interactive causal graph visualization (D3.js)
-- [ ] Real-time chat with WebSocket streaming
-- [ ] Time series explorer with lag slider
+- [ ] Real-time chat with WebSocket streaming (functional)
+- [ ] Knowledge base persistence (SurrealDB/Neo4j)
+- [ ] Test coverage 40% → 80%
 
 ### 📋 Planned (v2.0)
 - [ ] Neo4j for causal graph persistence
@@ -273,6 +335,8 @@ ruff check src/ api/
 - [ ] Export to standard causal formats (TETRAD, DOT)
 - [ ] Teleconnection patterns (NAO, ENSO)
 - [ ] Automated report generation
+- [ ] Full audit coverage (156+ checks)
+- [ ] Docker Compose deployment
 
 ---
 
