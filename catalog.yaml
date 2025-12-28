@@ -1,0 +1,194 @@
+# catalog.yaml - Multi-provider catalog con latency metadata
+# COMPLEMENTA (non sostituisce) src/data_manager/catalog.py
+metadata:
+  title: Surge Shazam Multi-Sensor Catalog
+  version: 1
+  note: "Estende CopernicusCatalog con ERA5, NOAA, NASA, ESA"
+
+sources:
+  # === COPERNICUS MARINE (delegato a catalog.py esistente) ===
+  cmems_sealevel:
+    driver: intake_xarray.netcdf.NetCDFSource
+    description: "CMEMS Sea Level L4 (via CopernicusCatalog)"
+    metadata:
+      provider: Copernicus Marine
+      product_id: "SEALEVEL_GLO_PHY_L4_NRT_008_046"
+      variables: [sla, adt, ugos, vgos]
+      resolution_spatial: "0.25°"
+      resolution_temporal: "daily"
+      coverage_temporal: ["1993-01-01", "present"]
+      latency: "~1d"
+      latency_badge: "🟡"
+      client: "src.data_manager.catalog.CopernicusCatalog"
+      status: available
+    args:
+      urlpath: "data/cmems/sealevel/*.nc"
+
+  cmems_sst:
+    driver: intake_xarray.netcdf.NetCDFSource
+    description: "CMEMS SST OSTIA (via CopernicusCatalog)"
+    metadata:
+      provider: Copernicus Marine
+      product_id: "SST_GLO_SST_L4_NRT_OBSERVATIONS_010_001"
+      variables: [analysed_sst, analysis_error, sea_ice_fraction]
+      resolution_spatial: "0.05°"
+      resolution_temporal: "daily"
+      coverage_temporal: ["2007-01-01", "present"]
+      latency: "~1d"
+      latency_badge: "🟡"
+      client: "src.data_manager.catalog.CopernicusCatalog"
+      status: available
+    args:
+      urlpath: "data/cmems/sst/*.nc"
+
+  cmems_currents:
+    driver: intake_xarray.netcdf.NetCDFSource
+    description: "CMEMS Ocean Currents (via CopernicusCatalog)"
+    metadata:
+      provider: Copernicus Marine
+      product_id: "GLOBAL_ANALYSISFORECAST_PHY_001_024"
+      variables: [uo, vo, thetao, so, zos]
+      resolution_spatial: "0.083°"
+      resolution_temporal: "daily"
+      coverage_temporal: ["2019-01-01", "present"]
+      latency: "~1d"
+      latency_badge: "🟡"
+      client: "src.data_manager.catalog.CopernicusCatalog"
+      status: available
+    args:
+      urlpath: "data/cmems/currents/*.nc"
+
+  cmems_waves:
+    driver: intake_xarray.netcdf.NetCDFSource
+    description: "CMEMS Ocean Waves (via CopernicusCatalog)"
+    metadata:
+      provider: Copernicus Marine
+      product_id: "GLOBAL_ANALYSISFORECAST_WAV_001_027"
+      variables: [VHM0, VMDR, VTM10, VTPK]
+      resolution_spatial: "0.083°"
+      resolution_temporal: "3-hourly"
+      coverage_temporal: ["2019-01-01", "present"]
+      latency: "~1d"
+      latency_badge: "🟡"
+      client: "src.data_manager.catalog.CopernicusCatalog"
+      status: available
+    args:
+      urlpath: "data/cmems/waves/*.nc"
+
+  cmems_reanalysis:
+    driver: intake_xarray.netcdf.NetCDFSource
+    description: "CMEMS Global Ocean Physics Reanalysis"
+    metadata:
+      provider: Copernicus Marine
+      product_id: "GLOBAL_MULTIYEAR_PHY_001_030"
+      variables: [uo, vo, thetao, so, zos, mlotst]
+      resolution_spatial: "0.083°"
+      resolution_temporal: "daily"
+      coverage_temporal: ["1993-01-01", "present"]
+      latency: "~1mo"
+      latency_badge: "🔴"
+      client: "src.data_manager.catalog.CopernicusCatalog"
+      status: available
+    args:
+      urlpath: "data/cmems/reanalysis/*.nc"
+
+  # === ERA5 (client esistente) ===
+  era5_reanalysis:
+    driver: intake_xarray.netcdf.NetCDFSource
+    description: "ERA5 Reanalysis - ECMWF"
+    metadata:
+      provider: ECMWF
+      variables: [temperature, precipitation, wind_u, wind_v, pressure, runoff, soil_moisture]
+      resolution_spatial: "0.25°"
+      resolution_temporal: "hourly"
+      coverage_temporal: ["1940-01-01", "present"]
+      latency: "~5d"
+      latency_badge: "🔴"
+      auth_env: "CDSAPI_KEY"
+      client: "src.surge_shazam.data.era5_client"
+      status: available
+    args:
+      urlpath: "data/era5/*.nc"
+
+  # === NOAA CLIMATE INDICES (client esistente) ===
+  noaa_climate_indices:
+    driver: csv
+    description: "NOAA Climate Teleconnection Indices"
+    metadata:
+      provider: NOAA
+      variables: [NAO, AO, ENSO, AMO, PDO, PNA, EA, SCAND]
+      resolution_temporal: "monthly"
+      coverage_temporal: ["1950-01-01", "present"]
+      latency: "~1mo"
+      latency_badge: "🔴"
+      auth_env: null
+      client: "src.surge_shazam.data.climate_indices"
+      status: available
+    args:
+      urlpath: "https://www.cpc.ncep.noaa.gov/products/precip/CWlink/pna/norm.nao.monthly.b5001.current.ascii"
+
+  # === ESA CCI (file locali) ===
+  slcci_altimetry:
+    driver: intake_xarray.netcdf.NetCDFSource
+    description: "ESA Sea Level CCI (local files)"
+    metadata:
+      provider: ESA CCI
+      variables: [corssh, mean_sea_surface, swh]
+      resolution_spatial: "along-track"
+      coverage_temporal: ["1993-01-01", "2020-12-31"]
+      latency: "historical"
+      latency_badge: "⚫"
+      status: available
+    args:
+      urlpath: "data/slcci/*.nc"
+
+  # === NASA CYGNSS (da implementare - Task 2.1) ===
+  cygnss_wind:
+    driver: intake_xarray.netcdf.NetCDFSource
+    description: "CYGNSS Wind Speed (NASA PO.DAAC)"
+    metadata:
+      provider: NASA
+      variables: [wind_speed, wind_speed_uncertainty, mss, les]
+      resolution_spatial: "25km"
+      resolution_temporal: "hourly"
+      coverage_temporal: ["2017-03-01", "present"]
+      latency: "2-24h"
+      latency_badge: "🟢"
+      auth_env: "NASA_EARTHDATA_TOKEN"
+      client: "src.surge_shazam.data.cygnss_client"
+      priority: HIGH
+      status: to_implement
+      docs: "https://podaac.jpl.nasa.gov/CYGNSS"
+    args:
+      urlpath: "data/cygnss/*.nc"
+
+  # === FUTURE DATASETS ===
+  metop_sg_ro:
+    driver: intake_xarray.netcdf.NetCDFSource
+    description: "MetOp-SG GRAS Radio Occultation"
+    metadata:
+      provider: EUMETSAT
+      variables: [temperature_profile, humidity_profile, bending_angle]
+      resolution_spatial: "vertical 100m"
+      coverage_temporal: ["2025-08-01", "present"]
+      latency: "~3h"
+      latency_badge: "🟢"
+      auth_env: "EUMETSAT_API_KEY"
+      priority: MEDIUM
+      status: to_implement
+    args:
+      urlpath: "data/metop/*.nc"
+
+  hydrognss:
+    driver: intake_xarray.netcdf.NetCDFSource
+    description: "HydroGNSS Soil Moisture (ESA Scout)"
+    metadata:
+      provider: ESA
+      variables: [soil_moisture, freeze_thaw]
+      coverage_temporal: ["2026-07-01", "future"]
+      latency: "TBD"
+      latency_badge: "⏳"
+      priority: LOW
+      status: coming_2026
+    args:
+      urlpath: "data/hydrognss/*.nc"

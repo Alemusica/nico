@@ -638,3 +638,121 @@ async def interpret_dataset(dataset_name: str):
         "domain": result.domain,
         "summary": result.summary,
     }
+
+
+# ============== INTAKE CATALOG ENDPOINTS ==============
+
+# Catalog availability flag
+INTAKE_CATALOG_AVAILABLE = False
+try:
+    from src.data_manager.intake_bridge import get_catalog, IntakeCatalogBridge
+    INTAKE_CATALOG_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ Intake Catalog not available: {e}")
+
+
+@router.get("/catalog")
+@cached(ttl_seconds=600, key_prefix="intake_catalog")
+async def list_catalog():
+    """
+    List all datasets in the Intake catalog with latency metadata.
+    
+    Returns multi-provider catalog (CMEMS, ERA5, NOAA, NASA, ESA).
+    """
+    if not INTAKE_CATALOG_AVAILABLE:
+        raise HTTPException(503, "Intake catalog not available")
+    
+    cat = get_catalog()
+    datasets = []
+    
+    for ds_id in cat.list_datasets():
+        meta = cat.get_metadata(ds_id)
+        datasets.append({
+            "id": ds_id,
+            "description": meta.get("description", ds_id),
+            "provider": meta.get("provider"),
+            "variables": meta.get("variables", []),
+            "latency": meta.get("latency"),
+            "latency_badge": meta.get("latency_badge"),
+            "status": meta.get("status"),
+            "resolution_spatial": meta.get("resolution_spatial"),
+            "resolution_temporal": meta.get("resolution_temporal"),
+        })
+    
+    return {
+        "datasets": datasets,
+        "count": len(datasets),
+        "summary": cat.summary(),
+    }
+
+
+@router.get("/catalog/search")
+async def search_catalog(
+    variables: Optional[str] = None,
+    latency: Optional[str] = None,
+    status: Optional[str] = None,
+    provider: Optional[str] = None,
+):
+    """
+    Search datasets by criteria.
+    
+    Args:
+        variables: Comma-separated variables (e.g., "sla,sst")
+        latency: Latency badge filter ("🟢", "🟡", "🔴", "⚫")
+        status: Status filter ("available", "to_implement")
+        provider: Provider filter ("Copernicus Marine", "ECMWF", etc.)
+    """
+    if not INTAKE_CATALOG_AVAILABLE:
+        raise HTTPException(503, "Intake catalog not available")
+    
+    cat = get_catalog()
+    var_list = variables.split(",") if variables else None
+    
+    results = cat.search(
+        variables=var_list,
+        latency_badge=latency,
+        status=status,
+        provider=provider,
+    )
+    
+    return {
+        "matches": results,
+        "count": len(results),
+    }
+
+
+@router.get("/catalog/realtime")
+async def get_realtime_datasets():
+    """
+    Get datasets with near real-time latency (🟢).
+    
+    Useful for operational monitoring.
+    """
+    if not INTAKE_CATALOG_AVAILABLE:
+        raise HTTPException(503, "Intake catalog not available")
+    
+    cat = get_catalog()
+    results = cat.search_by_latency(max_latency="🟢")
+    
+    return {
+        "datasets": results,
+        "count": len(results),
+        "note": "Near real-time datasets (latency < 24h)",
+    }
+
+
+@router.get("/catalog/{dataset_id}")
+async def get_catalog_dataset(dataset_id: str):
+    """Get detailed metadata for a specific dataset."""
+    if not INTAKE_CATALOG_AVAILABLE:
+        raise HTTPException(503, "Intake catalog not available")
+    
+    cat = get_catalog()
+    try:
+        meta = cat.get_metadata(dataset_id)
+        return {
+            "id": dataset_id,
+            **meta,
+        }
+    except KeyError:
+        raise HTTPException(404, f"Dataset '{dataset_id}' not found")
