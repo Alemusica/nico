@@ -64,3 +64,10 @@ pydantic-settings>=2.0.0
 structlog>=23.0.0
 python-json-logger>=2.0.0
 slowapi>=0.1.9
+
+# Multi-sensor Catalog (Sprint Dec 2025)
+intake>=2.0.8
+intake-xarray>=2.0.0
+
+# NASA Satellite Data (CYGNSS)
+earthaccess>=0.10.0

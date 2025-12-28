@@ -1,5 +1,8 @@
 # Cosmograph React v2.0 Reference
 
+> ⚠️ **DEPRECATED** (Dec 2025): Cosmograph è stato rimpiazzato da D3.js/react-force-graph-3d.
+> Vedi commit `7318bd6` per la migrazione. Questo file è mantenuto per riferimento storico.
+
 Reference documentation for `@cosmograph/react` v2.0.1 integration.
 
 ## Installation

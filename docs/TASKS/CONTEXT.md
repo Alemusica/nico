@@ -2,6 +2,8 @@
 
 > **LEGGI QUESTO PRIMA DI OGNI TASK**
 > Questo file dà awareness su cosa esiste già per evitare duplicazioni.
+> 
+> **Last Updated**: 2025-12-28 (Sprint completo)
 
 ## 📂 Codice Esistente (NON riscrivere!)
 
@@ -9,9 +11,20 @@
 | File | Linee | Status | Copre |
 |------|-------|--------|-------|
 | `src/data_manager/catalog.py` | 736 | ✅ Working | **Solo CMEMS** (8 prodotti) |
+| `src/data_manager/intake_bridge.py` | 180 | ✅ **NEW** | Bridge multi-provider |
+| `src/data_manager/causal_graph.py` | 300 | ✅ **NEW** | SurrealDB causal storage |
 | `src/surge_shazam/data/era5_client.py` | ~200 | ✅ Working | ERA5 |
 | `src/surge_shazam/data/cmems_client.py` | ~300 | ✅ Working | CMEMS download |
 | `src/surge_shazam/data/climate_indices.py` | ~150 | ✅ Working | NAO, ENSO, etc |
+| `src/surge_shazam/data/cygnss_client.py` | 63 | ✅ **NEW** | NASA CYGNSS wind |
+
+### Multi-Provider Catalog ✅ (Sprint Dec 2025)
+| File | Cosa fa |
+|------|---------|
+| `catalog.yaml` | 11 datasets, latency badges 🟢🟡🔴⚫ |
+| `intake_bridge.py` | `get_catalog()`, `search()`, `search_by_latency()` |
+| `causal_graph.py` | `CausalGraphDB`, `CausalEdge`, 4 known chains |
+| `cygnss_client.py` | NASA earthaccess, near real-time wind |
 
 ### Cosa FA `catalog.py` esistente:
 - ✅ `list_products()` - lista prodotti CMEMS
@@ -20,13 +33,13 @@
 - ✅ `get_download_config()` - config per download
 - ✅ Caching JSON con TTL 24h
 
-### Cosa MANCA nel catalog esistente:
-- ❌ **Latency metadata** (`latency_badge: "🟢"`) - fondamentale!
-- ❌ **ERA5** - usa client separato, non nel catalog
-- ❌ **Climate Indices (NOAA)** - client separato
-- ❌ **CYGNSS (NASA)** - non implementato
-- ❌ **SLCCI (ESA CCI)** - solo file locali
-- ❌ **Multi-provider unified** - solo CMEMS
+### Cosa ERA mancante (ORA IMPLEMENTATO ✅):
+- ✅ **Latency metadata** → `catalog.yaml` con `latency_badge`
+- ✅ **ERA5 nel catalog** → `catalog.yaml` entry
+- ✅ **Climate Indices (NOAA)** → `catalog.yaml` entry
+- ✅ **CYGNSS (NASA)** → `cygnss_client.py` + `catalog.yaml`
+- ✅ **SLCCI (ESA CCI)** → `catalog.yaml` entry
+- ✅ **Multi-provider unified** → `intake_bridge.py`
 
 ### Causal Discovery ✅
 | File | Linee | Status |

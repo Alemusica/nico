@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - 2025-12-28
+
+#### 🛰️ Multi-Sensor Catalog (Sprint Dec 2025)
+- **catalog.yaml**: Intake YAML con 11 datasets multi-provider (CMEMS, NASA, ECMWF, NOAA, ESA)
+- **intake_bridge.py**: `IntakeCatalogBridge` per ricerca unificata con latency badges 🟢🟡🔴⚫
+- **causal_graph.py**: `CausalGraphDB` per SurrealDB con 4 catene causali pre-definite
+- **cygnss_client.py**: NASA CYGNSS near real-time wind data via earthaccess
+- **Catalog API**: 4 nuovi endpoint `/data/catalog/*` per ricerca datasets
+
+#### 📋 Agent Task System
+- **docs/TASKS/**: 5 task atomici con checklist per agenti AI
+- **CONTEXT.md**: Awareness del codice esistente per evitare duplicazioni
+- **PROGRESS.md**: Tracker stato tasks per coordinamento multi-chat
+
+#### 🔗 Known Causal Chains
+- NAO → precipitation (lag 10d, teleconnection)
+- precipitation → runoff (lag 2d, hydrology)
+- wind → SST (lag 0d, air-sea interaction)
+- SLCCI → SLA (lag 63d, r=0.866, arctic signal propagation)
+
+### Dependencies - 2025-12-28
+- Added: `intake>=2.0.8`, `intake-xarray>=2.0.0`, `earthaccess>=0.10.0`
+
+### Deprecated - 2025-12-28
+- **docs/COSMOGRAPH_REFERENCE.md**: Cosmograph rimpiazzato da D3.js (commit 7318bd6)
+
+---
+
 ### Added - 2025-12-25
 
 #### 💾 Investigation Data Cache Integration
