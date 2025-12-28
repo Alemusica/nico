@@ -1,0 +1,2430 @@
+{
+  "event": "Lago Maggiore Flood 2000",
+  "timestamp": "2025-12-29T00:30:44.444729",
+  "data_file": "/Users/alessioivoycazzaniga/nico/data/pipeline/lago_maggiore_2000/era5_lago_maggiore_2000.nc",
+  "n_timesteps": 121,
+  "variables": [
+    "precipitation",
+    "temperature",
+    "pressure",
+    "u_wind",
+    "v_wind",
+    "soil_moisture",
+    "runoff"
+  ],
+  "pcmci_config": {
+    "max_lag": 10,
+    "alpha": 0.05,
+    "min_effect_size": 0.15
+  },
+  "n_significant_links": 113,
+  "links": [
+    {
+      "source": "precipitation",
+      "target": "runoff",
+      "lag": 2,
+      "strength": 0.9796846257401444,
+      "p_value": 4.272199172875436e-68,
+      "score": 0.9918738502960578,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 0,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "soil_moisture",
+      "lag": 1,
+      "strength": 0.7022693126525295,
+      "p_value": 2.1931054340372097e-15,
+      "score": 0.8809077250610118,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 5
+      }
+    },
+    {
+      "source": "precipitation",
+      "target": "precipitation",
+      "lag": 1,
+      "strength": 0.686699808797061,
+      "p_value": 3.094826206748664e-15,
+      "score": 0.8746799235188244,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 0,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "soil_moisture",
+      "lag": 0,
+      "strength": 0.48692819495167683,
+      "p_value": 3.693315754356984e-07,
+      "score": 0.7947712779806707,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 5
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "pressure",
+      "lag": 0,
+      "strength": 0.48692819495167683,
+      "p_value": 3.693315754356984e-07,
+      "score": 0.7947712779806707,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "runoff",
+      "lag": 1,
+      "strength": 0.4312232512907689,
+      "p_value": 1.431227945439562e-05,
+      "score": 0.7724893005163076,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "u_wind",
+      "lag": 10,
+      "strength": 0.4010125702127835,
+      "p_value": 4.276571794494745e-05,
+      "score": 0.7604050280851133,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 3
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "v_wind",
+      "lag": 10,
+      "strength": -0.3657033638375295,
+      "p_value": 0.00021310182555924102,
+      "score": 0.7462813455350118,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 4
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "pressure",
+      "lag": 1,
+      "strength": 0.34467088837363635,
+      "p_value": 0.0006252812185151567,
+      "score": 0.7378683553494545,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "runoff",
+      "lag": 1,
+      "strength": 0.2587557512109406,
+      "p_value": 0.010092083048281825,
+      "score": 0.5027061373459044,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "precipitation",
+      "target": "u_wind",
+      "lag": 4,
+      "strength": 0.25461757525980755,
+      "p_value": 0.010183922008236484,
+      "score": 0.5002640171657347,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 0,
+        "target_idx": 3
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "soil_moisture",
+      "lag": 7,
+      "strength": 0.25438992984106373,
+      "p_value": 0.010253973213981981,
+      "score": 0.499577536213053,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 5
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "runoff",
+      "lag": 1,
+      "strength": -0.2550526478291739,
+      "p_value": 0.0104382259207953,
+      "score": 0.49829572066815403,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "precipitation",
+      "target": "runoff",
+      "lag": 3,
+      "strength": -0.25693836764218,
+      "p_value": 0.01065071214043891,
+      "score": 0.49729961764608865,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 0,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "runoff",
+      "lag": 3,
+      "strength": 0.25461262285693476,
+      "p_value": 0.010982631098158654,
+      "score": 0.49370376992640036,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "temperature",
+      "lag": 8,
+      "strength": 0.25054917534185567,
+      "p_value": 0.01150117805145998,
+      "score": 0.48807120476088595,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "runoff",
+      "lag": 1,
+      "strength": 0.25351589116484036,
+      "p_value": 0.011776535557981277,
+      "score": 0.4872028469214087,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "v_wind",
+      "lag": 0,
+      "strength": 0.2589791123810714,
+      "p_value": 0.01218818650552379,
+      "score": 0.48640382670380283,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 4
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "temperature",
+      "lag": 0,
+      "strength": 0.2589791123810714,
+      "p_value": 0.01218818650552379,
+      "score": 0.48640382670380283,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "runoff",
+      "lag": 2,
+      "strength": -0.2534163462094323,
+      "p_value": 0.012261347297388928,
+      "score": 0.4836588997217941,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "temperature",
+      "lag": 1,
+      "strength": -0.24845084444676407,
+      "p_value": 0.012237039388213954,
+      "score": 0.4818450661921037,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "temperature",
+      "lag": 2,
+      "strength": -0.24819582501588183,
+      "p_value": 0.012329212767125878,
+      "score": 0.48109126053972895,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "pressure",
+      "lag": 2,
+      "strength": -0.24728283975890558,
+      "p_value": 0.012664182496184844,
+      "score": 0.4783977038505327,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "pressure",
+      "lag": 1,
+      "strength": -0.24609789746143215,
+      "p_value": 0.01311074241656085,
+      "score": 0.474913701984672,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "precipitation",
+      "lag": 6,
+      "strength": 0.24586006109955177,
+      "p_value": 0.013202007983672912,
+      "score": 0.47421602623036224,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "pressure",
+      "lag": 9,
+      "strength": -0.24976632062911286,
+      "p_value": 0.014120911319162818,
+      "score": 0.4699339831278626,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "temperature",
+      "lag": 3,
+      "strength": -0.24421697686986638,
+      "p_value": 0.013847757475104309,
+      "score": 0.46941090097820887,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "pressure",
+      "lag": 3,
+      "strength": -0.2441599341357878,
+      "p_value": 0.013870660678513324,
+      "score": 0.46924454413325395,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "temperature",
+      "lag": 10,
+      "strength": -0.24348952496554133,
+      "p_value": 0.01414231430404375,
+      "score": 0.46729171299881045,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "runoff",
+      "lag": 4,
+      "strength": 0.2442297543714275,
+      "p_value": 0.014333455757384175,
+      "score": 0.4664217196994326,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "runoff",
+      "lag": 2,
+      "strength": -0.24655526272429965,
+      "p_value": 0.014911658233738332,
+      "score": 0.46391691681872654,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "runoff",
+      "lag": 10,
+      "strength": 0.2430582930254965,
+      "p_value": 0.014822623182079253,
+      "score": 0.46303830357073833,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "runoff",
+      "lag": 4,
+      "strength": 0.24304739788799834,
+      "p_value": 0.014827239814265102,
+      "score": 0.4630068967850284,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "pressure",
+      "lag": 10,
+      "strength": -0.24135404048091536,
+      "p_value": 0.01503867194271174,
+      "score": 0.46109971906648395,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "pressure",
+      "lag": 3,
+      "strength": 0.2454937226764506,
+      "p_value": 0.016488525292641717,
+      "score": 0.4547611261152121,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "soil_moisture",
+      "lag": 2,
+      "strength": -0.24136823112391337,
+      "p_value": 0.016653028747092246,
+      "score": 0.4522486460999974,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 5
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "precipitation",
+      "lag": 6,
+      "strength": 0.23796453317534427,
+      "p_value": 0.016562595991257156,
+      "score": 0.45136013160744043,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "soil_moisture",
+      "lag": 10,
+      "strength": -0.2399951052663339,
+      "p_value": 0.016726080985538943,
+      "score": 0.45131920305612494,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 5
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "pressure",
+      "lag": 8,
+      "strength": 0.2379046759412203,
+      "p_value": 0.01659066583228088,
+      "score": 0.45118910719834515,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "u_wind",
+      "lag": 9,
+      "strength": -0.23657913160224403,
+      "p_value": 0.01722290390627647,
+      "score": 0.4474103769438941,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 3
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "temperature",
+      "lag": 2,
+      "strength": 0.24219891008860034,
+      "p_value": 0.018042976104530897,
+      "score": 0.4456179292437779,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "temperature",
+      "lag": 5,
+      "strength": 0.23873982807902808,
+      "p_value": 0.017912506824807474,
+      "score": 0.44486465745659487,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "pressure",
+      "lag": 3,
+      "strength": 0.24020708684335032,
+      "p_value": 0.018406672540465564,
+      "score": 0.4430877775028616,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "temperature",
+      "lag": 9,
+      "strength": -0.23485134305300087,
+      "p_value": 0.018078161183785316,
+      "score": 0.4425096863777118,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "runoff",
+      "lag": 7,
+      "strength": 0.23657254025802815,
+      "p_value": 0.018396371343947927,
+      "score": 0.44168258259600374,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "precipitation",
+      "lag": 1,
+      "strength": -0.23451475964940244,
+      "p_value": 0.01824896607100012,
+      "score": 0.4415582511136392,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "pressure",
+      "lag": 4,
+      "strength": -0.2340488902871795,
+      "p_value": 0.018487673804513723,
+      "score": 0.4402431021406685,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "temperature",
+      "lag": 4,
+      "strength": -0.23307729920651238,
+      "p_value": 0.01899417970058194,
+      "score": 0.4375068111884619,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "temperature",
+      "lag": 3,
+      "strength": 0.23710544560931515,
+      "p_value": 0.01936675608400097,
+      "score": 0.4374308016765608,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "pressure",
+      "lag": 9,
+      "strength": -0.23070142349512493,
+      "p_value": 0.020283354388639076,
+      "score": 0.4308526136641147,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "pressure",
+      "lag": 2,
+      "strength": 0.23539653357013873,
+      "p_value": 0.0209581905021585,
+      "score": 0.42988785670513896,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "u_wind",
+      "lag": 2,
+      "strength": 0.23005818273315398,
+      "p_value": 0.02064505301588728,
+      "score": 0.42906007259974677,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 3
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "pressure",
+      "lag": 8,
+      "strength": -0.2345262317315981,
+      "p_value": 0.021450813154587443,
+      "score": 0.42752174069052684,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "temperature",
+      "lag": 3,
+      "strength": 0.2355109858782004,
+      "p_value": 0.021589857910762,
+      "score": 0.42735443752663005,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "runoff",
+      "lag": 8,
+      "strength": 0.22926164518879683,
+      "p_value": 0.02110061414894958,
+      "score": 0.42684563888689714,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "precipitation",
+      "target": "runoff",
+      "lag": 10,
+      "strength": 0.23114388909428296,
+      "p_value": 0.02134023407003393,
+      "score": 0.4266177199043097,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 0,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "pressure",
+      "lag": 4,
+      "strength": 0.23502326987007235,
+      "p_value": 0.02187039941648905,
+      "score": 0.4260379650323791,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "precipitation",
+      "target": "soil_moisture",
+      "lag": 9,
+      "strength": 0.22794646383826983,
+      "p_value": 0.021871679259260274,
+      "score": 0.42320215983740145,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 0,
+        "target_idx": 5
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "precipitation",
+      "lag": 8,
+      "strength": 0.22871472954829303,
+      "p_value": 0.022089813017118282,
+      "score": 0.4226474838734361,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "precipitation",
+      "lag": 7,
+      "strength": 0.22717156516886114,
+      "p_value": 0.023028665892320232,
+      "score": 0.4184148702800493,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "precipitation",
+      "target": "runoff",
+      "lag": 1,
+      "strength": -0.22716056802656875,
+      "p_value": 0.023035477067518347,
+      "score": 0.4183847850160025,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 0,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "runoff",
+      "lag": 2,
+      "strength": -0.22426047971523516,
+      "p_value": 0.024162567602058108,
+      "score": 0.4130755754645168,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "temperature",
+      "lag": 1,
+      "strength": 0.22516564297868757,
+      "p_value": 0.024299892827144672,
+      "score": 0.41294538555561766,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "precipitation",
+      "lag": 10,
+      "strength": 0.22476653730072071,
+      "p_value": 0.024559838931141824,
+      "score": 0.4118615120644564,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "u_wind",
+      "lag": 1,
+      "strength": -0.2218950404551679,
+      "p_value": 0.025738173379888662,
+      "score": 0.40664247176461643,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 3
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "runoff",
+      "lag": 9,
+      "strength": 0.2223060912659996,
+      "p_value": 0.026215331888158503,
+      "score": 0.4052113644490477,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "runoff",
+      "lag": 9,
+      "strength": 0.2216532113411373,
+      "p_value": 0.026670234246624416,
+      "score": 0.4034559185070689,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "precipitation",
+      "lag": 9,
+      "strength": 0.22128430470101534,
+      "p_value": 0.026930230005876053,
+      "score": 0.4024657093499332,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "pressure",
+      "lag": 5,
+      "strength": -0.2190495477168456,
+      "p_value": 0.027748704589907174,
+      "score": 0.39897127638841734,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "pressure",
+      "lag": 7,
+      "strength": 0.21979022464167464,
+      "p_value": 0.02882182436605863,
+      "score": 0.3959717963859488,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "pressure",
+      "lag": 10,
+      "strength": -0.22161427538660552,
+      "p_value": 0.02914233767678678,
+      "score": 0.3957408329299707,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "runoff",
+      "lag": 5,
+      "strength": 0.2187553231317492,
+      "p_value": 0.028771242992800282,
+      "score": 0.39571040426251686,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "temperature",
+      "lag": 5,
+      "strength": -0.21742867883664183,
+      "p_value": 0.02895246803573509,
+      "score": 0.3946343533719498,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "u_wind",
+      "lag": 1,
+      "strength": -0.21732830600729053,
+      "p_value": 0.029028444885140635,
+      "score": 0.39436656832574807,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 3
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "u_wind",
+      "lag": 1,
+      "strength": 0.21822133587853243,
+      "p_value": 0.029173317418231638,
+      "score": 0.39429137088213656,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 3
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "runoff",
+      "lag": 5,
+      "strength": 0.21747335106404936,
+      "p_value": 0.02974452228458319,
+      "score": 0.3923079407697953,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "soil_moisture",
+      "lag": 3,
+      "strength": 0.21807692097459203,
+      "p_value": 0.030124364017143503,
+      "score": 0.3914471910110825,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 5
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "precipitation",
+      "lag": 10,
+      "strength": 0.21604811330146084,
+      "p_value": 0.030012398535387643,
+      "score": 0.39095910435585246,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "pressure",
+      "lag": 9,
+      "strength": -0.22115989256352253,
+      "p_value": 0.031255090399123,
+      "score": 0.38947980515522573,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "runoff",
+      "lag": 2,
+      "strength": 0.2161995200490273,
+      "p_value": 0.03160849979825735,
+      "score": 0.38651903124840337,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "soil_moisture",
+      "lag": 10,
+      "strength": -0.2159667133759584,
+      "p_value": 0.03179677064012687,
+      "score": 0.3859100825131882,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 5
+      }
+    },
+    {
+      "source": "precipitation",
+      "target": "pressure",
+      "lag": 3,
+      "strength": -0.21404288695564602,
+      "p_value": 0.0316102881216371,
+      "score": 0.3856514639087629,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 0,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "temperature",
+      "lag": 7,
+      "strength": 0.2154397498856059,
+      "p_value": 0.03222642455603019,
+      "score": 0.384533475101994,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "temperature",
+      "lag": 8,
+      "strength": -0.21316953076675552,
+      "p_value": 0.032328369766359374,
+      "score": 0.38335105133691405,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "soil_moisture",
+      "lag": 6,
+      "strength": 0.2128778653162852,
+      "p_value": 0.032571224801416006,
+      "score": 0.38258432812864485,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 5
+      }
+    },
+    {
+      "source": "precipitation",
+      "target": "temperature",
+      "lag": 10,
+      "strength": 0.2127941646302114,
+      "p_value": 0.03264120160644197,
+      "score": 0.38236443827786626,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 0,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "pressure",
+      "lag": 7,
+      "strength": -0.2163214040731738,
+      "p_value": 0.03332325789662878,
+      "score": 0.38197907078122695,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "precipitation",
+      "target": "temperature",
+      "lag": 3,
+      "strength": -0.21184831522139036,
+      "p_value": 0.0334408164947843,
+      "score": 0.37988395155256277,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 0,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "pressure",
+      "lag": 10,
+      "strength": -0.21641661685768243,
+      "p_value": 0.03516297970138314,
+      "score": 0.37734951275147816,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "precipitation",
+      "lag": 4,
+      "strength": -0.21095701224419444,
+      "p_value": 0.0351332598455099,
+      "score": 0.3752391153478393,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "v_wind",
+      "target": "pressure",
+      "lag": 8,
+      "strength": -0.20930645218175903,
+      "p_value": 0.03567185160341978,
+      "score": 0.37325745034073554,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 4,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "runoff",
+      "lag": 4,
+      "strength": -0.2081180936450172,
+      "p_value": 0.04079476044406123,
+      "score": 0.36112636001824366,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "runoff",
+      "lag": 8,
+      "strength": 0.2042474642613122,
+      "p_value": 0.0415162744850093,
+      "score": 0.35805531077881375,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "temperature",
+      "lag": 5,
+      "strength": 0.20770125980982088,
+      "p_value": 0.042296437339919696,
+      "score": 0.35781974632965124,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "precipitation",
+      "lag": 2,
+      "strength": -0.20343698344429306,
+      "p_value": 0.0423489769548306,
+      "score": 0.35600620871232197,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "precipitation",
+      "target": "pressure",
+      "lag": 10,
+      "strength": 0.20170721426848298,
+      "p_value": 0.04309983167381122,
+      "score": 0.35378777090159347,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 0,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "precipitation",
+      "lag": 3,
+      "strength": -0.20235958319177927,
+      "p_value": 0.04347741016827911,
+      "score": 0.3532910999892786,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "pressure",
+      "lag": 6,
+      "strength": 0.20406110764311897,
+      "p_value": 0.043858262878420706,
+      "score": 0.35321415779531484,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "precipitation",
+      "target": "precipitation",
+      "lag": 9,
+      "strength": 0.2014629595629626,
+      "p_value": 0.04335846708202542,
+      "score": 0.35317039991979166,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 0,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "pressure",
+      "lag": 10,
+      "strength": -0.20576747954502878,
+      "p_value": 0.04429708431434242,
+      "score": 0.35303196353892663,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "u_wind",
+      "lag": 2,
+      "strength": -0.2014008572891762,
+      "p_value": 0.04342443117278119,
+      "score": 0.35301351527026714,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 3
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "precipitation",
+      "lag": 3,
+      "strength": -0.20110639161391908,
+      "p_value": 0.044821310739022444,
+      "score": 0.35014564609687404,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "runoff",
+      "lag": 8,
+      "strength": 0.20184050290468314,
+      "p_value": 0.04512876215893034,
+      "score": 0.34984551688602367,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "precipitation",
+      "lag": 5,
+      "strength": -0.20001150890241517,
+      "p_value": 0.04602350888809543,
+      "score": 0.347408658214457,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "precipitation",
+      "lag": 1,
+      "strength": -0.1995543420700858,
+      "p_value": 0.04653333796578176,
+      "score": 0.34626889546763284,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "pressure",
+      "lag": 6,
+      "strength": -0.19862815633511988,
+      "p_value": 0.04645576018674661,
+      "score": 0.3460433483095758,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 2
+      }
+    },
+    {
+      "source": "temperature",
+      "target": "temperature",
+      "lag": 2,
+      "strength": 0.20709206932102875,
+      "p_value": 0.048880673887073775,
+      "score": 0.3450093908043427,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 1,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "runoff",
+      "lag": 3,
+      "strength": -0.19792261698427616,
+      "p_value": 0.04725449908926994,
+      "score": 0.3442804140167219,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "runoff",
+      "target": "runoff",
+      "lag": 9,
+      "strength": 0.197485044306364,
+      "p_value": 0.04775556377656744,
+      "score": 0.34318922242676253,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 6,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "soil_moisture",
+      "target": "precipitation",
+      "lag": 6,
+      "strength": -0.1978253007173249,
+      "p_value": 0.048504058217638424,
+      "score": 0.34197450498794435,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 5,
+        "target_idx": 0
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "runoff",
+      "lag": 6,
+      "strength": 0.1976816445894389,
+      "p_value": 0.04867085326238119,
+      "score": 0.341618865826049,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 6
+      }
+    },
+    {
+      "source": "u_wind",
+      "target": "temperature",
+      "lag": 6,
+      "strength": -0.1958342722080122,
+      "p_value": 0.04968561193921747,
+      "score": 0.3390875802716089,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 3,
+        "target_idx": 1
+      }
+    },
+    {
+      "source": "pressure",
+      "target": "u_wind",
+      "lag": 2,
+      "strength": -0.1957401966850502,
+      "p_value": 0.0497975155538948,
+      "score": 0.33885454348813815,
+      "test_used": "parcorr",
+      "validated": false,
+      "physics_plausible": true,
+      "metadata": {
+        "source_idx": 2,
+        "target_idx": 3
+      }
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "precipitation",
+        "label": "precipitation"
+      },
+      {
+        "id": "temperature",
+        "label": "temperature"
+      },
+      {
+        "id": "pressure",
+        "label": "pressure"
+      },
+      {
+        "id": "u_wind",
+        "label": "u_wind"
+      },
+      {
+        "id": "v_wind",
+        "label": "v_wind"
+      },
+      {
+        "id": "soil_moisture",
+        "label": "soil_moisture"
+      },
+      {
+        "id": "runoff",
+        "label": "runoff"
+      }
+    ],
+    "edges": [
+      {
+        "source": "precipitation",
+        "target": "runoff",
+        "weight": 0.9918738502960578,
+        "lag": 2
+      },
+      {
+        "source": "soil_moisture",
+        "target": "soil_moisture",
+        "weight": 0.8809077250610118,
+        "lag": 1
+      },
+      {
+        "source": "precipitation",
+        "target": "precipitation",
+        "weight": 0.8746799235188244,
+        "lag": 1
+      },
+      {
+        "source": "pressure",
+        "target": "soil_moisture",
+        "weight": 0.7947712779806707,
+        "lag": 0
+      },
+      {
+        "source": "soil_moisture",
+        "target": "pressure",
+        "weight": 0.7947712779806707,
+        "lag": 0
+      },
+      {
+        "source": "runoff",
+        "target": "runoff",
+        "weight": 0.7724893005163076,
+        "lag": 1
+      },
+      {
+        "source": "v_wind",
+        "target": "u_wind",
+        "weight": 0.7604050280851133,
+        "lag": 10
+      },
+      {
+        "source": "u_wind",
+        "target": "v_wind",
+        "weight": 0.7462813455350118,
+        "lag": 10
+      },
+      {
+        "source": "temperature",
+        "target": "pressure",
+        "weight": 0.7378683553494545,
+        "lag": 1
+      },
+      {
+        "source": "pressure",
+        "target": "runoff",
+        "weight": 0.5027061373459044,
+        "lag": 1
+      },
+      {
+        "source": "precipitation",
+        "target": "u_wind",
+        "weight": 0.5002640171657347,
+        "lag": 4
+      },
+      {
+        "source": "runoff",
+        "target": "soil_moisture",
+        "weight": 0.499577536213053,
+        "lag": 7
+      },
+      {
+        "source": "v_wind",
+        "target": "runoff",
+        "weight": 0.49829572066815403,
+        "lag": 1
+      },
+      {
+        "source": "precipitation",
+        "target": "runoff",
+        "weight": 0.49729961764608865,
+        "lag": 3
+      },
+      {
+        "source": "runoff",
+        "target": "runoff",
+        "weight": 0.49370376992640036,
+        "lag": 3
+      },
+      {
+        "source": "runoff",
+        "target": "temperature",
+        "weight": 0.48807120476088595,
+        "lag": 8
+      },
+      {
+        "source": "temperature",
+        "target": "runoff",
+        "weight": 0.4872028469214087,
+        "lag": 1
+      },
+      {
+        "source": "temperature",
+        "target": "v_wind",
+        "weight": 0.48640382670380283,
+        "lag": 0
+      },
+      {
+        "source": "v_wind",
+        "target": "temperature",
+        "weight": 0.48640382670380283,
+        "lag": 0
+      },
+      {
+        "source": "temperature",
+        "target": "runoff",
+        "weight": 0.4836588997217941,
+        "lag": 2
+      },
+      {
+        "source": "u_wind",
+        "target": "temperature",
+        "weight": 0.4818450661921037,
+        "lag": 1
+      },
+      {
+        "source": "u_wind",
+        "target": "temperature",
+        "weight": 0.48109126053972895,
+        "lag": 2
+      },
+      {
+        "source": "u_wind",
+        "target": "pressure",
+        "weight": 0.4783977038505327,
+        "lag": 2
+      },
+      {
+        "source": "u_wind",
+        "target": "pressure",
+        "weight": 0.474913701984672,
+        "lag": 1
+      },
+      {
+        "source": "v_wind",
+        "target": "precipitation",
+        "weight": 0.47421602623036224,
+        "lag": 6
+      },
+      {
+        "source": "pressure",
+        "target": "pressure",
+        "weight": 0.4699339831278626,
+        "lag": 9
+      },
+      {
+        "source": "u_wind",
+        "target": "temperature",
+        "weight": 0.46941090097820887,
+        "lag": 3
+      },
+      {
+        "source": "u_wind",
+        "target": "pressure",
+        "weight": 0.46924454413325395,
+        "lag": 3
+      },
+      {
+        "source": "v_wind",
+        "target": "temperature",
+        "weight": 0.46729171299881045,
+        "lag": 10
+      },
+      {
+        "source": "pressure",
+        "target": "runoff",
+        "weight": 0.4664217196994326,
+        "lag": 4
+      },
+      {
+        "source": "pressure",
+        "target": "runoff",
+        "weight": 0.46391691681872654,
+        "lag": 2
+      },
+      {
+        "source": "u_wind",
+        "target": "runoff",
+        "weight": 0.46303830357073833,
+        "lag": 10
+      },
+      {
+        "source": "temperature",
+        "target": "runoff",
+        "weight": 0.4630068967850284,
+        "lag": 4
+      },
+      {
+        "source": "v_wind",
+        "target": "pressure",
+        "weight": 0.46109971906648395,
+        "lag": 10
+      },
+      {
+        "source": "temperature",
+        "target": "pressure",
+        "weight": 0.4547611261152121,
+        "lag": 3
+      },
+      {
+        "source": "temperature",
+        "target": "soil_moisture",
+        "weight": 0.4522486460999974,
+        "lag": 2
+      },
+      {
+        "source": "runoff",
+        "target": "precipitation",
+        "weight": 0.45136013160744043,
+        "lag": 6
+      },
+      {
+        "source": "pressure",
+        "target": "soil_moisture",
+        "weight": 0.45131920305612494,
+        "lag": 10
+      },
+      {
+        "source": "runoff",
+        "target": "pressure",
+        "weight": 0.45118910719834515,
+        "lag": 8
+      },
+      {
+        "source": "runoff",
+        "target": "u_wind",
+        "weight": 0.4474103769438941,
+        "lag": 9
+      },
+      {
+        "source": "pressure",
+        "target": "temperature",
+        "weight": 0.4456179292437779,
+        "lag": 2
+      },
+      {
+        "source": "soil_moisture",
+        "target": "temperature",
+        "weight": 0.44486465745659487,
+        "lag": 5
+      },
+      {
+        "source": "pressure",
+        "target": "pressure",
+        "weight": 0.4430877775028616,
+        "lag": 3
+      },
+      {
+        "source": "v_wind",
+        "target": "temperature",
+        "weight": 0.4425096863777118,
+        "lag": 9
+      },
+      {
+        "source": "runoff",
+        "target": "runoff",
+        "weight": 0.44168258259600374,
+        "lag": 7
+      },
+      {
+        "source": "soil_moisture",
+        "target": "precipitation",
+        "weight": 0.4415582511136392,
+        "lag": 1
+      },
+      {
+        "source": "u_wind",
+        "target": "pressure",
+        "weight": 0.4402431021406685,
+        "lag": 4
+      },
+      {
+        "source": "u_wind",
+        "target": "temperature",
+        "weight": 0.4375068111884619,
+        "lag": 4
+      },
+      {
+        "source": "soil_moisture",
+        "target": "temperature",
+        "weight": 0.4374308016765608,
+        "lag": 3
+      },
+      {
+        "source": "v_wind",
+        "target": "pressure",
+        "weight": 0.4308526136641147,
+        "lag": 9
+      },
+      {
+        "source": "pressure",
+        "target": "pressure",
+        "weight": 0.42988785670513896,
+        "lag": 2
+      },
+      {
+        "source": "runoff",
+        "target": "u_wind",
+        "weight": 0.42906007259974677,
+        "lag": 2
+      },
+      {
+        "source": "temperature",
+        "target": "pressure",
+        "weight": 0.42752174069052684,
+        "lag": 8
+      },
+      {
+        "source": "pressure",
+        "target": "temperature",
+        "weight": 0.42735443752663005,
+        "lag": 3
+      },
+      {
+        "source": "v_wind",
+        "target": "runoff",
+        "weight": 0.42684563888689714,
+        "lag": 8
+      },
+      {
+        "source": "precipitation",
+        "target": "runoff",
+        "weight": 0.4266177199043097,
+        "lag": 10
+      },
+      {
+        "source": "temperature",
+        "target": "pressure",
+        "weight": 0.4260379650323791,
+        "lag": 4
+      },
+      {
+        "source": "precipitation",
+        "target": "soil_moisture",
+        "weight": 0.42320215983740145,
+        "lag": 9
+      },
+      {
+        "source": "v_wind",
+        "target": "precipitation",
+        "weight": 0.4226474838734361,
+        "lag": 8
+      },
+      {
+        "source": "v_wind",
+        "target": "precipitation",
+        "weight": 0.4184148702800493,
+        "lag": 7
+      },
+      {
+        "source": "precipitation",
+        "target": "runoff",
+        "weight": 0.4183847850160025,
+        "lag": 1
+      },
+      {
+        "source": "v_wind",
+        "target": "runoff",
+        "weight": 0.4130755754645168,
+        "lag": 2
+      },
+      {
+        "source": "pressure",
+        "target": "temperature",
+        "weight": 0.41294538555561766,
+        "lag": 1
+      },
+      {
+        "source": "v_wind",
+        "target": "precipitation",
+        "weight": 0.4118615120644564,
+        "lag": 10
+      },
+      {
+        "source": "temperature",
+        "target": "u_wind",
+        "weight": 0.40664247176461643,
+        "lag": 1
+      },
+      {
+        "source": "u_wind",
+        "target": "runoff",
+        "weight": 0.4052113644490477,
+        "lag": 9
+      },
+      {
+        "source": "soil_moisture",
+        "target": "runoff",
+        "weight": 0.4034559185070689,
+        "lag": 9
+      },
+      {
+        "source": "v_wind",
+        "target": "precipitation",
+        "weight": 0.4024657093499332,
+        "lag": 9
+      },
+      {
+        "source": "u_wind",
+        "target": "pressure",
+        "weight": 0.39897127638841734,
+        "lag": 5
+      },
+      {
+        "source": "soil_moisture",
+        "target": "pressure",
+        "weight": 0.3959717963859488,
+        "lag": 7
+      },
+      {
+        "source": "soil_moisture",
+        "target": "pressure",
+        "weight": 0.3957408329299707,
+        "lag": 10
+      },
+      {
+        "source": "temperature",
+        "target": "runoff",
+        "weight": 0.39571040426251686,
+        "lag": 5
+      },
+      {
+        "source": "u_wind",
+        "target": "temperature",
+        "weight": 0.3946343533719498,
+        "lag": 5
+      },
+      {
+        "source": "pressure",
+        "target": "u_wind",
+        "weight": 0.39436656832574807,
+        "lag": 1
+      },
+      {
+        "source": "u_wind",
+        "target": "u_wind",
+        "weight": 0.39429137088213656,
+        "lag": 1
+      },
+      {
+        "source": "pressure",
+        "target": "runoff",
+        "weight": 0.3923079407697953,
+        "lag": 5
+      },
+      {
+        "source": "temperature",
+        "target": "soil_moisture",
+        "weight": 0.3914471910110825,
+        "lag": 3
+      },
+      {
+        "source": "u_wind",
+        "target": "precipitation",
+        "weight": 0.39095910435585246,
+        "lag": 10
+      },
+      {
+        "source": "temperature",
+        "target": "pressure",
+        "weight": 0.38947980515522573,
+        "lag": 9
+      },
+      {
+        "source": "runoff",
+        "target": "runoff",
+        "weight": 0.38651903124840337,
+        "lag": 2
+      },
+      {
+        "source": "temperature",
+        "target": "soil_moisture",
+        "weight": 0.3859100825131882,
+        "lag": 10
+      },
+      {
+        "source": "precipitation",
+        "target": "pressure",
+        "weight": 0.3856514639087629,
+        "lag": 3
+      },
+      {
+        "source": "soil_moisture",
+        "target": "temperature",
+        "weight": 0.384533475101994,
+        "lag": 7
+      },
+      {
+        "source": "v_wind",
+        "target": "temperature",
+        "weight": 0.38335105133691405,
+        "lag": 8
+      },
+      {
+        "source": "runoff",
+        "target": "soil_moisture",
+        "weight": 0.38258432812864485,
+        "lag": 6
+      },
+      {
+        "source": "precipitation",
+        "target": "temperature",
+        "weight": 0.38236443827786626,
+        "lag": 10
+      },
+      {
+        "source": "pressure",
+        "target": "pressure",
+        "weight": 0.38197907078122695,
+        "lag": 7
+      },
+      {
+        "source": "precipitation",
+        "target": "temperature",
+        "weight": 0.37988395155256277,
+        "lag": 3
+      },
+      {
+        "source": "temperature",
+        "target": "pressure",
+        "weight": 0.37734951275147816,
+        "lag": 10
+      },
+      {
+        "source": "soil_moisture",
+        "target": "precipitation",
+        "weight": 0.3752391153478393,
+        "lag": 4
+      },
+      {
+        "source": "v_wind",
+        "target": "pressure",
+        "weight": 0.37325745034073554,
+        "lag": 8
+      },
+      {
+        "source": "soil_moisture",
+        "target": "runoff",
+        "weight": 0.36112636001824366,
+        "lag": 4
+      },
+      {
+        "source": "u_wind",
+        "target": "runoff",
+        "weight": 0.35805531077881375,
+        "lag": 8
+      },
+      {
+        "source": "pressure",
+        "target": "temperature",
+        "weight": 0.35781974632965124,
+        "lag": 5
+      },
+      {
+        "source": "soil_moisture",
+        "target": "precipitation",
+        "weight": 0.35600620871232197,
+        "lag": 2
+      },
+      {
+        "source": "precipitation",
+        "target": "pressure",
+        "weight": 0.35378777090159347,
+        "lag": 10
+      },
+      {
+        "source": "soil_moisture",
+        "target": "precipitation",
+        "weight": 0.3532910999892786,
+        "lag": 3
+      },
+      {
+        "source": "soil_moisture",
+        "target": "pressure",
+        "weight": 0.35321415779531484,
+        "lag": 6
+      },
+      {
+        "source": "precipitation",
+        "target": "precipitation",
+        "weight": 0.35317039991979166,
+        "lag": 9
+      },
+      {
+        "source": "pressure",
+        "target": "pressure",
+        "weight": 0.35303196353892663,
+        "lag": 10
+      },
+      {
+        "source": "temperature",
+        "target": "u_wind",
+        "weight": 0.35301351527026714,
+        "lag": 2
+      },
+      {
+        "source": "runoff",
+        "target": "precipitation",
+        "weight": 0.35014564609687404,
+        "lag": 3
+      },
+      {
+        "source": "runoff",
+        "target": "runoff",
+        "weight": 0.34984551688602367,
+        "lag": 8
+      },
+      {
+        "source": "soil_moisture",
+        "target": "precipitation",
+        "weight": 0.347408658214457,
+        "lag": 5
+      },
+      {
+        "source": "temperature",
+        "target": "precipitation",
+        "weight": 0.34626889546763284,
+        "lag": 1
+      },
+      {
+        "source": "u_wind",
+        "target": "pressure",
+        "weight": 0.3460433483095758,
+        "lag": 6
+      },
+      {
+        "source": "temperature",
+        "target": "temperature",
+        "weight": 0.3450093908043427,
+        "lag": 2
+      },
+      {
+        "source": "soil_moisture",
+        "target": "runoff",
+        "weight": 0.3442804140167219,
+        "lag": 3
+      },
+      {
+        "source": "runoff",
+        "target": "runoff",
+        "weight": 0.34318922242676253,
+        "lag": 9
+      },
+      {
+        "source": "soil_moisture",
+        "target": "precipitation",
+        "weight": 0.34197450498794435,
+        "lag": 6
+      },
+      {
+        "source": "pressure",
+        "target": "runoff",
+        "weight": 0.341618865826049,
+        "lag": 6
+      },
+      {
+        "source": "u_wind",
+        "target": "temperature",
+        "weight": 0.3390875802716089,
+        "lag": 6
+      },
+      {
+        "source": "pressure",
+        "target": "u_wind",
+        "weight": 0.33885454348813815,
+        "lag": 2
+      }
+    ]
+  }
+}

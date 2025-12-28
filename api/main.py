@@ -90,6 +90,7 @@ from api.routers.health_router import router as health_router
 from api.routers.investigation_router import router as investigation_router
 from api.routers.knowledge_router import router as knowledge_router
 from api.routers.pipeline_router import router as pipeline_router
+from api.routers.timeseries_router import router as timeseries_router
 
 # Configure logging
 settings = get_settings()
@@ -228,6 +229,7 @@ app.include_router(health_router, prefix=API_V1_PREFIX)
 app.include_router(investigation_router, prefix=API_V1_PREFIX)
 app.include_router(knowledge_router, prefix=API_V1_PREFIX)
 app.include_router(pipeline_router, prefix=API_V1_PREFIX)
+app.include_router(timeseries_router, prefix=API_V1_PREFIX)
 
 # Add Request ID middleware
 app.add_middleware(RequestIDMiddleware)
