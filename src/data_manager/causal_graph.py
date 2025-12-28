@@ -3,6 +3,8 @@ Causal Graph Storage - SurrealDB
 
 Store and query physics-validated causal chains discovered by PCMCI.
 Integrates with existing pcmci_engine.py results.
+
+NOTE: surrealdb 1.x uses sync API, no async needed.
 """
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
@@ -49,6 +51,8 @@ class CausalGraphDB:
     Schema:
     - dataset: nodes representing data sources
     - causal_edge: directed edges with lag, correlation, physics validation
+    
+    NOTE: Uses sync API (surrealdb 1.x)
     """
     
     def __init__(self, url: str = "ws://localhost:8001/rpc"):
@@ -56,27 +60,27 @@ class CausalGraphDB:
             raise ImportError("surrealdb package required: pip install surrealdb")
         
         self.url = url
-        self.db = Surreal(url)
+        self.db = None
         self._connected = False
         self._initialized = False
     
-    async def connect(self):
+    def connect(self):
         """Connect to SurrealDB and initialize schema."""
         if self._connected:
             return
         
-        await self.db.connect()
-        await self.db.use("causal", "knowledge")
+        self.db = Surreal(self.url)
+        self.db.use("causal", "knowledge")
         self._connected = True
         
         if not self._initialized:
-            await self._init_schema()
+            self._init_schema()
             self._initialized = True
     
-    async def _init_schema(self):
+    def _init_schema(self):
         """Create tables if not exist."""
         # Dataset nodes
-        await self.db.query("""
+        self.db.query("""
             DEFINE TABLE IF NOT EXISTS dataset SCHEMAFULL;
             DEFINE FIELD id ON dataset TYPE string;
             DEFINE FIELD name ON dataset TYPE string;
@@ -88,7 +92,7 @@ class CausalGraphDB:
         """)
         
         # Causal edges
-        await self.db.query("""
+        self.db.query("""
             DEFINE TABLE IF NOT EXISTS causal_edge SCHEMAFULL;
             DEFINE FIELD source ON causal_edge TYPE string;
             DEFINE FIELD target ON causal_edge TYPE string;
@@ -104,17 +108,17 @@ class CausalGraphDB:
         """)
         
         # Indexes for fast queries
-        await self.db.query("""
-            DEFINE INDEX idx_edge_source ON causal_edge FIELDS source;
-            DEFINE INDEX idx_edge_target ON causal_edge FIELDS target;
-            DEFINE INDEX idx_edge_score ON causal_edge FIELDS physics_score;
+        self.db.query("""
+            DEFINE INDEX IF NOT EXISTS idx_edge_source ON causal_edge FIELDS source;
+            DEFINE INDEX IF NOT EXISTS idx_edge_target ON causal_edge FIELDS target;
+            DEFINE INDEX IF NOT EXISTS idx_edge_score ON causal_edge FIELDS physics_score;
         """)
     
-    async def add_dataset(self, dataset_id: str, metadata: Dict[str, Any]):
+    def add_dataset(self, dataset_id: str, metadata: Dict[str, Any]):
         """Add or update a dataset node."""
-        await self.connect()
+        self.connect()
         
-        await self.db.query("""
+        self.db.query("""
             UPSERT dataset:$id SET
                 id = $id,
                 name = $name,
@@ -131,11 +135,11 @@ class CausalGraphDB:
             "provider": metadata.get("provider"),
         })
     
-    async def add_edge(self, edge: CausalEdge, metadata: Dict[str, Any] = None):
+    def add_edge(self, edge: CausalEdge, metadata: Dict[str, Any] = None):
         """Add a causal edge between dataset variables."""
-        await self.connect()
+        self.connect()
         
-        result = await self.db.query("""
+        result = self.db.query("""
             CREATE causal_edge SET
                 source = $src,
                 target = $tgt,
@@ -161,7 +165,7 @@ class CausalGraphDB:
         })
         return result
     
-    async def get_precursors(
+    def get_precursors(
         self, 
         target_dataset: str, 
         target_variable: str = None,
@@ -178,24 +182,24 @@ class CausalGraphDB:
         Returns:
             List of causal edges pointing to target
         """
-        await self.connect()
+        self.connect()
         
         if target_variable:
-            result = await self.db.query("""
+            result = self.db.query("""
                 SELECT * FROM causal_edge 
                 WHERE target = $t AND target_var = $v AND physics_score >= $min
                 ORDER BY physics_score DESC, lag_days ASC
             """, {"t": target_dataset, "v": target_variable, "min": min_score})
         else:
-            result = await self.db.query("""
+            result = self.db.query("""
                 SELECT * FROM causal_edge 
                 WHERE target = $t AND physics_score >= $min
                 ORDER BY physics_score DESC, lag_days ASC
             """, {"t": target_dataset, "min": min_score})
         
-        return result[0]["result"] if result else []
+        return result if result else []
     
-    async def get_effects(
+    def get_effects(
         self,
         source_dataset: str,
         source_variable: str = None,
@@ -210,24 +214,24 @@ class CausalGraphDB:
         Returns:
             List of causal edges from source
         """
-        await self.connect()
+        self.connect()
         
         if source_variable:
-            result = await self.db.query("""
+            result = self.db.query("""
                 SELECT * FROM causal_edge 
                 WHERE source = $s AND source_var = $v
                 ORDER BY lag_days ASC
             """, {"s": source_dataset, "v": source_variable})
         else:
-            result = await self.db.query("""
+            result = self.db.query("""
                 SELECT * FROM causal_edge 
                 WHERE source = $s
                 ORDER BY lag_days ASC
             """, {"s": source_dataset})
         
-        return result[0]["result"] if result else []
+        return result if result else []
     
-    async def get_causal_chain(
+    def get_causal_chain(
         self,
         start_dataset: str,
         start_variable: str,
@@ -238,7 +242,7 @@ class CausalGraphDB:
         
         Returns list of paths, each path is a list of edges.
         """
-        await self.connect()
+        self.connect()
         
         # BFS to find all paths
         paths = []
@@ -250,7 +254,7 @@ class CausalGraphDB:
                 continue
             
             current_ds, current_var, _ = path[-1]
-            effects = await self.get_effects(current_ds, current_var)
+            effects = self.get_effects(current_ds, current_var)
             
             if not effects:
                 if len(path) > 1:
@@ -262,17 +266,17 @@ class CausalGraphDB:
         
         return paths
     
-    async def get_all_edges(self) -> List[Dict]:
+    def get_all_edges(self) -> List[Dict]:
         """Get all causal edges in the graph."""
-        await self.connect()
-        result = await self.db.query("SELECT * FROM causal_edge ORDER BY physics_score DESC")
-        return result[0]["result"] if result else []
+        self.connect()
+        result = self.db.query("SELECT * FROM causal_edge ORDER BY physics_score DESC")
+        return result if result else []
     
-    async def get_graph_stats(self) -> Dict[str, Any]:
+    def get_graph_stats(self) -> Dict[str, Any]:
         """Get statistics about the causal graph."""
-        await self.connect()
+        self.connect()
         
-        edges = await self.get_all_edges()
+        edges = self.get_all_edges()
         
         sources = set()
         targets = set()
@@ -291,6 +295,12 @@ class CausalGraphDB:
             "mechanisms": mechanisms,
             "avg_physics_score": sum(e.get("physics_score", 0) for e in edges) / len(edges) if edges else 0,
         }
+    
+    def close(self):
+        """Close database connection."""
+        if self.db:
+            self.db.close()
+            self._connected = False
 
 
 # Pre-defined physics chains (from domain knowledge)
@@ -342,10 +352,10 @@ KNOWN_CAUSAL_CHAINS = [
 ]
 
 
-async def seed_known_chains(db: CausalGraphDB):
+def seed_known_chains(db: CausalGraphDB):
     """Seed database with known physics-validated causal chains."""
     for edge in KNOWN_CAUSAL_CHAINS:
-        await db.add_edge(edge, metadata={"seeded": True})
+        db.add_edge(edge, metadata={"seeded": True})
     print(f"✅ Seeded {len(KNOWN_CAUSAL_CHAINS)} known causal chains")
 
 
@@ -363,32 +373,30 @@ def get_causal_db() -> CausalGraphDB:
 
 # CLI test
 if __name__ == "__main__":
-    import asyncio
+    print("=== Causal Graph DB Test ===\n")
     
-    async def test():
-        print("=== Causal Graph DB Test ===\n")
-        
-        db = CausalGraphDB()
-        
-        try:
-            await db.connect()
-            print("✅ Connected to SurrealDB")
-            
-            # Seed known chains
-            await seed_known_chains(db)
-            
-            # Query
-            print("\nPrecursors of ERA5 precipitation:")
-            precursors = await db.get_precursors("era5_reanalysis", "precipitation")
-            for p in precursors:
-                print(f"  - {p['source']}.{p['source_var']} (lag={p['lag_days']}d, score={p['physics_score']})")
-            
-            # Stats
-            stats = await db.get_graph_stats()
-            print(f"\nGraph stats: {stats}")
-            
-        except Exception as e:
-            print(f"❌ Error: {e}")
-            print("   Make sure SurrealDB is running: docker start surrealdb")
+    db = CausalGraphDB()
     
-    asyncio.run(test())
+    try:
+        db.connect()
+        print("✅ Connected to SurrealDB")
+        
+        # Seed known chains
+        seed_known_chains(db)
+        
+        # Query
+        print("\nPrecursors of ERA5 precipitation:")
+        precursors = db.get_precursors("era5_reanalysis", "precipitation")
+        for p in precursors:
+            print(f"  - {p['source']}.{p['source_var']} (lag={p['lag_days']}d, score={p['physics_score']})")
+        
+        # Stats
+        stats = db.get_graph_stats()
+        print(f"\nGraph stats: {stats}")
+        
+        db.close()
+        print("\n✅ Test complete")
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        print("   Make sure SurrealDB is running: docker start surrealdb")
