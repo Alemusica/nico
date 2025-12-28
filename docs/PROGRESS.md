@@ -32,11 +32,27 @@
 
 | Task | Status | Started | Completed | Notes |
 |------|--------|---------|-----------|-------|
-| 3.1 causal_graph.py | ⬜ TODO | - | - | SurrealDB storage |
+| 3.1 causal_graph.py | ✅ DONE | 2024-12-28 | 2024-12-28 | SurrealDB + 4 known chains |
 
 ---
 
 ## 📝 Progress Log
+
+### 2024-12-28 - Task 3.1 Causal Graph
+**Status**: ✅ DONE
+**What was done**:
+- Created `src/data_manager/causal_graph.py`
+- CausalEdge dataclass + CausalGraphDB async class
+- 4 KNOWN_CAUSAL_CHAINS pre-seeded (NAO→precipitation, precipitation→runoff, wind→SST, SLCCI→SLA r=0.866)
+- Methods: add_edge, get_precursors, get_effects, get_causal_chain
+
+**Blockers**:
+- Docker not running (runtime test skipped)
+
+**Next**:
+- Integration with pcmci_engine.py
+
+---
 
 ### 2024-12-28 - Task 2.1 CYGNSS Client
 **Status**: ✅ DONE
