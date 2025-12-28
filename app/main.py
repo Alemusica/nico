@@ -35,13 +35,27 @@ def run_app():
     # Sidebar - data loading and settings
     config = render_sidebar()
     
-    # Check if data is loaded
+    # Check if data is loaded - but always show catalog tab
     if not st.session_state.get("datasets"):
-        render_welcome_message()
+        # Show catalog-only view when no data loaded
+        render_catalog_only_view()
         return
     
-    # Main content tabs
+    # Main content tabs (all tabs when data is loaded)
     render_tabs(config)
+
+
+def render_catalog_only_view():
+    """Show catalog and welcome when no local data is loaded."""
+    from app.components.catalog_tab import render_catalog_tab
+    
+    tab1, tab2 = st.tabs(["🗃️ Dataset Catalog", "👋 Welcome"])
+    
+    with tab1:
+        render_catalog_tab()
+    
+    with tab2:
+        render_welcome_message()
 
 
 def render_welcome_message():

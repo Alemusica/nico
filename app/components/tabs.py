@@ -14,12 +14,14 @@ from .profiles_tab import render_profiles_tab
 from .monthly_tab import render_monthly_tab
 from .spatial_tab import render_spatial_tab
 from .explorer_tab import render_explorer_tab
+from .catalog_tab import render_catalog_tab
 
 
 def render_tabs(config: AppConfig):
     """Render main content tabs."""
     
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🗃️ Dataset Catalog",
         "📈 Slope Timeline",
         "🌊 DOT Profiles",
         "📅 Monthly Analysis",
@@ -31,16 +33,19 @@ def render_tabs(config: AppConfig):
     cycle_info = st.session_state.cycle_info
     
     with tab1:
-        render_slope_timeline_tab(datasets, cycle_info, config)
+        render_catalog_tab()
     
     with tab2:
-        render_profiles_tab(datasets, cycle_info, config)
+        render_slope_timeline_tab(datasets, cycle_info, config)
     
     with tab3:
-        render_monthly_tab(datasets, cycle_info, config)
+        render_profiles_tab(datasets, cycle_info, config)
     
     with tab4:
-        render_spatial_tab(datasets, cycle_info, config)
+        render_monthly_tab(datasets, cycle_info, config)
     
     with tab5:
+        render_spatial_tab(datasets, cycle_info, config)
+    
+    with tab6:
         render_explorer_tab(datasets, cycle_info, config)
