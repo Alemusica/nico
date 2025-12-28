@@ -117,7 +117,7 @@ def render_catalog_tab():
     
     with col4:
         st.write("")  # Spacer
-        search_btn = st.button("🔍 Search", use_container_width=True)
+        search_btn = st.button("🔍 Search", use_container_width=False)
     
     # Parse filters
     provider = None if provider_filter == "All" else provider_filter

@@ -81,6 +81,3 @@ def render_welcome_message():
     </div>
     """, unsafe_allow_html=True)
 
-
-# Run the app
-run_app()
