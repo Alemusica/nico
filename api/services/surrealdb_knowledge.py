@@ -41,7 +41,7 @@ class SurrealDBKnowledgeService(KnowledgeService):
     def __init__(
         self,
         url: str = "ws://localhost:8001/rpc",
-        namespace: str = "oceanography",
+        namespace: str = "causal",
         database: str = "knowledge",
         username: str = "root",
         password: str = "root",
@@ -104,7 +104,11 @@ class SurrealDBKnowledgeService(KnowledgeService):
                     await self._query(f"KILL {live_id}")
                 except Exception:
                     pass
-            await self._db.close()
+            try:
+                # SurrealDB sync client uses close() not async
+                self._db.close()
+            except Exception:
+                pass
             self._db = None
     
     async def _initialize_schema(self) -> None:

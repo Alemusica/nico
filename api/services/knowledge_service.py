@@ -542,8 +542,8 @@ def create_knowledge_service(
             from .surrealdb_knowledge import SurrealDBKnowledgeService
             
             # SurrealDB config with defaults
-            url = config.get("url", "http://localhost:8001")
-            namespace = config.get("namespace", "nico")
+            url = config.get("url", "ws://localhost:8001/rpc")
+            namespace = config.get("namespace", "causal")
             database = config.get("database", "knowledge")
             
             logger.info(f"Using SurrealDBKnowledgeService at {url}")

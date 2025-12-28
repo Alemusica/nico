@@ -205,3 +205,74 @@ __all__ = [
     "quick_association_rules",
     "MLXTEND_AVAILABLE",
 ]
+
+# New imports for extended functionality
+try:
+    from .causal.pcmci_engine import (
+        PCMCIEngine,
+        PCMCIResult,
+        CausalLink as PCMCICausalLink,
+        HAS_TIGRAMITE,
+    )
+    __all__.extend([
+        "PCMCIEngine",
+        "PCMCIResult",
+        "PCMCICausalLink",
+        "HAS_TIGRAMITE",
+    ])
+except ImportError:
+    HAS_TIGRAMITE = False
+    PCMCIEngine = None
+    PCMCIResult = None
+    PCMCICausalLink = None
+
+try:
+    from .causal.ishikawa import (
+        IshikawaDiagram,
+        Cause,
+        CauseCategory,
+    )
+    __all__.extend([
+        "IshikawaDiagram",
+        "Cause",
+        "CauseCategory",
+    ])
+except ImportError:
+    IshikawaDiagram = None
+    Cause = None
+    CauseCategory = None
+
+try:
+    from .cross_region import (
+        CrossRegionMatcher,
+        Region,
+        RegionMatch,
+    )
+    __all__.extend([
+        "CrossRegionMatcher",
+        "Region",
+        "RegionMatch",
+    ])
+except ImportError:
+    CrossRegionMatcher = None
+    Region = None
+    RegionMatch = None
+
+try:
+    from .early_warning import (
+        EarlyWarningSystem,
+        AlertLevel,
+        Alert,
+        AlertPattern,
+    )
+    __all__.extend([
+        "EarlyWarningSystem",
+        "AlertLevel",
+        "Alert",
+        "AlertPattern",
+    ])
+except ImportError:
+    EarlyWarningSystem = None
+    AlertLevel = None
+    Alert = None
+    AlertPattern = None

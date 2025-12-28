@@ -83,6 +83,7 @@ except ImportError:
 
 # Import routers
 from api.routers.analysis_router import router as analysis_router
+from api.routers.analysis import router as advanced_analysis_router
 from api.routers.chat_router import router as chat_router
 from api.routers.data_router import router as data_router
 from api.routers.health_router import router as health_router
@@ -194,6 +195,10 @@ Check system health: `GET /health`
             "description": "Causal discovery and root cause analysis"
         },
         {
+            "name": "Advanced Analysis",
+            "description": "PCMCI causal discovery, cross-region matching, early warning alerts"
+        },
+        {
             "name": "knowledge",
             "description": "Scientific knowledge base (papers, events, patterns)"
         },
@@ -216,6 +221,7 @@ Check system health: `GET /health`
 API_V1_PREFIX = "/api/v1"
 
 app.include_router(analysis_router, prefix=API_V1_PREFIX)
+app.include_router(advanced_analysis_router, prefix=API_V1_PREFIX)
 app.include_router(chat_router, prefix=API_V1_PREFIX)
 app.include_router(data_router, prefix=API_V1_PREFIX)
 app.include_router(health_router, prefix=API_V1_PREFIX)

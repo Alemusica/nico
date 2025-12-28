@@ -12,21 +12,24 @@ import {
   BookOpen,
   Zap,
   Calendar,
-  Network
+  Network,
+  Joystick
 } from 'lucide-react'
 import clsx from 'clsx'
 
 interface SidebarProps {
   activeView: string
-  onViewChange: (view: 'graph' | 'data' | 'knowledge' | 'knowledge-graph' | 'chat' | 'historical') => void
+  onViewChange: (view: 'graph' | 'data' | 'knowledge' | 'knowledge-graph' | 'cosmograph' | 'chat' | 'historical' | 'cockpit') => void
 }
 
 const navigation = [
+  { id: 'cockpit', label: '🎮 Cockpit', icon: Joystick },
   { id: 'graph', label: 'Causal Graph', icon: GitBranch },
   { id: 'data', label: 'Data Explorer', icon: Database },
   { id: 'historical', label: 'Historical Analysis', icon: Calendar },
   { id: 'knowledge', label: 'Knowledge Base', icon: BookOpen },
-  { id: 'knowledge-graph', label: 'Knowledge Graph', icon: Network },
+  { id: 'knowledge-graph', label: 'Knowledge 3D', icon: Network },
+  { id: 'cosmograph', label: 'Graph Explorer', icon: Zap },
   { id: 'chat', label: 'AI Assistant', icon: MessageSquare },
 ] as const
 
@@ -59,7 +62,7 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
         {navigation.map((item) => (
           <button
             key={item.id}
-            onClick={() => onViewChange(item.id as 'graph' | 'data' | 'knowledge' | 'knowledge-graph' | 'chat' | 'historical')}
+            onClick={() => onViewChange(item.id as 'graph' | 'data' | 'knowledge' | 'knowledge-graph' | 'cosmograph' | 'chat' | 'historical' | 'cockpit')}
             className={clsx(
               'sidebar-item w-full text-left',
               activeView === item.id && 'sidebar-item-active'

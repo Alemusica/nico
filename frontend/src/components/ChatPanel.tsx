@@ -4,15 +4,15 @@
  * Now includes Investigation Briefing before download
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Sparkles, RefreshCw, Globe, Database, MapPin, Clock, Download, X, Check } from 'lucide-react'
 import clsx from 'clsx'
-import { useStore } from '../store'
-import { chat, investigateStreaming, isInvestigationQuery, createInvestigationBriefing, listCacheEntries, loadCachedAsDataset } from '../api'
+import { Check, Clock, Database, Download, Globe, MapPin, RefreshCw, Send, Sparkles, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { InvestigateProgress, InvestigateResponse, InvestigationBriefingData } from '../api'
+import { chat, createInvestigationBriefing, investigateStreaming, isInvestigationQuery, listCacheEntries, loadCachedAsDataset } from '../api'
+import { useStore } from '../store'
+import type { ProgressStep } from './InvestigationProgress'
 import { InvestigationProgress } from './InvestigationProgress'
 import { InvestigationResult } from './InvestigationResult'
-import type { ProgressStep } from './InvestigationProgress'
 
 interface ChatPanelProps {
   expanded?: boolean
@@ -43,25 +43,25 @@ export interface ResolutionConfig {
 }
 
 // Briefing Card Component with Resolution Picker
-function BriefingCard({ 
-  briefing, 
-  onConfirm, 
+function BriefingCard({
+  briefing,
+  onConfirm,
   onCancel,
-  isLoading 
-}: { 
+  isLoading
+}: {
   briefing: InvestigationBriefingData
   onConfirm: (resolution?: ResolutionConfig) => void
   onCancel: () => void
   isLoading: boolean
 }) {
   const [showOptions, setShowOptions] = useState(false)
-  const [resolution, setResolution] = useState<ResolutionConfig>({ 
-    temporal: 'daily', 
-    spatial: '0.25' 
+  const [resolution, setResolution] = useState<ResolutionConfig>({
+    temporal: 'daily',
+    spatial: '0.25'
   })
-  
-  const formatTime = (sec: number) => sec < 60 ? `${Math.round(sec)}s` : `${Math.floor(sec/60)}m ${Math.round(sec%60)}s`
-  
+
+  const formatTime = (sec: number) => sec < 60 ? `${Math.round(sec)}s` : `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s`
+
   return (
     <div className="bg-gradient-to-br from-blue-50 to-slate-50 rounded-xl border border-blue-200 overflow-hidden">
       {/* Header */}
@@ -72,7 +72,7 @@ function BriefingCard({
         </div>
         <p className="text-blue-100 text-xs mt-1">Review data to be downloaded</p>
       </div>
-      
+
       {/* Content */}
       <div className="p-4 space-y-3">
         {/* Location */}
@@ -82,13 +82,13 @@ function BriefingCard({
             <div>
               <p className="font-medium text-slate-800">{briefing.location.name}</p>
               <p className="text-xs text-slate-500">
-                {briefing.location.region}, {briefing.location.country} • 
+                {briefing.location.region}, {briefing.location.country} •
                 {briefing.location.lat.toFixed(2)}°N, {briefing.location.lon.toFixed(2)}°E
               </p>
             </div>
           </div>
         )}
-        
+
         {/* Period */}
         <div className="flex items-start gap-2">
           <Clock className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
@@ -99,7 +99,7 @@ function BriefingCard({
             <p className="text-xs text-slate-500 capitalize">{briefing.event_context.event_type}</p>
           </div>
         </div>
-        
+
         {/* Data Sources */}
         <div className="border-t pt-3 mt-3">
           <p className="text-xs font-semibold text-slate-600 mb-2">📦 Data Sources</p>
@@ -111,23 +111,23 @@ function BriefingCard({
                   <span className="font-medium text-slate-700">{req.name}</span>
                 </div>
                 <span className="text-xs text-slate-400">
-                  {req.estimated_size_mb > 0.1 ? `${req.estimated_size_mb.toFixed(1)} MB` : ''} 
+                  {req.estimated_size_mb > 0.1 ? `${req.estimated_size_mb.toFixed(1)} MB` : ''}
                   ~{formatTime(req.estimated_time_sec)}
                 </span>
               </div>
             ))}
           </div>
         </div>
-        
+
         {/* Resolution Picker (collapsible) */}
         <div className="border-t pt-3">
-          <button 
+          <button
             onClick={() => setShowOptions(!showOptions)}
             className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800"
           >
             ⚙️ {showOptions ? 'Hide' : 'Configure'} Resolution
           </button>
-          
+
           {showOptions && (
             <div className="mt-2 grid grid-cols-2 gap-3 p-3 bg-white rounded-lg border border-slate-200">
               {/* Temporal */}
@@ -148,7 +148,7 @@ function BriefingCard({
                   {TEMPORAL_OPTIONS.find(o => o.value === resolution.temporal)?.desc}
                 </p>
               </div>
-              
+
               {/* Spatial */}
               <div>
                 <label className="text-xs text-slate-500 font-medium mb-1 block">
@@ -170,17 +170,17 @@ function BriefingCard({
             </div>
           )}
         </div>
-        
+
         {/* Total */}
         <div className="bg-blue-100 rounded-lg p-2 text-center">
           <p className="text-sm font-semibold text-blue-800">
             ⏱️ Estimated: ~{formatTime(briefing.total_estimated_time_sec)}
           </p>
         </div>
-        
+
         {/* Actions */}
         <div className="flex gap-2 pt-2">
-          <button 
+          <button
             onClick={onCancel}
             disabled={isLoading}
             className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
@@ -188,7 +188,7 @@ function BriefingCard({
             <X className="w-4 h-4" />
             Cancel
           </button>
-          <button 
+          <button
             onClick={() => onConfirm(resolution)}
             disabled={isLoading}
             className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
@@ -212,9 +212,9 @@ function BriefingCard({
 }
 
 export function ChatPanel({ expanded = false }: ChatPanelProps) {
-  const { 
-    messages, addMessage, clearMessages, causalGraph, selectedLink, 
-    setPendingInvestigationResult, setActiveView, setKnowledgeSearchQuery 
+  const {
+    messages, addMessage, clearMessages, causalGraph, selectedLink,
+    setPendingInvestigationResult, setActiveView, setKnowledgeSearchQuery
   } = useStore()
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -246,9 +246,9 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
     setIsInvestigating(true)
     setProgressSteps([])
     setPendingBriefing(null)
-    
+
     const cleanup = investigateStreaming(
-      { 
+      {
         query,
         // Pass resolution config if provided
         ...(resolution && {
@@ -263,13 +263,16 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
       // On complete
       (result: InvestigateResponse) => {
         setIsInvestigating(false)
-        
+
         // Save investigation result as message with metadata
         addMessage('assistant', '🕵️ Investigation Complete', {
           type: 'investigation_result',
           investigation_result: result
         })
-        
+
+        // Auto-populate PCMCI panel with investigation data
+        setPendingInvestigationResult(result)
+
         setProgressSteps([])
         setIsLoading(false)
       },
@@ -281,7 +284,7 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
         setIsLoading(false)
       }
     )
-    
+
     cleanupRef.current = cleanup
   }, [addMessage])
 
@@ -383,7 +386,7 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
             <p className="text-phi-xs text-slate-500">Powered by Ollama</p>
           </div>
         </div>
-        <button 
+        <button
           onClick={clearMessages}
           className="btn btn-ghost btn-sm"
           title="Clear chat"
@@ -403,10 +406,10 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
               How can I help?
             </h5>
             <p className="text-phi-sm text-slate-500 mb-phi-lg">
-              Ask me to <strong>investigate events</strong> (e.g., "analizza Lago Maggiore 2000") 
+              Ask me to <strong>investigate events</strong> (e.g., "analizza Lago Maggiore 2000")
               or ask about causal patterns in your data.
             </p>
-            
+
             {/* Suggestions */}
             <div className="flex flex-wrap gap-phi-sm justify-center">
               {suggestions.map((suggestion) => (
@@ -432,12 +435,12 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
               >
                 {/* Render Investigation Result if metadata present */}
                 {message.metadata?.type === 'investigation_result' ? (
-                  <InvestigationResult 
+                  <InvestigationResult
                     result={message.metadata.investigation_result}
                     onRunAnalysis={async () => {
                       const result = message.metadata.investigation_result
                       setPendingInvestigationResult(result)
-                      
+
                       // Load cached investigation data as dataset
                       try {
                         const cacheResponse = await listCacheEntries()
@@ -495,17 +498,17 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
                 )}
               </div>
             ))}
-            
+
             {/* Investigation Progress */}
             {isInvestigating && progressSteps.length > 0 && (
               <div className="chat-message chat-message-assistant animate-slide-up">
-                <InvestigationProgress 
-                  steps={progressSteps} 
+                <InvestigationProgress
+                  steps={progressSteps}
                   isComplete={false}
                 />
               </div>
             )}
-            
+
             {/* Pending Briefing - Show before confirmation */}
             {pendingBriefing && !isInvestigating && (
               <div className="chat-message chat-message-assistant animate-slide-up">
@@ -517,7 +520,7 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
                 />
               </div>
             )}
-            
+
             {/* Loading spinner for non-investigation queries */}
             {isLoading && !isInvestigating && !pendingBriefing && (
               <div className="chat-message chat-message-assistant animate-slide-up">
@@ -529,7 +532,7 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
             )}
           </>
         )}
-        
+
         <div ref={messagesEndRef} />
       </div>
 
