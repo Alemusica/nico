@@ -196,8 +196,27 @@ class TestResolution:
         assert TemporalResolution.MONTHLY.value == "monthly"
     
     def test_spatial_resolution(self):
-        """Test spatial resolution enum."""
+        """Test spatial resolution enum as float."""
         from src.core.models import SpatialResolution
         
-        assert SpatialResolution.MEDIUM.value == "0.25"
-        assert SpatialResolution.LOW.value == "0.5"
+        # Values are floats for direct use in binning
+        assert SpatialResolution.MEDIUM.value == 0.25
+        assert SpatialResolution.LOW.value == 0.5
+        assert SpatialResolution.HIGH.value == 0.1
+        assert SpatialResolution.COARSE.value == 1.0
+        
+        # Test from_degrees helper
+        res = SpatialResolution.from_degrees(0.3)
+        assert res == SpatialResolution.MEDIUM
+        
+        res = SpatialResolution.from_degrees(0.08)
+        assert res == SpatialResolution.HIGH
+    
+    def test_spatial_resolution_list_all(self):
+        """Test spatial resolution list_all method."""
+        from src.core.models import SpatialResolution
+        
+        all_res = SpatialResolution.list_all()
+        assert len(all_res) == 4
+        assert all_res[0]["name"] == "HIGH"
+        assert all_res[1]["degrees"] == 0.25

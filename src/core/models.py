@@ -11,13 +11,36 @@ These models provide:
 
 Usage:
     from src.core.models import BoundingBox, GateModel, TimeRange, DataRequest
+    from src.core.models import SpatialResolution, TemporalResolution
+
+Models:
+    - BoundingBox: Geographic bbox with validation and center calculation
+    - TimeRange: Temporal range accepting datetime or ISO strings
+    - GateModel: Ocean gate definition with optional fallback bbox
+    - DataRequest: Unified data request for API and services
+    - SpatialResolution: Binning resolution enum (0.1° to 1.0°)
+    - TemporalResolution: Temporal aggregation enum (hourly to monthly)
+    - ResolutionConfig: Combined resolution settings
+
+Example:
+    >>> from src.core.models import BoundingBox, TimeRange, SpatialResolution
+    >>> bbox = BoundingBox(lat_min=78, lat_max=82, lon_min=-20, lon_max=15)
+    >>> print(bbox.center)  # (80.0, -2.5)
+    >>> tr = TimeRange(start="2024-01-01", end="2024-12-31")
+    >>> print(tr.days)  # 365
+    >>> res = SpatialResolution.MEDIUM
+    >>> print(res.value)  # 0.25
+
+Changelog:
+    2025-12-29: Added BoundingBox.center, TimeRange datetime support,
+                DataRequest.dataset_id, SpatialResolution as float enum
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -35,12 +58,55 @@ class TemporalResolution(str, Enum):
     MONTHLY = "monthly"
 
 
-class SpatialResolution(str, Enum):
-    """Spatial resolution options for data requests."""
-    HIGH = "0.1"
-    MEDIUM = "0.25"
-    LOW = "0.5"
-    COARSE = "1.0"
+class SpatialResolution(float, Enum):
+    """
+    Spatial resolution options for data requests and binning.
+    
+    Values are in degrees. Use `.value` to get the float for binning operations.
+    
+    Example:
+        >>> res = SpatialResolution.MEDIUM
+        >>> bin_size = res.value  # 0.25 degrees
+        >>> data.coarsen(lat=int(0.25/current_res), lon=int(0.25/current_res))
+    
+    Available resolutions:
+        - HIGH: 0.1° (~11 km at equator)
+        - MEDIUM: 0.25° (~28 km) - default for most analyses
+        - LOW: 0.5° (~56 km)
+        - COARSE: 1.0° (~111 km)
+    
+    For custom binning, you can also pass a float directly to analysis functions.
+    """
+    HIGH = 0.1
+    MEDIUM = 0.25
+    LOW = 0.5
+    COARSE = 1.0
+    
+    @classmethod
+    def from_degrees(cls, degrees: float) -> 'SpatialResolution':
+        """
+        Get closest resolution enum from degrees value.
+        
+        Args:
+            degrees: Resolution in degrees
+            
+        Returns:
+            Closest SpatialResolution enum
+            
+        Example:
+            >>> SpatialResolution.from_degrees(0.3)
+            SpatialResolution.MEDIUM
+        """
+        options = [(abs(r.value - degrees), r) for r in cls]
+        return min(options, key=lambda x: x[0])[1]
+    
+    @classmethod
+    def list_all(cls) -> list:
+        """List all resolutions with descriptions."""
+        return [
+            {"name": r.name, "degrees": r.value, "km_approx": r.value * 111}
+            for r in cls
+        ]
 
 
 class DataSource(str, Enum):

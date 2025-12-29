@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - 2025-12-29
+
+#### 🏗️ Unified Architecture Refactoring (Issue #12)
+
+**Phase 1 - Core Models** (`src/core/models.py`)
+- `BoundingBox`: Geographic bbox with validation, center calculation, dateline crossing
+- `TimeRange`: Temporal range accepting both `datetime` and ISO strings
+- `GateModel`: Ocean gate definition with optional bbox fallback
+- `DataRequest`: Unified data request for API and services
+- `TemporalResolution`: Enum (hourly, daily, monthly)
+- `SpatialResolution`: Enum (HIGH=0.1°, MEDIUM=0.25°, LOW=0.5°, COARSE=1.0°)
+- `ResolutionConfig`: Combined resolution settings
+
+**Phase 2 - Centralized Config** (`config/*.yaml`)
+- `gates.yaml`: 8 ocean gates with metadata and pre-computed passes
+- `datasets.yaml`: 8 dataset providers with latency badges
+- `regions.yaml`: 11 pre-defined regions (Arctic, Atlantic, etc.)
+- `defaults.yaml`: Default analysis parameters
+
+**Phase 3 - Gates Module** (`src/gates/`)
+- `GateCatalog`: Central registry loading from YAML
+- `GateLoader`: Shapefile loading with geopandas caching
+- `GateBuffer`: Spatial buffer calculations using Shapely
+- `PassFilter`: Satellite pass filtering with pre-computed distances
+
+**Phase 4 - Services Layer** (`src/services/`)
+- `GateService`: Gate selection, bbox, passes (used by Streamlit & API)
+- `DataService`: Unified data loading (Copernicus/ERA5/local)
+- `AnalysisService`: DOT, binning, statistics, causal prep
+
+**Phase 5 - API Integration**
+- `api/routers/gates_router.py`: 7 REST endpoints for gates
+- Registered in `api/main.py` with OpenAPI tag
+
+**Phase 6 - Streamlit v2**
+- `app/components/sidebar_v2.py`: Refactored sidebar using services
+
+**Phase 7 - Data Loaders**
+- `src/data/unified_loader.py`: `UnifiedLoader` with caching and mock fallback
+
+**Phase 8 - Tests**
+- `tests/test_core_models.py`: Unit tests for Pydantic models
+- `tests/test_gate_service.py`: Unit tests for GateService
+
+### Fixed - 2025-12-29
+
+#### 🐛 Audit Fixes
+
+| Bug | File | Fix |
+|-----|------|-----|
+| `BoundingBox.center` missing | `src/core/models.py` | Added `@property center` with dateline handling |
+| `TimeRange` rejects `datetime` | `src/core/models.py` | Added `mode='before'` validator for auto-conversion |
+| `DataRequest.dataset_id` missing | `src/core/models.py` | Added field with default `"cmems_sla"` |
+| `SpatialResolution.QUARTER_DEGREE` undefined | `src/services/data_service.py` | Changed to `SpatialResolution.MEDIUM` |
+| `GateModel` required fields | `src/core/models.py` | Made `description`, `region` optional with defaults |
+| Test enum mismatch | `tests/test_core_models.py` | Updated to use `MEDIUM`/`LOW` |
+
+---
+
 ### Added - 2025-12-28
 
 #### 🛰️ Multi-Sensor Catalog (Sprint Dec 2025)

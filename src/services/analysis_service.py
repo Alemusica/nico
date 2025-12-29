@@ -111,21 +111,49 @@ class AnalysisService:
         self,
         data: Any,
         resolution: float = 0.25,
-        method: str = "mean"
+        method: str = "mean",
+        lat_resolution: Optional[float] = None,
+        lon_resolution: Optional[float] = None
     ) -> Optional[Any]:
         """
         Bin data to specified spatial resolution.
         
+        Supports independent lat/lon resolution for anisotropic binning.
+        
         Args:
             data: xarray Dataset
-            resolution: Target resolution in degrees
+            resolution: Target resolution in degrees (used for both lat/lon if not specified separately)
             method: Aggregation method (mean, median, std)
+            lat_resolution: Optional separate latitude resolution in degrees
+            lon_resolution: Optional separate longitude resolution in degrees
             
         Returns:
             Binned xarray Dataset
+            
+        Example:
+            >>> from src.core.models import SpatialResolution
+            >>> # Use enum
+            >>> binned = service.spatial_bin(data, resolution=SpatialResolution.MEDIUM.value)
+            >>> # Use custom float
+            >>> binned = service.spatial_bin(data, resolution=0.15)
+            >>> # Different lat/lon resolution
+            >>> binned = service.spatial_bin(data, lat_resolution=0.25, lon_resolution=0.5)
+        
+        Note:
+            - If lat_resolution or lon_resolution is provided, they override `resolution`
+            - If data is already at target resolution, returns unchanged
+            - Uses xarray.coarsen() for efficient binning
         """
         if data is None:
             return None
+        
+        # Handle SpatialResolution enum if passed
+        if hasattr(resolution, 'value'):
+            resolution = resolution.value
+        
+        # Use separate resolutions if provided
+        target_lat_res = lat_resolution if lat_resolution is not None else resolution
+        target_lon_res = lon_resolution if lon_resolution is not None else resolution
         
         try:
             import xarray as xr
@@ -135,19 +163,19 @@ class AnalysisService:
                 lat_res = abs(float(data.lat[1] - data.lat[0])) if len(data.lat) > 1 else 1.0
                 lon_res = abs(float(data.lon[1] - data.lon[0])) if len(data.lon) > 1 else 1.0
                 
-                if lat_res >= resolution and lon_res >= resolution:
-                    logger.info(f"Data already at {lat_res}° - no binning needed")
+                if lat_res >= target_lat_res and lon_res >= target_lon_res:
+                    logger.info(f"Data already at {lat_res}°x{lon_res}° - no binning needed")
                     return data
                 
-                # Compute binning factor
-                lat_factor = int(resolution / lat_res)
-                lon_factor = int(resolution / lon_res)
+                # Compute binning factors
+                lat_factor = max(1, int(target_lat_res / lat_res))
+                lon_factor = max(1, int(target_lon_res / lon_res))
                 
                 if lat_factor > 1 or lon_factor > 1:
                     # Use coarsen for binning
                     coarsened = data.coarsen(
-                        lat=max(lat_factor, 1),
-                        lon=max(lon_factor, 1),
+                        lat=lat_factor,
+                        lon=lon_factor,
                         boundary="trim"
                     )
                     
@@ -160,7 +188,7 @@ class AnalysisService:
                     else:
                         data = coarsened.mean()
                     
-                    logger.info(f"Binned to {resolution}° using {method}")
+                    logger.info(f"Binned to {target_lat_res}°(lat) x {target_lon_res}°(lon) using {method}")
             
             return data
             
