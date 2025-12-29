@@ -6,7 +6,7 @@
 # Last Updated: 2025-12-29
 
 metadata:
-  version: "1.0"
+  version: "1.1"
   updated: "2025-12-29"
   shapefile_dir: "gates/"
   default_buffer_km: 50.0
@@ -21,6 +21,8 @@ gates:
     closest_passes: [481, 254, 127, 308, 55]
     latitude_range: [78.0, 80.0]
     longitude_range: [-20.0, 10.0]
+    datasets: ["SLCCI", "ERA5", "CMEMS-SST"]
+    default_buffer_km: 50.0
     
   denmark_strait:
     name: "🌀 Denmark Strait"
@@ -30,6 +32,8 @@ gates:
     closest_passes: [246, 172, 320, 98, 394]
     latitude_range: [66.0, 68.0]
     longitude_range: [-28.0, -24.0]
+    datasets: ["SLCCI", "ERA5", "CMEMS-SST"]
+    default_buffer_km: 50.0
     
   davis_strait:
     name: "❄️ Davis Strait"
@@ -39,6 +43,8 @@ gates:
     closest_passes: []
     latitude_range: [66.0, 68.0]
     longitude_range: [-58.0, -52.0]
+    datasets: ["SLCCI", "ERA5"]
+    default_buffer_km: 75.0
     
   barents_opening:
     name: "🌡️ Barents Opening"
@@ -48,6 +54,8 @@ gates:
     closest_passes: [481, 254, 127]
     latitude_range: [70.0, 76.0]
     longitude_range: [15.0, 25.0]
+    datasets: ["SLCCI", "ERA5", "CMEMS-SST"]
+    default_buffer_km: 50.0
     
   norwegian_boundary:
     name: "🇳🇴 Norwegian Sea Boundary"
@@ -57,6 +65,8 @@ gates:
     closest_passes: [220, 146, 294]
     latitude_range: [62.0, 66.0]
     longitude_range: [-10.0, 5.0]
+    datasets: ["SLCCI", "ERA5"]
+    default_buffer_km: 50.0
 
   # === PACIFIC SECTOR ===
   bering_strait:
@@ -67,6 +77,8 @@ gates:
     closest_passes: [76, 152, 228, 304, 380]
     latitude_range: [65.0, 66.0]
     longitude_range: [168.0, -168.0]  # Crosses dateline
+    datasets: ["SLCCI", "ERA5"]
+    default_buffer_km: 50.0
 
   # === CANADIAN ARCHIPELAGO ===
   nares_strait:
@@ -77,6 +89,8 @@ gates:
     closest_passes: []
     latitude_range: [78.0, 82.0]
     longitude_range: [-70.0, -60.0]
+    datasets: ["SLCCI", "ERA5"]
+    default_buffer_km: 75.0
     
   lancaster_sound:
     name: "🚢 Lancaster Sound"
@@ -86,6 +100,8 @@ gates:
     closest_passes: []
     latitude_range: [74.0, 75.0]
     longitude_range: [-84.0, -80.0]
+    datasets: ["SLCCI", "ERA5"]
+    default_buffer_km: 50.0
 
 # Region groupings for UI
 regions:

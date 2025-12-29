@@ -66,6 +66,9 @@ class GateCatalog:
         self._metadata = data.get("metadata", {})
         self._regions = data.get("regions", {})
         
+        # Get default buffer from metadata
+        default_buffer = self._metadata.get("default_buffer_km", 50.0)
+        
         # Parse gates
         for gate_id, info in data.get("gates", {}).items():
             self._gates[gate_id] = GateModel(
@@ -75,6 +78,10 @@ class GateCatalog:
                 description=info.get("description", ""),
                 region=info.get("region", "Unknown"),
                 closest_passes=info.get("closest_passes"),
+                datasets=info.get("datasets"),
+                default_buffer_km=info.get("default_buffer_km", default_buffer),
+                latitude_range=info.get("latitude_range"),
+                longitude_range=info.get("longitude_range"),
             )
     
     def get(self, gate_id: str) -> Optional[GateModel]:

@@ -320,12 +320,180 @@ def _render_gate_selector_v2() -> dict | None:
             except Exception as e:
                 st.sidebar.warning(f"⚠️ Could not load geometry: {e}")
                 st.session_state["gate_geometry"] = None
+            
+            # === LOAD DATA BUTTON ===
+            st.sidebar.markdown("---")
+            if st.sidebar.button("🚀 Load Data for Gate", type="primary", key="load_gate_data_btn"):
+                _load_data_for_gate(selected_gate_id, buffer_km)
+                
     else:
         st.session_state["gate_geometry"] = None
     
     st.session_state["selected_gate"] = selected_gate_id
     
     return {"gate_id": selected_gate_id}
+
+
+def _load_data_for_gate(gate_id: str, buffer_km: float):
+    """
+    Load data for the selected gate using DataService.
+    
+    This wires the UI to the Services Layer as per NICO Unified Architecture:
+    UI → DataService → Provider (CMEMS/ERA5/Local) → Data
+    
+    The DataService decides WHERE to get data based on:
+    1. User selection (dataset_id in session_state)
+    2. Gate's recommended datasets (gate.datasets)
+    3. config/datasets.yaml provider configuration
+    """
+    from src.services import DataService, GateService
+    from src.core.models import BoundingBox, TimeRange, DataRequest
+    from ..state import update_datasets
+    from datetime import datetime, timedelta
+    
+    try:
+        gs = GateService()
+        data_service = DataService()
+        
+        gate = gs.get_gate(gate_id)
+        if not gate:
+            st.sidebar.error(f"❌ Gate not found: {gate_id}")
+            return
+        
+        bbox = gate.bbox
+        if not bbox:
+            st.sidebar.error(f"❌ Gate has no bounding box: {gate_id}")
+            return
+        
+        # Get user's dataset selection (from catalog tab or default)
+        selected_dataset = st.session_state.get("selected_dataset_id")
+        
+        # If no selection, use gate's recommended datasets
+        if not selected_dataset and gate.datasets:
+            selected_dataset = gate.datasets[0]  # First recommended
+            st.sidebar.info(f"📊 Using gate's recommended dataset: {selected_dataset}")
+        
+        # Fallback to CMEMS sea level
+        if not selected_dataset:
+            selected_dataset = "cmems_sealevel"
+            st.sidebar.info(f"📊 Using default dataset: {selected_dataset}")
+        
+        # Time range (default: last 30 days or user selection)
+        time_start = st.session_state.get("time_start", datetime.now() - timedelta(days=30))
+        time_end = st.session_state.get("time_end", datetime.now())
+        
+        # Build request following architecture
+        request = data_service.build_request(
+            gate=gate,
+            bbox=bbox,
+            time_range=TimeRange(start=time_start, end=time_end),
+            variables=st.session_state.get("selected_variables", []),
+            dataset_id=selected_dataset
+        )
+        
+        # Show loading state
+        with st.spinner(f"🔄 Loading {selected_dataset} for {gate.name}..."):
+            # DataService routes to correct provider based on dataset_id
+            data = data_service.load(request)
+            
+            if data is not None:
+                # Convert to list format expected by tabs
+                if hasattr(data, 'dims'):  # xarray Dataset
+                    datasets = [data]
+                    cycle_info = [{
+                        "filename": f"{selected_dataset}_{gate_id}",
+                        "cycle": 1,
+                        "path": selected_dataset,
+                        "n_points": data.sizes.get("time", 0)
+                    }]
+                else:
+                    datasets = [data]
+                    cycle_info = [{"filename": selected_dataset, "cycle": 1}]
+                
+                update_datasets(datasets, cycle_info)
+                st.sidebar.success(f"✅ Loaded data for {gate.name}")
+                st.rerun()
+            else:
+                # No data from provider - try demo data
+                st.sidebar.warning(f"⚠️ No data from {selected_dataset}. Generating demo data...")
+                datasets, cycle_info = _generate_demo_data(gate, buffer_km)
+                if datasets:
+                    update_datasets(datasets, cycle_info)
+                    st.sidebar.success(f"✅ Generated demo data for {gate.name}")
+                    st.rerun()
+                else:
+                    st.sidebar.error("❌ Could not load or generate data")
+            
+    except Exception as e:
+        st.sidebar.error(f"❌ Error loading data: {e}")
+        import traceback
+        st.sidebar.code(traceback.format_exc())
+
+
+def _generate_demo_data(gate, buffer_km: float):
+    """Generate demo data for testing when no real data is available."""
+    import numpy as np
+    import xarray as xr
+    import pandas as pd
+    
+    bbox = gate.bbox
+    if not bbox:
+        return [], []
+    
+    # Generate 5 demo cycles
+    datasets = []
+    cycle_info = []
+    
+    for cycle in range(1, 6):
+        # Random points in bbox
+        n_points = 500
+        
+        buffer_deg = buffer_km / 111.0
+        lats = np.random.uniform(
+            bbox.lat_min - buffer_deg,
+            bbox.lat_max + buffer_deg,
+            n_points
+        )
+        lons = np.random.uniform(
+            bbox.lon_min - buffer_deg,
+            bbox.lon_max + buffer_deg,
+            n_points
+        )
+        
+        # Generate DOT-like values
+        base_dot = -0.5 + 0.1 * np.sin(2 * np.pi * lons / 30)
+        noise = np.random.randn(n_points) * 0.05
+        corssh = base_dot + noise
+        mss = np.zeros(n_points)  # Reference surface
+        
+        # Create times
+        base_time = pd.Timestamp("2020-01-01") + pd.Timedelta(days=10 * cycle)
+        times = [base_time + pd.Timedelta(seconds=i) for i in range(n_points)]
+        
+        ds = xr.Dataset(
+            {
+                "corssh": (["time"], corssh),
+                "mean_sea_surface": (["time"], mss),
+                "latitude": (["time"], lats),
+                "longitude": (["time"], lons),
+            },
+            coords={"time": times},
+            attrs={
+                "cycle": cycle,
+                "source": "demo_data",
+                "gate": gate.id,
+            }
+        )
+        
+        datasets.append(ds)
+        cycle_info.append({
+            "filename": f"demo_cycle_{cycle}.nc",
+            "cycle": cycle,
+            "path": "demo",
+            "n_points": n_points
+        })
+    
+    return datasets, cycle_info
 
 
 def _load_gate_geometry(gate_id: str, gates_dir: Path):

@@ -155,6 +155,54 @@ class TestGateModel:
         )
         
         assert gate.closest_passes == [481, 360, 239]
+    
+    def test_gate_with_datasets(self):
+        """Test gate with recommended datasets."""
+        from src.core.models import GateModel
+        
+        gate = GateModel(
+            id="fram_strait",
+            name="Fram Strait",
+            file="fram_strait.shp",
+            datasets=["SLCCI", "ERA5", "CMEMS-SST"],
+            default_buffer_km=75.0
+        )
+        
+        assert gate.datasets == ["SLCCI", "ERA5", "CMEMS-SST"]
+        assert gate.default_buffer_km == 75.0
+    
+    def test_gate_bbox_from_ranges(self):
+        """Test bbox computed from latitude_range and longitude_range."""
+        from src.core.models import GateModel
+        
+        gate = GateModel(
+            id="fram_strait",
+            name="Fram Strait",
+            file="fram_strait.shp",
+            latitude_range=[78.0, 80.0],
+            longitude_range=[-20.0, 10.0]
+        )
+        
+        bbox = gate.bbox
+        assert bbox is not None
+        assert bbox.lat_min == 78.0
+        assert bbox.lat_max == 80.0
+        assert bbox.lon_min == -20.0
+        assert bbox.lon_max == 10.0
+    
+    def test_gate_no_bbox_without_ranges(self):
+        """Test bbox is None when no ranges provided."""
+        from src.core.models import GateModel
+        
+        gate = GateModel(
+            id="fram_strait",
+            name="Fram Strait",
+            file="fram_strait.shp"
+        )
+        
+        # Without lat/lon ranges, bbox should be None
+        # (unless lat_min/max/lon_min/max are set)
+        assert gate.bbox is None
 
 
 class TestDataRequest:

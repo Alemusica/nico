@@ -279,6 +279,9 @@ class GateModel(BaseModel):
         description: Human-readable description
         region: Geographic region (Atlantic, Pacific, Canadian)
         closest_passes: Pre-computed closest satellite passes
+        datasets: Recommended datasets for this gate
+        default_buffer_km: Default buffer around gate in km
+        bbox: Optional bounding box (computed from lat/lon ranges)
     
     Example:
         >>> gate = GateModel(
@@ -286,7 +289,8 @@ class GateModel(BaseModel):
         ...     name="🧊 Fram Strait",
         ...     file="fram_strait_S3_pass_481.shp",
         ...     description="Main Arctic-Atlantic exchange",
-        ...     region="Atlantic Sector"
+        ...     region="Atlantic Sector",
+        ...     datasets=["SLCCI", "ERA5"]
         ... )
     """
     id: str = Field(..., description="Unique gate identifier")
@@ -295,12 +299,38 @@ class GateModel(BaseModel):
     description: str = Field(default="", description="Human-readable description")
     region: str = Field(default="", description="Geographic region")
     closest_passes: Optional[List[int]] = Field(default=None, description="Pre-computed closest satellite passes")
-    # Optional: bounding box for fallback when shapefile not available
+    datasets: Optional[List[str]] = Field(default=None, description="Recommended datasets for this gate")
+    default_buffer_km: Optional[float] = Field(default=50.0, description="Default buffer around gate in km")
+    # Bounding box (can be specified directly or via lat/lon ranges)
     lat_min: Optional[float] = Field(default=None, ge=-90, le=90)
     lat_max: Optional[float] = Field(default=None, ge=-90, le=90)
     lon_min: Optional[float] = Field(default=None, ge=-180, le=180)
     lon_max: Optional[float] = Field(default=None, ge=-180, le=180)
+    # Alternative: latitude_range and longitude_range from YAML
+    latitude_range: Optional[List[float]] = Field(default=None, description="[lat_min, lat_max]")
+    longitude_range: Optional[List[float]] = Field(default=None, description="[lon_min, lon_max]")
     importance: Optional[str] = Field(default=None, description="Scientific importance")
+    
+    @property
+    def bbox(self) -> Optional[BoundingBox]:
+        """Get bounding box from lat/lon fields or ranges."""
+        # Try direct lat/lon fields first
+        if all(v is not None for v in [self.lat_min, self.lat_max, self.lon_min, self.lon_max]):
+            return BoundingBox(
+                lat_min=self.lat_min,
+                lat_max=self.lat_max,
+                lon_min=self.lon_min,
+                lon_max=self.lon_max
+            )
+        # Try ranges (from YAML)
+        if self.latitude_range and self.longitude_range:
+            return BoundingBox(
+                lat_min=self.latitude_range[0],
+                lat_max=self.latitude_range[1],
+                lon_min=self.longitude_range[0],
+                lon_max=self.longitude_range[1]
+            )
+        return None
     
     class Config:
         json_schema_extra = {
@@ -310,7 +340,9 @@ class GateModel(BaseModel):
                 "file": "fram_strait_S3_pass_481.shp",
                 "description": "Main Arctic-Atlantic exchange",
                 "region": "Atlantic Sector",
-                "closest_passes": [481, 254, 127, 308, 55]
+                "closest_passes": [481, 254, 127, 308, 55],
+                "datasets": ["SLCCI", "ERA5", "CMEMS-SST"],
+                "default_buffer_km": 50.0
             }
         }
 
