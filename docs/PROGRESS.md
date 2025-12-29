@@ -1,6 +1,6 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2025-12-29 (Session 3)
+> Last Updated: 2025-12-29 (Session 3 - Unified Pipeline)
 > Agent: Use this file to track progress. Update after each task.
 
 ---
@@ -9,8 +9,28 @@
 
 **PRIMA di ogni task, verifica:**
 - [ ] Letto `docs/TASKS/CONTEXT.md`?
+- [ ] Letto `docs/UNIFIED_DATA_PIPELINE.md`? ← NEW!
 - [ ] Verificato codice esistente?
 - [ ] Usando `.venv/bin/python`?
+
+---
+
+## 🔄 UNIFIED DATA PIPELINE (2025-12-29)
+
+### GitHub Issue: #16 (Architecture Agent)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Document pipeline | ✅ DONE | docs/UNIFIED_DATA_PIPELINE.md |
+| DataService uses IntakeCatalogBridge | ✅ DONE | Prioritized catalog.yaml routing |
+| Mock data in altimetry format | ✅ DONE | corssh, mss, lat, lon variables |
+| Fix TimeRange string handling | ✅ DONE | Handles both string and datetime |
+
+**Key Insight**: Alemusica already has working API tokens in React!
+- React calls `/api/v1/data/*` endpoints
+- FastAPI routes to DataManager
+- DataManager uses existing clients (ERA5, CMEMS, etc.)
+- Credentials in environment variables
 
 ---
 

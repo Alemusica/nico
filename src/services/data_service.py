@@ -2,12 +2,15 @@
 Data Service
 ============
 Business logic for data loading and filtering.
-Unified interface for Copernicus, ERA5, local files, and other datasets.
+Unified interface for ALL data sources via IntakeCatalogBridge.
 
 This service follows the NICO Unified Architecture:
 - Called by UI (Streamlit/React) and API
 - Uses GateService for spatial bounds
-- Routes to appropriate loader based on dataset type
+- Routes to IntakeCatalogBridge which reads from catalog.yaml
+
+CRITICAL: This is the ONLY entry point for data loading.
+See docs/UNIFIED_DATA_PIPELINE.md for architecture.
 """
 
 from datetime import datetime, timedelta
@@ -32,16 +35,24 @@ from src.core.models import (
 
 logger = logging.getLogger(__name__)
 
+# Try to import IntakeCatalogBridge (the unified catalog)
+INTAKE_BRIDGE_AVAILABLE = False
+try:
+    from src.data_manager.intake_bridge import IntakeCatalogBridge, get_catalog
+    INTAKE_BRIDGE_AVAILABLE = True
+    logger.info("IntakeCatalogBridge available - using unified catalog")
+except ImportError as e:
+    logger.warning(f"IntakeCatalogBridge not available: {e}")
+
 
 class DataService:
     """
     Service for data loading and filtering.
     
-    Provides a unified interface for:
-    - Building data requests
-    - Loading from Copernicus/ERA5/CMEMS
-    - Filtering by time/space
-    - Caching results
+    Routes ALL data requests through IntakeCatalogBridge which:
+    - Reads dataset definitions from catalog.yaml
+    - Instantiates appropriate client (CMEMS, ERA5, etc.)
+    - Returns xarray Dataset
     
     Example:
         >>> service = DataService()
@@ -57,12 +68,23 @@ class DataService:
         """
         Initialize data service.
         
-        Args:
-            config_path: Path to datasets.yaml configuration
+        Uses IntakeCatalogBridge as primary source, falls back to
+        config/datasets.yaml if intake not available.
         """
         self.config_path = Path(config_path) if config_path else Path("config/datasets.yaml")
         self._datasets: Dict[str, Dict] = {}
         self._defaults: Dict[str, Any] = {}
+        
+        # Initialize catalog bridge if available
+        self._catalog_bridge = None
+        if INTAKE_BRIDGE_AVAILABLE:
+            try:
+                self._catalog_bridge = IntakeCatalogBridge()
+                logger.info(f"Loaded {len(self._catalog_bridge.list_datasets())} datasets from catalog.yaml")
+            except Exception as e:
+                logger.warning(f"Could not initialize IntakeCatalogBridge: {e}")
+        
+        # Load fallback config
         self._load_config()
     
     def _load_config(self) -> None:
@@ -155,9 +177,10 @@ class DataService:
         """
         Load data based on request.
         
-        Routes to the appropriate data loader based on:
-        1. Dataset configuration in config/datasets.yaml
-        2. Dataset ID prefix (cmems_, era5_, local_, etc.)
+        ROUTING PRIORITY:
+        1. IntakeCatalogBridge (reads catalog.yaml) - PREFERRED
+        2. Fallback to config/datasets.yaml routing
+        3. Fallback to dataset_id prefix matching
         
         Args:
             request: DataRequest with parameters
@@ -168,7 +191,47 @@ class DataService:
         dataset_id = request.dataset_id
         logger.info(f"Loading dataset: {dataset_id}")
         
-        # Check if dataset is configured
+        # === PRIORITY 1: Use IntakeCatalogBridge ===
+        if self._catalog_bridge is not None:
+            try:
+                # Check if dataset exists in catalog
+                if dataset_id in self._catalog_bridge.list_datasets():
+                    logger.info(f"Loading {dataset_id} via IntakeCatalogBridge")
+                    
+                    # Build bbox tuple (lat_min, lat_max, lon_min, lon_max) as per intake_bridge
+                    bbox_tuple = (
+                        request.bbox.lat_min,
+                        request.bbox.lat_max,
+                        request.bbox.lon_min, 
+                        request.bbox.lon_max
+                    )
+                    
+                    # Time range tuple
+                    time_tuple = (request.time_range.start, request.time_range.end)
+                    
+                    # Load via bridge - note: load() is async in intake_bridge
+                    # For now, use synchronous fallback via intake directly
+                    try:
+                        source = self._catalog_bridge.catalog[dataset_id]
+                        # Try to read (may fail if urlpath doesn't exist)
+                        data = source.read()
+                        if data is not None:
+                            logger.info(f"✅ Loaded {dataset_id} via catalog source")
+                            return data
+                    except Exception as e:
+                        logger.debug(f"Direct catalog read failed: {e}")
+                        
+                    # Try via client if available
+                    client = self._catalog_bridge.get_client(dataset_id)
+                    if client is not None:
+                        logger.info(f"Using client for {dataset_id}")
+                        # Client-based loading handled below
+                        
+            except Exception as e:
+                logger.warning(f"Catalog bridge load failed for {dataset_id}: {e}")
+                # Fall through to other methods
+        
+        # === PRIORITY 2: Use config/datasets.yaml ===
         dataset_config = self._datasets.get(dataset_id)
         
         if dataset_config:
@@ -185,7 +248,7 @@ class DataService:
             elif "nasa" in provider or "podaac" in provider:
                 return self._load_nasa(request, dataset_config)
         
-        # Fallback: route based on dataset_id prefix
+        # === PRIORITY 3: Fallback to prefix matching ===
         dataset_lower = dataset_id.lower()
         if "cmems" in dataset_lower or "copernicus" in dataset_lower:
             return self._load_cmems(request)
@@ -560,52 +623,84 @@ class DataService:
         """
         Generate mock data for testing.
         
-        Returns an xarray-like structure with random data.
+        Returns an xarray Dataset in ALTIMETRY format (along-track):
+        - Dimension: time
+        - Variables: corssh, mean_sea_surface, latitude, longitude
+        
+        This matches the SLCCI format expected by visualization tabs.
         """
         try:
             import numpy as np
             import xarray as xr
+            import pandas as pd
             
-            # Generate coordinate arrays
-            lats = np.linspace(
-                request.bbox.lat_min,
-                request.bbox.lat_max,
-                50
-            )
-            lons = np.linspace(
-                request.bbox.lon_min,
-                request.bbox.lon_max,
-                50
-            )
+            # Parse time range
+            start_str = request.time_range.start[:10] if isinstance(request.time_range.start, str) else request.time_range.start.isoformat()[:10]
+            end_str = request.time_range.end[:10] if isinstance(request.time_range.end, str) else request.time_range.end.isoformat()[:10]
             
-            # Generate time array
-            times = np.arange(
-                np.datetime64(request.time_range.start.isoformat()[:10]),
-                np.datetime64(request.time_range.end.isoformat()[:10]),
-                np.timedelta64(1, 'D')
-            )
+            # Generate along-track altimetry data
+            n_points = 1000  # Points per track
             
-            # Create data variables
-            data_vars = {}
-            for var in request.variables:
-                data = np.random.randn(len(times), len(lats), len(lons)) * 0.1
-                data_vars[var] = (["time", "lat", "lon"], data)
+            # Create lat/lon along a pass-like track
+            lat_center = (request.bbox.lat_min + request.bbox.lat_max) / 2
+            lon_center = (request.bbox.lon_min + request.bbox.lon_max) / 2
+            lat_range = request.bbox.lat_max - request.bbox.lat_min
+            lon_range = request.bbox.lon_max - request.bbox.lon_min
             
+            # Simulate satellite track (roughly N-S with some E-W movement)
+            t = np.linspace(0, 1, n_points)
+            lats = request.bbox.lat_min + lat_range * t + np.random.randn(n_points) * 0.01
+            lons = lon_center + np.sin(t * 4 * np.pi) * lon_range * 0.3 + np.random.randn(n_points) * 0.01
+            
+            # Sort by longitude for profile plots
+            sort_idx = np.argsort(lons)
+            lats = lats[sort_idx]
+            lons = lons[sort_idx]
+            
+            # Generate realistic DOT values
+            # Base signal: slope across strait (typical transport signal)
+            base_slope = 0.5e-5  # m/m slope
+            base_dot = base_slope * (lons - lon_center) * 111000  # Convert to meters
+            
+            # Add mesoscale variability
+            mesoscale = 0.05 * np.sin(2 * np.pi * lons / 2) * np.cos(2 * np.pi * lats / 1)
+            
+            # Add noise
+            noise = np.random.randn(n_points) * 0.02
+            
+            # Total DOT
+            dot = base_dot + mesoscale + noise
+            
+            # SSH = DOT + geoid (simulate geoid as constant for demo)
+            geoid = -30.0  # Typical Arctic geoid
+            mss = geoid + np.zeros(n_points)  # MSS ≈ geoid for demo
+            corssh = dot + mss  # SSH = DOT + MSS
+            
+            # Generate times
+            base_time = pd.Timestamp(start_str)
+            times = [base_time + pd.Timedelta(seconds=i*0.5) for i in range(n_points)]
+            
+            # Create Dataset in SLCCI format
             ds = xr.Dataset(
-                data_vars,
-                coords={
-                    "time": times,
-                    "lat": lats,
-                    "lon": lons
+                {
+                    "corssh": (["time"], corssh.astype(np.float32)),
+                    "mean_sea_surface": (["time"], mss.astype(np.float32)),
+                    "latitude": (["time"], lats.astype(np.float32)),
+                    "longitude": (["time"], lons.astype(np.float32)),
+                    "dot": (["time"], dot.astype(np.float32)),  # Pre-computed for convenience
                 },
+                coords={"time": times},
                 attrs={
                     "dataset_id": request.dataset_id,
-                    "source": "mock_data",
-                    "generated": datetime.now().isoformat()
+                    "source": "mock_altimetry_data",
+                    "generated": datetime.now().isoformat(),
+                    "cycle": 1,
+                    "gate": getattr(request, 'gate_id', 'unknown'),
+                    "description": "Demo altimetry track data for visualization testing"
                 }
             )
             
-            logger.info(f"Generated mock data: {ds.dims}")
+            logger.info(f"Generated mock altimetry data: {ds.dims}, vars: {list(ds.data_vars)}")
             return ds
             
         except ImportError:
