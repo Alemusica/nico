@@ -253,10 +253,13 @@ def render_map_view(
         bearing=0
     )
     
+    # Use a free map style that doesn't require Mapbox token
+    # Options: "light", "dark", "road", "satellite", "streets"
+    # Or use Carto: "carto-positron", "carto-darkmatter"
     deck = pdk.Deck(
         layers=layers,
         initial_view_state=view_state,
-        map_style="mapbox://styles/mapbox/dark-v10",
+        map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
         tooltip={
             "text": "{name}\n{provider}\nLatency: {latency}"
         }

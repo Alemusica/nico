@@ -621,11 +621,11 @@ class DataService:
     
     def _load_mock_data(self, request: DataRequest) -> Optional[Any]:
         """
-        Generate mock data for testing.
+        Generate mock data for testing - MULTIPLE CYCLES with variable slope.
         
-        Returns an xarray Dataset in ALTIMETRY format (along-track):
+        Returns a LIST of xarray Datasets in ALTIMETRY format (along-track):
         - Dimension: time
-        - Variables: corssh, mean_sea_surface, latitude, longitude
+        - Variables: corssh, mean_sea_surface, latitude, longitude, pass, cycle
         
         This matches the SLCCI format expected by visualization tabs.
         """
@@ -636,76 +636,186 @@ class DataService:
             
             # Parse time range
             start_str = request.time_range.start[:10] if isinstance(request.time_range.start, str) else request.time_range.start.isoformat()[:10]
-            end_str = request.time_range.end[:10] if isinstance(request.time_range.end, str) else request.time_range.end.isoformat()[:10]
             
-            # Generate along-track altimetry data
-            n_points = 1000  # Points per track
+            # Configuration
+            n_cycles = 10  # Generate 10 cycles for timeline variation
+            n_points_per_cycle = 500  # Points per pass
+            pass_number = 481  # Example pass number (Fram Strait S3)
             
-            # Create lat/lon along a pass-like track
+            # Gate geometry
             lat_center = (request.bbox.lat_min + request.bbox.lat_max) / 2
             lon_center = (request.bbox.lon_min + request.bbox.lon_max) / 2
             lat_range = request.bbox.lat_max - request.bbox.lat_min
             lon_range = request.bbox.lon_max - request.bbox.lon_min
             
-            # Simulate satellite track (roughly N-S with some E-W movement)
-            t = np.linspace(0, 1, n_points)
-            lats = request.bbox.lat_min + lat_range * t + np.random.randn(n_points) * 0.01
-            lons = lon_center + np.sin(t * 4 * np.pi) * lon_range * 0.3 + np.random.randn(n_points) * 0.01
+            datasets = []
             
-            # Sort by longitude for profile plots
-            sort_idx = np.argsort(lons)
-            lats = lats[sort_idx]
-            lons = lons[sort_idx]
+            for cycle in range(1, n_cycles + 1):
+                # Simulate satellite track (along-track, roughly N-S)
+                t = np.linspace(0, 1, n_points_per_cycle)
+                lats = request.bbox.lat_min + lat_range * t + np.random.randn(n_points_per_cycle) * 0.005
+                lons = lon_center + np.sin(t * 2 * np.pi) * lon_range * 0.2 + np.random.randn(n_points_per_cycle) * 0.005
+                
+                # Sort by longitude for profile plots
+                sort_idx = np.argsort(lons)
+                lats = lats[sort_idx]
+                lons = lons[sort_idx]
+                
+                # Generate DOT with VARIABLE SLOPE per cycle - REALISTIC VALUES
+                # Seasonal and interannual variability
+                seasonal = 1 + 0.5 * np.sin(2 * np.pi * cycle / 12)
+                interannual = 0.3 * np.sin(2 * np.pi * cycle / 24)
+                random_var = np.random.randn() * 0.2
+                
+                # Base slope: 0.0002 to 0.0008 mm/m (realistic)
+                base_slope_mm_m = (0.0003 + 0.0002 * interannual) * seasonal * (1 + random_var)
+                
+                lon_diff = lons - lon_center
+                distance_m = lon_diff * 111000 * np.cos(np.radians(lat_center))
+                base_dot = base_slope_mm_m * distance_m / 1000
+                
+                # Add mesoscale eddy variability
+                mesoscale = 0.03 * np.sin(2 * np.pi * lons / 1.5 + cycle * 0.5) * np.cos(2 * np.pi * lats / 0.8)
+                
+                # Add realistic noise
+                noise = np.random.randn(n_points_per_cycle) * 0.025
+                
+                # Total DOT
+                dot = base_dot + mesoscale + noise
+                
+                # SSH = DOT + MSS
+                mss = -30.0 + 0.5 * np.sin(2 * np.pi * lons / 10)  # Variable MSS
+                corssh = dot + mss
+                
+                # Generate times (each cycle is ~10 days apart)
+                base_time = pd.Timestamp(start_str) + pd.Timedelta(days=10 * (cycle - 1))
+                times = [base_time + pd.Timedelta(seconds=i * 0.5) for i in range(n_points_per_cycle)]
+                
+                # Create Dataset with pass and cycle info
+                ds = xr.Dataset(
+                    {
+                        "corssh": (["time"], corssh.astype(np.float32)),
+                        "mean_sea_surface": (["time"], mss.astype(np.float32)),
+                        "latitude": (["time"], lats.astype(np.float32)),
+                        "longitude": (["time"], lons.astype(np.float32)),
+                        "dot": (["time"], dot.astype(np.float32)),
+                        "pass": (["time"], np.full(n_points_per_cycle, pass_number, dtype=np.int32)),
+                        "cycle": (["time"], np.full(n_points_per_cycle, cycle, dtype=np.int32)),
+                    },
+                    coords={"time": times},
+                    attrs={
+                        "dataset_id": request.dataset_id,
+                        "source": "mock_altimetry_data",
+                        "generated": datetime.now().isoformat(),
+                        "cycle": cycle,
+                        "pass": pass_number,
+                        "gate": getattr(request, 'gate_id', 'unknown'),
+                        "description": f"Demo altimetry cycle {cycle}, pass {pass_number}"
+                    }
+                )
+                
+                datasets.append(ds)
             
-            # Generate realistic DOT values
-            # Base signal: slope across strait (typical transport signal)
-            base_slope = 0.5e-5  # m/m slope
-            base_dot = base_slope * (lons - lon_center) * 111000  # Convert to meters
+            # Return first dataset for backward compatibility
+            # The sidebar should call load_multi_cycle for multiple datasets
+            logger.info(f"Generated {n_cycles} mock cycles with variable slope")
+            return datasets[0] if len(datasets) == 1 else xr.concat(datasets, dim="time")
             
-            # Add mesoscale variability
-            mesoscale = 0.05 * np.sin(2 * np.pi * lons / 2) * np.cos(2 * np.pi * lats / 1)
-            
-            # Add noise
-            noise = np.random.randn(n_points) * 0.02
-            
-            # Total DOT
-            dot = base_dot + mesoscale + noise
-            
-            # SSH = DOT + geoid (simulate geoid as constant for demo)
-            geoid = -30.0  # Typical Arctic geoid
-            mss = geoid + np.zeros(n_points)  # MSS ≈ geoid for demo
-            corssh = dot + mss  # SSH = DOT + MSS
-            
-            # Generate times
-            base_time = pd.Timestamp(start_str)
-            times = [base_time + pd.Timedelta(seconds=i*0.5) for i in range(n_points)]
-            
-            # Create Dataset in SLCCI format
-            ds = xr.Dataset(
-                {
-                    "corssh": (["time"], corssh.astype(np.float32)),
-                    "mean_sea_surface": (["time"], mss.astype(np.float32)),
-                    "latitude": (["time"], lats.astype(np.float32)),
-                    "longitude": (["time"], lons.astype(np.float32)),
-                    "dot": (["time"], dot.astype(np.float32)),  # Pre-computed for convenience
-                },
-                coords={"time": times},
-                attrs={
-                    "dataset_id": request.dataset_id,
-                    "source": "mock_altimetry_data",
-                    "generated": datetime.now().isoformat(),
-                    "cycle": 1,
-                    "gate": getattr(request, 'gate_id', 'unknown'),
-                    "description": "Demo altimetry track data for visualization testing"
-                }
-            )
-            
-            logger.info(f"Generated mock altimetry data: {ds.dims}, vars: {list(ds.data_vars)}")
-            return ds
-            
-        except ImportError:
-            logger.error("numpy/xarray not available for mock data")
+        except Exception as e:
+            logger.error(f"Mock data generation error: {e}")
             return None
+    
+    def load_multi_cycle_demo(self, request: DataRequest, n_cycles: int = 10) -> tuple[List[Any], List[Dict]]:
+        """
+        Load multiple demo cycles for timeline analysis.
+        
+        Returns:
+            Tuple of (datasets, cycle_info) matching the format expected by visualization.
+        """
+        try:
+            import numpy as np
+            import xarray as xr
+            import pandas as pd
+            
+            start_str = request.time_range.start[:10] if isinstance(request.time_range.start, str) else request.time_range.start.isoformat()[:10]
+            
+            n_points = 500
+            pass_number = 481
+            
+            lat_center = (request.bbox.lat_min + request.bbox.lat_max) / 2
+            lon_center = (request.bbox.lon_min + request.bbox.lon_max) / 2
+            lat_range = request.bbox.lat_max - request.bbox.lat_min
+            lon_range = request.bbox.lon_max - request.bbox.lon_min
+            
+            datasets = []
+            cycle_info = []
+            
+            for cycle in range(1, n_cycles + 1):
+                t = np.linspace(0, 1, n_points)
+                lats = request.bbox.lat_min + lat_range * t + np.random.randn(n_points) * 0.005
+                lons = lon_center + np.sin(t * 2 * np.pi) * lon_range * 0.2 + np.random.randn(n_points) * 0.005
+                
+                sort_idx = np.argsort(lons)
+                lats = lats[sort_idx]
+                lons = lons[sort_idx]
+                
+                # Variable slope per cycle - REALISTIC VALUES
+                # Real DOT slope across Fram Strait: ~0.0001 to 0.001 mm/m
+                # Seasonal and interannual variability
+                seasonal = 1 + 0.5 * np.sin(2 * np.pi * cycle / 12)  # ±50% seasonal
+                interannual = 0.3 * np.sin(2 * np.pi * cycle / 24)   # Slower variation
+                random_var = np.random.randn() * 0.2  # Some randomness
+                
+                # Base slope: 0.0002 to 0.0008 mm/m (realistic range)
+                base_slope_mm_m = (0.0003 + 0.0002 * interannual) * seasonal * (1 + random_var)
+                
+                # Convert to DOT: slope in m per degree longitude
+                # DOT change across strait ≈ slope_mm_m * distance_m / 1000
+                lon_diff = lons - lon_center  # degrees
+                distance_m = lon_diff * 111000 * np.cos(np.radians(lat_center))  # meters
+                base_dot = base_slope_mm_m * distance_m / 1000  # Convert mm to m
+                
+                # Add mesoscale variability (eddies, waves) - ±2-5 cm
+                mesoscale = 0.03 * np.sin(2 * np.pi * lons / 1.5 + cycle * 0.5) * np.cos(2 * np.pi * lats / 0.5)
+                
+                # Add realistic noise (altimeter precision ~2-3 cm)
+                noise = np.random.randn(n_points) * 0.025
+                
+                dot = base_dot + mesoscale + noise
+                
+                mss = -30.0 + 0.5 * np.sin(2 * np.pi * lons / 10)
+                corssh = dot + mss
+                
+                base_time = pd.Timestamp(start_str) + pd.Timedelta(days=10 * (cycle - 1))
+                times = [base_time + pd.Timedelta(seconds=i * 0.5) for i in range(n_points)]
+                
+                ds = xr.Dataset(
+                    {
+                        "corssh": (["time"], corssh.astype(np.float32)),
+                        "mean_sea_surface": (["time"], mss.astype(np.float32)),
+                        "latitude": (["time"], lats.astype(np.float32)),
+                        "longitude": (["time"], lons.astype(np.float32)),
+                        "pass": (["time"], np.full(n_points, pass_number, dtype=np.int32)),
+                    },
+                    coords={"time": times},
+                    attrs={"cycle": cycle, "pass": pass_number}
+                )
+                
+                datasets.append(ds)
+                cycle_info.append({
+                    "filename": f"demo_cycle_{cycle}_pass_{pass_number}.nc",
+                    "cycle": cycle,
+                    "pass": pass_number,
+                    "path": "demo",
+                    "n_points": n_points,
+                    "date": base_time.strftime("%Y-%m-%d")
+                })
+            
+            return datasets, cycle_info
+            
+        except Exception as e:
+            logger.error(f"Multi-cycle demo error: {e}")
+            return [], []
     
     def filter_by_passes(
         self,

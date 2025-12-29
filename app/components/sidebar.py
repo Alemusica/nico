@@ -373,13 +373,13 @@ def _load_data_for_gate(gate_id: str, buffer_km: float):
             selected_dataset = gate.datasets[0]  # First recommended
             st.sidebar.info(f"📊 Using gate's recommended dataset: {selected_dataset}")
         
-        # Fallback to CMEMS sea level
+        # Fallback to demo (no API required)
         if not selected_dataset:
-            selected_dataset = "cmems_sealevel"
-            st.sidebar.info(f"📊 Using default dataset: {selected_dataset}")
+            selected_dataset = "demo"
+            st.sidebar.info(f"📊 Using demo data (no API key needed)")
         
-        # Time range (default: last 30 days or user selection)
-        time_start = st.session_state.get("time_start", datetime.now() - timedelta(days=30))
+        # Time range (default: last 100 days for multiple cycles)
+        time_start = st.session_state.get("time_start", datetime.now() - timedelta(days=100))
         time_end = st.session_state.get("time_end", datetime.now())
         
         # Build request following architecture
@@ -393,6 +393,17 @@ def _load_data_for_gate(gate_id: str, buffer_km: float):
         
         # Show loading state
         with st.spinner(f"🔄 Loading {selected_dataset} for {gate.name}..."):
+            # For demo data, use multi-cycle loader for proper timeline
+            if "demo" in selected_dataset.lower():
+                datasets, cycle_info = data_service.load_multi_cycle_demo(request, n_cycles=10)
+                if datasets:
+                    update_datasets(datasets, cycle_info)
+                    st.sidebar.success(f"✅ Loaded {len(datasets)} demo cycles for {gate.name}")
+                    st.rerun()
+                else:
+                    st.sidebar.error("❌ Could not generate demo data")
+                return
+            
             # DataService routes to correct provider based on dataset_id
             data = data_service.load(request)
             
@@ -402,7 +413,8 @@ def _load_data_for_gate(gate_id: str, buffer_km: float):
                     datasets = [data]
                     cycle_info = [{
                         "filename": f"{selected_dataset}_{gate_id}",
-                        "cycle": 1,
+                        "cycle": data.attrs.get("cycle", 1),
+                        "pass": data.attrs.get("pass", None),
                         "path": selected_dataset,
                         "n_points": data.sizes.get("time", 0)
                     }]
@@ -414,12 +426,12 @@ def _load_data_for_gate(gate_id: str, buffer_km: float):
                 st.sidebar.success(f"✅ Loaded data for {gate.name}")
                 st.rerun()
             else:
-                # No data from provider - try demo data
-                st.sidebar.warning(f"⚠️ No data from {selected_dataset}. Generating demo data...")
-                datasets, cycle_info = _generate_demo_data(gate, buffer_km)
+                # No data from provider - try multi-cycle demo
+                st.sidebar.warning(f"⚠️ No data from {selected_dataset}. Generating demo cycles...")
+                datasets, cycle_info = data_service.load_multi_cycle_demo(request, n_cycles=10)
                 if datasets:
                     update_datasets(datasets, cycle_info)
-                    st.sidebar.success(f"✅ Generated demo data for {gate.name}")
+                    st.sidebar.success(f"✅ Generated {len(datasets)} demo cycles for {gate.name}")
                     st.rerun()
                 else:
                     st.sidebar.error("❌ Could not load or generate data")
