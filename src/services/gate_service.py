@@ -78,6 +78,18 @@ class GateService:
         """
         return self._catalog.get(gate_id)
     
+    def get_gate(self, gate_id: str) -> Optional[GateModel]:
+        """
+        Alias for select_gate (compatibility).
+        
+        Args:
+            gate_id: Gate identifier
+            
+        Returns:
+            GateModel if found, None otherwise
+        """
+        return self.select_gate(gate_id)
+    
     def list_gates(self) -> List[GateModel]:
         """
         List all available gates.
@@ -133,6 +145,18 @@ class GateService:
             self._geometry_cache[gate_id] = gdf
         
         return gdf
+    
+    def get_gate_geometry(self, gate_id: str) -> Optional[Any]:
+        """
+        Alias for load_geometry (compatibility with UI components).
+        
+        Args:
+            gate_id: Gate identifier
+            
+        Returns:
+            GeoDataFrame with gate geometry
+        """
+        return self.load_geometry(gate_id)
     
     def get_bbox(
         self,

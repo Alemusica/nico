@@ -53,6 +53,49 @@ def search_catalog(
     latency: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Search catalog with filters."""
+    
+    # First try direct import (more reliable than API)
+    try:
+        from src.data_manager.intake_bridge import get_catalog
+        cat = get_catalog()
+        
+        # Get all datasets
+        all_datasets = []
+        for ds_id in cat.list_datasets():
+            meta = cat.get_metadata(ds_id)
+            all_datasets.append({
+                "id": ds_id,
+                "description": meta.get("description", ds_id),
+                "provider": meta.get("provider", ""),
+                "variables": meta.get("variables", []),
+                "latency": meta.get("latency", ""),
+                "latency_badge": meta.get("latency_badge", "⚫"),
+                "status": meta.get("status", "available"),
+                "resolution_spatial": meta.get("resolution_spatial", ""),
+                "resolution_temporal": meta.get("resolution_temporal", ""),
+            })
+        
+        # Filter
+        results = all_datasets
+        
+        if provider:
+            results = [d for d in results if provider.lower() in d.get("provider", "").lower()]
+        
+        if variables:
+            results = [
+                d for d in results 
+                if any(v.lower() in [vv.lower() for vv in d.get("variables", [])] for v in variables)
+            ]
+        
+        if latency:
+            results = [d for d in results if d.get("latency_badge", "") == latency]
+        
+        return {"matches": results, "count": len(results)}
+        
+    except ImportError as e:
+        st.warning(f"intake_bridge not available: {e}")
+    
+    # Fallback to API
     try:
         params = {}
         if provider:
@@ -69,18 +112,7 @@ def search_catalog(
     except Exception:
         pass
     
-    # Fallback to direct search
-    try:
-        from src.data_manager.intake_bridge import get_catalog
-        cat = get_catalog()
-        results = cat.search(
-            variables=variables,
-            latency_badge=latency,
-            provider=provider,
-        )
-        return {"matches": results, "count": len(results)}
-    except ImportError:
-        return None
+    return None
 
 
 def render_catalog_tab():

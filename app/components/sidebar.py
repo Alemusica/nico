@@ -93,15 +93,23 @@ class AppConfig:
     gate_buffer_km: float = 50.0  # Buffer around gate for data selection
 
 
+# Initialize GateService once
+try:
+    from src.services import GateService
+    _gate_service = GateService()
+    GATE_SERVICE_AVAILABLE = True
+except ImportError:
+    _gate_service = None
+    GATE_SERVICE_AVAILABLE = False
+
+
 def render_sidebar() -> AppConfig:
     """Render sidebar and return configuration."""
     
     st.sidebar.title("⚙️ Settings")
     
     # === GATE SELECTION (TOP PRIORITY) ===
-    # TEMPORARILY DISABLED FOR DEBUGGING
-    # gate_info = _render_gate_selector()
-    st.sidebar.info("🔧 Gate selector temporarily disabled")
+    gate_info = _render_gate_selector()
     
     st.sidebar.divider()
     
@@ -131,7 +139,12 @@ def _render_gate_selector() -> dict | None:
     
     st.sidebar.subheader("🗺️ Select Ocean Gate")
     
-    gates_dir = Path("/Users/alessioivoycazzaniga/nico/gates")
+    # Use GateService if available
+    if GATE_SERVICE_AVAILABLE and _gate_service:
+        return _render_gate_selector_v2()
+    
+    # Fallback to static GATE_CATALOG
+    gates_dir = Path(__file__).parent.parent.parent / "gates"
     
     if not gates_dir.exists():
         st.sidebar.warning("⚠️ Gates directory not found")
@@ -204,6 +217,109 @@ def _render_gate_selector() -> dict | None:
         # Load gate geometry
         if selected_gate_id != current_gate:
             _load_gate_geometry(selected_gate_id, gates_dir)
+    else:
+        st.session_state["gate_geometry"] = None
+    
+    st.session_state["selected_gate"] = selected_gate_id
+    
+    return {"gate_id": selected_gate_id}
+
+
+def _render_gate_selector_v2() -> dict | None:
+    """
+    Render gate selection using the new GateService.
+    
+    This version uses:
+    - config/gates.yaml for gate metadata
+    - Relative paths
+    - GateService for all operations
+    """
+    # Get regions
+    regions = _gate_service.get_regions()
+    
+    # Region filter (optional)
+    selected_region = st.sidebar.selectbox(
+        "🌍 Filter by Region",
+        ["All Regions"] + regions,
+        help="Filter gates by ocean region",
+        key="gate_region_filter"
+    )
+    
+    # Get gates
+    if selected_region == "All Regions":
+        gates = _gate_service.list_gates()
+    else:
+        gates = _gate_service.list_gates_by_region(selected_region)
+    
+    # Build options
+    gate_options = ["🌍 None (Global Analysis)"]
+    gate_ids = [None]
+    
+    for gate in gates:
+        # Icon based on gate type
+        icon = "🚪" if "strait" in gate.name.lower() else "🌊"
+        gate_options.append(f"{icon} {gate.name}")
+        gate_ids.append(gate.id)
+    
+    # Current selection
+    current_gate = st.session_state.get("selected_gate")
+    current_idx = 0
+    if current_gate and current_gate in gate_ids:
+        current_idx = gate_ids.index(current_gate)
+    
+    # Selector
+    selected_idx = st.sidebar.selectbox(
+        "Choose a Gate",
+        range(len(gate_options)),
+        format_func=lambda i: gate_options[i],
+        index=current_idx,
+        help="Select an ocean strait/gate to analyze",
+        key="main_gate_selector_v2"
+    )
+    
+    selected_gate_id = gate_ids[selected_idx]
+    
+    # Show gate info card
+    if selected_gate_id:
+        gate = _gate_service.get_gate(selected_gate_id)
+        
+        if gate:
+            # Nice info card
+            st.sidebar.markdown(f"""
+            <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); 
+                        padding: 12px; border-radius: 8px; margin: 8px 0;
+                        border-left: 4px solid #4fc3f7;">
+                <div style="color: #4fc3f7; font-size: 0.8em; margin-bottom: 4px;">
+                    📍 {gate.region}
+                </div>
+                <div style="color: white; font-size: 0.9em;">
+                    {gate.description}
+                </div>
+                <div style="color: #90caf9; font-size: 0.75em; margin-top: 6px;">
+                    Datasets: {', '.join(gate.datasets) if gate.datasets else 'Any'}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Buffer slider
+            buffer_km = st.sidebar.slider(
+                "Buffer (km)",
+                min_value=10,
+                max_value=200,
+                value=int(gate.default_buffer_km) if gate.default_buffer_km else 50,
+                step=10,
+                help="Area around the gate to include in analysis",
+                key="gate_buffer_slider"
+            )
+            st.session_state["gate_buffer_km"] = buffer_km
+            
+            # Load geometry if available
+            try:
+                geometry = _gate_service.get_gate_geometry(selected_gate_id)
+                st.session_state["gate_geometry"] = geometry
+            except Exception as e:
+                st.sidebar.warning(f"⚠️ Could not load geometry: {e}")
+                st.session_state["gate_geometry"] = None
     else:
         st.session_state["gate_geometry"] = None
     
