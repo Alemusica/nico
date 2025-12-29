@@ -1,0 +1,203 @@
+"""
+Tests for Core Models
+=====================
+Tests for src/core/models.py
+"""
+
+import pytest
+from datetime import datetime, timedelta
+
+
+class TestBoundingBox:
+    """Tests for BoundingBox model."""
+    
+    def test_valid_bbox(self):
+        """Test valid bounding box creation."""
+        from src.core.models import BoundingBox
+        
+        bbox = BoundingBox(
+            lat_min=60.0,
+            lat_max=85.0,
+            lon_min=-20.0,
+            lon_max=20.0
+        )
+        
+        assert bbox.lat_min == 60.0
+        assert bbox.lat_max == 85.0
+        assert bbox.lon_min == -20.0
+        assert bbox.lon_max == 20.0
+    
+    def test_invalid_lat_range(self):
+        """Test that lat_min > lat_max raises error."""
+        from src.core.models import BoundingBox
+        from pydantic import ValidationError
+        
+        with pytest.raises(ValidationError):
+            BoundingBox(
+                lat_min=85.0,  # Greater than max
+                lat_max=60.0,
+                lon_min=-20.0,
+                lon_max=20.0
+            )
+    
+    def test_invalid_lon_range(self):
+        """Test that lon_min > lon_max raises error (except for antimeridian)."""
+        from src.core.models import BoundingBox
+        from pydantic import ValidationError
+        
+        # This should raise because it's not spanning antimeridian
+        with pytest.raises(ValidationError):
+            BoundingBox(
+                lat_min=60.0,
+                lat_max=85.0,
+                lon_min=20.0,  # Greater than max
+                lon_max=-20.0
+            )
+    
+    def test_lat_bounds(self):
+        """Test latitude is within -90 to 90."""
+        from src.core.models import BoundingBox
+        from pydantic import ValidationError
+        
+        with pytest.raises(ValidationError):
+            BoundingBox(
+                lat_min=-100.0,  # Invalid
+                lat_max=85.0,
+                lon_min=-20.0,
+                lon_max=20.0
+            )
+    
+    def test_center_property(self):
+        """Test center calculation."""
+        from src.core.models import BoundingBox
+        
+        bbox = BoundingBox(
+            lat_min=60.0,
+            lat_max=80.0,
+            lon_min=-20.0,
+            lon_max=20.0
+        )
+        
+        center = bbox.center
+        assert center[0] == 70.0  # lat
+        assert center[1] == 0.0   # lon
+
+
+class TestTimeRange:
+    """Tests for TimeRange model."""
+    
+    def test_valid_time_range(self):
+        """Test valid time range creation."""
+        from src.core.models import TimeRange
+        
+        start = datetime(2024, 1, 1)
+        end = datetime(2024, 1, 31)
+        
+        tr = TimeRange(start=start, end=end)
+        
+        assert tr.start == start
+        assert tr.end == end
+    
+    def test_invalid_time_range(self):
+        """Test that start > end raises error."""
+        from src.core.models import TimeRange
+        from pydantic import ValidationError
+        
+        with pytest.raises(ValidationError):
+            TimeRange(
+                start=datetime(2024, 12, 31),  # After end
+                end=datetime(2024, 1, 1)
+            )
+    
+    def test_days_property(self):
+        """Test duration in days."""
+        from src.core.models import TimeRange
+        
+        tr = TimeRange(
+            start=datetime(2024, 1, 1),
+            end=datetime(2024, 1, 11)
+        )
+        
+        assert tr.days == 10
+
+
+class TestGateModel:
+    """Tests for GateModel."""
+    
+    def test_gate_creation(self):
+        """Test gate model creation."""
+        from src.core.models import GateModel
+        
+        gate = GateModel(
+            id="fram_strait",
+            name="Fram Strait",
+            file="fram_strait.shp",
+            region="Atlantic Sector",
+            lat_min=76.0,
+            lat_max=82.0,
+            lon_min=-20.0,
+            lon_max=15.0
+        )
+        
+        assert gate.id == "fram_strait"
+        assert gate.name == "Fram Strait"
+        assert gate.region == "Atlantic Sector"
+    
+    def test_gate_with_passes(self):
+        """Test gate with closest passes."""
+        from src.core.models import GateModel
+        
+        gate = GateModel(
+            id="fram_strait",
+            name="Fram Strait",
+            file="fram_strait.shp",
+            closest_passes=[481, 360, 239]
+        )
+        
+        assert gate.closest_passes == [481, 360, 239]
+
+
+class TestDataRequest:
+    """Tests for DataRequest model."""
+    
+    def test_data_request(self):
+        """Test data request creation."""
+        from src.core.models import DataRequest, BoundingBox, TimeRange
+        
+        bbox = BoundingBox(
+            lat_min=60.0, lat_max=85.0,
+            lon_min=-20.0, lon_max=20.0
+        )
+        
+        time_range = TimeRange(
+            start=datetime(2024, 1, 1),
+            end=datetime(2024, 1, 31)
+        )
+        
+        request = DataRequest(
+            bbox=bbox,
+            time_range=time_range,
+            variables=["sla", "adt"],
+            dataset_id="cmems_sla"
+        )
+        
+        assert request.variables == ["sla", "adt"]
+        assert request.dataset_id == "cmems_sla"
+
+
+class TestResolution:
+    """Tests for resolution enums."""
+    
+    def test_temporal_resolution(self):
+        """Test temporal resolution enum."""
+        from src.core.models import TemporalResolution
+        
+        assert TemporalResolution.DAILY.value == "daily"
+        assert TemporalResolution.MONTHLY.value == "monthly"
+    
+    def test_spatial_resolution(self):
+        """Test spatial resolution enum."""
+        from src.core.models import SpatialResolution
+        
+        assert SpatialResolution.QUARTER_DEGREE.value == 0.25
+        assert SpatialResolution.HALF_DEGREE.value == 0.5

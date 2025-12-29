@@ -1,0 +1,345 @@
+"""
+Core Domain Models
+==================
+Pydantic models shared across all branches and layers.
+
+These models provide:
+- Type safety with runtime validation
+- JSON serialization for API compatibility
+- Self-documenting schemas
+- Consistent data structures across Streamlit and API
+
+Usage:
+    from src.core.models import BoundingBox, GateModel, TimeRange, DataRequest
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import Enum
+from typing import Any, List, Optional, Tuple
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+# =============================================================================
+# ENUMS
+# =============================================================================
+
+class TemporalResolution(str, Enum):
+    """Temporal resolution options for data requests."""
+    HOURLY = "hourly"
+    THREE_HOURLY = "3-hourly"
+    SIX_HOURLY = "6-hourly"
+    DAILY = "daily"
+    MONTHLY = "monthly"
+
+
+class SpatialResolution(str, Enum):
+    """Spatial resolution options for data requests."""
+    HIGH = "0.1"
+    MEDIUM = "0.25"
+    LOW = "0.5"
+    COARSE = "1.0"
+
+
+class DataSource(str, Enum):
+    """Available data sources."""
+    CMEMS = "cmems"
+    ERA5 = "era5"
+    CYGNSS = "cygnss"
+    CLIMATE_INDICES = "climate_indices"
+    LOCAL = "local"
+
+
+class GateRegion(str, Enum):
+    """Ocean gate regions."""
+    ATLANTIC_SECTOR = "Atlantic Sector"
+    PACIFIC_SECTOR = "Pacific Sector"
+    CANADIAN_ARCHIPELAGO = "Canadian Archipelago"
+
+
+# =============================================================================
+# CORE MODELS
+# =============================================================================
+
+class BoundingBox(BaseModel):
+    """
+    Geographic bounding box with validation.
+    
+    Attributes:
+        lat_min: Minimum latitude (-90 to 90)
+        lat_max: Maximum latitude (-90 to 90)
+        lon_min: Minimum longitude (-180 to 180)
+        lon_max: Maximum longitude (-180 to 180)
+    
+    Example:
+        >>> bbox = BoundingBox(lat_min=78.0, lat_max=80.0, lon_min=-20.0, lon_max=10.0)
+        >>> print(bbox.lat_range)
+        (78.0, 80.0)
+    """
+    lat_min: float = Field(..., ge=-90, le=90, description="Minimum latitude")
+    lat_max: float = Field(..., ge=-90, le=90, description="Maximum latitude")
+    lon_min: float = Field(..., ge=-180, le=180, description="Minimum longitude")
+    lon_max: float = Field(..., ge=-180, le=180, description="Maximum longitude")
+    
+    @model_validator(mode='after')
+    def validate_ranges(self) -> 'BoundingBox':
+        """Ensure lat_min <= lat_max."""
+        if self.lat_min > self.lat_max:
+            raise ValueError(f"lat_min ({self.lat_min}) must be <= lat_max ({self.lat_max})")
+        # Note: lon_min > lon_max is valid (crosses dateline)
+        return self
+    
+    @property
+    def as_tuple(self) -> Tuple[float, float, float, float]:
+        """Return as (lat_min, lat_max, lon_min, lon_max)."""
+        return (self.lat_min, self.lat_max, self.lon_min, self.lon_max)
+    
+    @property
+    def lat_range(self) -> Tuple[float, float]:
+        """Return latitude range as (min, max)."""
+        return (self.lat_min, self.lat_max)
+    
+    @property
+    def lon_range(self) -> Tuple[float, float]:
+        """Return longitude range as (min, max)."""
+        return (self.lon_min, self.lon_max)
+    
+    @property
+    def as_list(self) -> List[float]:
+        """Return as [lat_min, lat_max, lon_min, lon_max] for API compatibility."""
+        return [self.lat_min, self.lat_max, self.lon_min, self.lon_max]
+    
+    @property
+    def crosses_dateline(self) -> bool:
+        """Check if bounding box crosses the international dateline."""
+        return self.lon_min > self.lon_max
+    
+    @classmethod
+    def from_tuple(cls, bbox: Tuple[float, float, float, float]) -> 'BoundingBox':
+        """Create from tuple (lat_min, lat_max, lon_min, lon_max)."""
+        return cls(lat_min=bbox[0], lat_max=bbox[1], lon_min=bbox[2], lon_max=bbox[3])
+    
+    @classmethod
+    def from_list(cls, bbox: List[float]) -> 'BoundingBox':
+        """Create from list [lat_min, lat_max, lon_min, lon_max]."""
+        if len(bbox) != 4:
+            raise ValueError(f"Expected 4 elements, got {len(bbox)}")
+        return cls(lat_min=bbox[0], lat_max=bbox[1], lon_min=bbox[2], lon_max=bbox[3])
+
+
+class TimeRange(BaseModel):
+    """
+    Temporal range for data queries.
+    
+    Attributes:
+        start: Start date in ISO format (YYYY-MM-DD)
+        end: End date in ISO format (YYYY-MM-DD)
+    
+    Example:
+        >>> tr = TimeRange(start="2024-01-01", end="2024-12-31")
+        >>> print(tr.start_date)
+        datetime(2024, 1, 1)
+    """
+    start: str = Field(..., description="Start date (YYYY-MM-DD)")
+    end: str = Field(..., description="End date (YYYY-MM-DD)")
+    
+    @field_validator('start', 'end')
+    @classmethod
+    def validate_date(cls, v: str) -> str:
+        """Validate ISO date format."""
+        try:
+            datetime.fromisoformat(v)
+        except ValueError:
+            raise ValueError(f"Invalid date format: {v}. Use YYYY-MM-DD")
+        return v
+    
+    @model_validator(mode='after')
+    def validate_range(self) -> 'TimeRange':
+        """Ensure start <= end."""
+        if self.start_date > self.end_date:
+            raise ValueError(f"start ({self.start}) must be <= end ({self.end})")
+        return self
+    
+    @property
+    def start_date(self) -> datetime:
+        """Return start as datetime object."""
+        return datetime.fromisoformat(self.start)
+    
+    @property
+    def end_date(self) -> datetime:
+        """Return end as datetime object."""
+        return datetime.fromisoformat(self.end)
+    
+    @property
+    def days(self) -> int:
+        """Return number of days in range."""
+        return (self.end_date - self.start_date).days
+
+
+class GateModel(BaseModel):
+    """
+    Ocean gate definition.
+    
+    Attributes:
+        id: Unique gate identifier (e.g., "fram_strait")
+        name: Display name with emoji (e.g., "🧊 Fram Strait")
+        file: Shapefile filename
+        description: Human-readable description
+        region: Geographic region (Atlantic, Pacific, Canadian)
+        closest_passes: Pre-computed closest satellite passes
+    
+    Example:
+        >>> gate = GateModel(
+        ...     id="fram_strait",
+        ...     name="🧊 Fram Strait",
+        ...     file="fram_strait_S3_pass_481.shp",
+        ...     description="Main Arctic-Atlantic exchange",
+        ...     region="Atlantic Sector"
+        ... )
+    """
+    id: str = Field(..., description="Unique gate identifier")
+    name: str = Field(..., description="Display name with emoji")
+    file: str = Field(..., description="Shapefile filename")
+    description: str = Field(..., description="Human-readable description")
+    region: str = Field(..., description="Geographic region")
+    closest_passes: Optional[List[int]] = Field(default=None, description="Pre-computed closest satellite passes")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "fram_strait",
+                "name": "🧊 Fram Strait",
+                "file": "fram_strait_S3_pass_481.shp",
+                "description": "Main Arctic-Atlantic exchange",
+                "region": "Atlantic Sector",
+                "closest_passes": [481, 254, 127, 308, 55]
+            }
+        }
+
+
+class ResolutionConfig(BaseModel):
+    """
+    Resolution configuration for data downloads.
+    
+    Attributes:
+        temporal: Temporal resolution (hourly, daily, etc.)
+        spatial: Spatial resolution in degrees
+    """
+    temporal: TemporalResolution = Field(default=TemporalResolution.DAILY)
+    spatial: SpatialResolution = Field(default=SpatialResolution.MEDIUM)
+
+
+class DataRequest(BaseModel):
+    """
+    Unified data request model for API and services.
+    
+    Used by both FastAPI endpoints and Streamlit to request data.
+    
+    Attributes:
+        bbox: Geographic bounding box
+        time_range: Temporal range
+        variables: List of variables to retrieve
+        gate_id: Optional gate identifier (auto-populates bbox)
+        pass_number: Optional satellite pass filter
+        source: Data source (cmems, era5, etc.)
+        resolution: Resolution configuration
+    
+    Example:
+        >>> request = DataRequest(
+        ...     bbox=BoundingBox(lat_min=78, lat_max=80, lon_min=-20, lon_max=10),
+        ...     time_range=TimeRange(start="2024-01-01", end="2024-12-31"),
+        ...     variables=["sla", "adt"],
+        ...     gate_id="fram_strait"
+        ... )
+    """
+    bbox: BoundingBox
+    time_range: TimeRange
+    variables: List[str] = Field(default_factory=list)
+    gate_id: Optional[str] = Field(default=None, description="Gate identifier")
+    pass_number: Optional[int] = Field(default=None, description="Satellite pass number")
+    source: Optional[DataSource] = Field(default=None, description="Data source")
+    resolution: ResolutionConfig = Field(default_factory=ResolutionConfig)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "bbox": {
+                    "lat_min": 78.0,
+                    "lat_max": 80.0,
+                    "lon_min": -20.0,
+                    "lon_max": 10.0
+                },
+                "time_range": {
+                    "start": "2024-01-01",
+                    "end": "2024-12-31"
+                },
+                "variables": ["sla", "adt"],
+                "gate_id": "fram_strait",
+                "source": "cmems"
+            }
+        }
+
+
+# =============================================================================
+# RESPONSE MODELS
+# =============================================================================
+
+class GateResponse(BaseModel):
+    """API response for gate details."""
+    gate: GateModel
+    bbox: Optional[BoundingBox] = None
+    available: bool = True
+
+
+class DataResponse(BaseModel):
+    """API response for data download status."""
+    request_id: str
+    status: str = Field(..., description="pending, downloading, ready, error")
+    progress: float = Field(default=0.0, ge=0.0, le=100.0)
+    data_url: Optional[str] = None
+    metadata: Optional[dict] = None
+    error: Optional[str] = None
+
+
+class GateListResponse(BaseModel):
+    """API response for listing gates."""
+    gates: List[GateModel]
+    total: int
+
+
+# =============================================================================
+# LEGACY COMPATIBILITY
+# =============================================================================
+
+def bbox_to_legacy_format(bbox: BoundingBox) -> dict:
+    """
+    Convert BoundingBox to legacy format used in existing code.
+    
+    Returns:
+        dict with lat_range and lon_range tuples
+    """
+    return {
+        "lat_range": bbox.lat_range,
+        "lon_range": bbox.lon_range,
+    }
+
+
+def legacy_to_bbox(lat_range: Tuple[float, float], lon_range: Tuple[float, float]) -> BoundingBox:
+    """
+    Convert legacy lat_range/lon_range to BoundingBox.
+    
+    Args:
+        lat_range: (lat_min, lat_max)
+        lon_range: (lon_min, lon_max)
+    
+    Returns:
+        BoundingBox instance
+    """
+    return BoundingBox(
+        lat_min=lat_range[0],
+        lat_max=lat_range[1],
+        lon_min=lon_range[0],
+        lon_max=lon_range[1]
+    )

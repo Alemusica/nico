@@ -86,6 +86,7 @@ from api.routers.analysis_router import router as analysis_router
 from api.routers.analysis import router as advanced_analysis_router
 from api.routers.chat_router import router as chat_router
 from api.routers.data_router import router as data_router
+from api.routers.gates_router import router as gates_router
 from api.routers.health_router import router as health_router
 from api.routers.investigation_router import router as investigation_router
 from api.routers.knowledge_router import router as knowledge_router
@@ -192,6 +193,10 @@ Check system health: `GET /health`
             "description": "Dataset management, upload, and caching operations"
         },
         {
+            "name": "gates",
+            "description": "Ocean gates, bounding boxes, and satellite passes"
+        },
+        {
             "name": "analysis",
             "description": "Causal discovery and root cause analysis"
         },
@@ -225,6 +230,7 @@ app.include_router(analysis_router, prefix=API_V1_PREFIX)
 app.include_router(advanced_analysis_router, prefix=API_V1_PREFIX)
 app.include_router(chat_router, prefix=API_V1_PREFIX)
 app.include_router(data_router, prefix=API_V1_PREFIX)
+app.include_router(gates_router, prefix=API_V1_PREFIX)
 app.include_router(health_router, prefix=API_V1_PREFIX)
 app.include_router(investigation_router, prefix=API_V1_PREFIX)
 app.include_router(knowledge_router, prefix=API_V1_PREFIX)

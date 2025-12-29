@@ -17,6 +17,13 @@ from .satellite_fusion import (
     SATELLITE_CONFIGS,
 )
 
+# New unified loader
+try:
+    from .unified_loader import UnifiedLoader, CacheManager, load_data
+    UNIFIED_LOADER_AVAILABLE = True
+except ImportError:
+    UNIFIED_LOADER_AVAILABLE = False
+
 __all__ = [
     # Loaders
     "load_cycle",
@@ -36,4 +43,8 @@ __all__ = [
     "SatelliteFusionEngine",
     "DynamicIndexCalculator",
     "SATELLITE_CONFIGS",
+    # Unified loader (if available)
+    "UnifiedLoader",
+    "CacheManager",
+    "load_data",
 ]

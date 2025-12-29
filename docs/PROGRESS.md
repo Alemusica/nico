@@ -1,6 +1,6 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2024-12-28
+> Last Updated: 2025-01-XX (Session 2)
 > Agent: Use this file to track progress. Update after each task.
 
 ---
@@ -33,6 +33,27 @@
 | Task | Status | Started | Completed | Notes |
 |------|--------|---------|-----------|-------|
 | 3.1 causal_graph.py | ✅ DONE | 2024-12-28 | 2024-12-28 | SurrealDB + 4 known chains |
+
+---
+
+## 🔄 UNIFIED ARCHITECTURE REFACTORING (v2.0)
+
+### GitHub Issue: #12
+https://github.com/Alemusica/nico/issues/12
+
+| Phase | Task | Status | Notes |
+|-------|------|--------|-------|
+| 0 | Documentation | ✅ DONE | ROADMAP, GATES_CATALOG, MODELS docs |
+| 1 | Core Models | ✅ DONE | src/core/models.py (Pydantic) |
+| 2 | Config Files | ✅ DONE | config/gates.yaml, datasets.yaml, regions.yaml, defaults.yaml |
+| 3 | Gates Module | ✅ DONE | src/gates/{catalog,loader,buffer,passes}.py |
+| 4 | Services Layer | ✅ DONE | src/services/{gate,data,analysis}_service.py |
+| 5 | API Integration | ✅ DONE | api/routers/gates_router.py |
+| 6 | Streamlit v2 | ✅ DONE | app/components/sidebar_v2.py |
+| 7 | Data Loaders | ✅ DONE | src/data/unified_loader.py |
+| 8 | Tests | ✅ DONE | tests/test_core_models.py, test_gate_service.py |
+| 9 | Docs Update | 🔄 IN PROGRESS | Update docstrings, README |
+| 10 | Merge | ⬜ TODO | Merge to master, cleanup |
 
 ---
 

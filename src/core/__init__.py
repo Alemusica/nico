@@ -17,6 +17,20 @@ from .config import (
 )
 from .resolver import VariableResolver, auto_load, compare_formats
 
+# New unified models
+try:
+    from .models import (
+        BoundingBox,
+        TimeRange,
+        GateModel,
+        DataRequest,
+        TemporalResolution,
+        SpatialResolution,
+    )
+    MODELS_AVAILABLE = True
+except ImportError:
+    MODELS_AVAILABLE = False
+
 __all__ = [
     # Satellite
     "detect_satellite_type",
@@ -41,4 +55,11 @@ __all__ = [
     "VariableResolver",
     "auto_load",
     "compare_formats",
+    # Models (if available)
+    "BoundingBox",
+    "TimeRange",
+    "GateModel",
+    "DataRequest",
+    "TemporalResolution",
+    "SpatialResolution",
 ]
