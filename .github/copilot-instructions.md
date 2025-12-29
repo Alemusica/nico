@@ -1,6 +1,38 @@
 # 🤖 Copilot/AI Agent Instructions
 
-## 🌿 BRANCH STRATEGY (READ FIRST!)
+> ⚠️ **CRITICAL: READ THIS ENTIRE FILE FIRST** - Every agent, every session, every time.
+
+---
+
+## 🔄 STEP 0: MANDATORY GIT PULL (DO THIS FIRST!)
+
+**ALWAYS execute these commands when starting ANY new session:**
+
+```bash
+cd /Users/nicolocaron/Documents/GitHub/nico
+git fetch origin
+git pull origin $(git branch --show-current)
+```
+
+**Why?** Multiple agents work on this repo. Without pulling first, you WILL have stale context and create conflicts.
+
+---
+
+## 📚 STEP 1: Required Reading Order
+
+After pulling, read these docs IN THIS EXACT ORDER:
+
+| # | File | What You Learn |
+|---|------|----------------|
+| 1 | `docs/PROGRESS.md` | Current state, what's done, what's broken |
+| 2 | `docs/FEATURE_INVENTORY.md` | All features across all branches |
+| 3 | `docs/CHAT_HISTORY.md` | Previous conversation context (if exists) |
+| 4 | Your branch agent doc (see table below) | Branch-specific tasks |
+| 5 | `docs/TASKS/CONTEXT.md` | Code awareness |
+
+---
+
+## 🌿 STEP 2: Branch Strategy
 
 **Check which branch you're on:**
 ```bash
@@ -121,4 +153,84 @@ docker ps
 
 # Start SurrealDB if not running
 docker start surrealdb
+```
+
+---
+
+## 📊 Logging (IMPORTANT)
+
+Use centralized logging from `src/core/logging_config.py`:
+
+```python
+from src.core.logging_config import get_logger, log_call, log_errors
+
+logger = get_logger(__name__)
+
+@log_call(logger)  # Auto-log function entry/exit
+def my_function():
+    logger.info("Processing", extra={"key": "value"})
+    return result
+```
+
+**Log files:**
+- `logs/nico.log` - All logs (JSON format)
+- `logs/nico_errors.log` - Errors only
+
+---
+
+## 📝 When Creating New Features
+
+1. **Check `docs/FEATURE_INVENTORY.md`** - Is it already implemented?
+2. **Add to services layer first** - `src/services/`
+3. **Use existing models** - `src/core/models.py`
+4. **Document in FEATURE_INVENTORY** - Add your feature
+5. **Update PROGRESS.md** - Track completion
+6. **Create GitHub Issue** - For visibility
+
+---
+
+## ✅ Pre-Commit Checklist
+
+Before EVERY commit:
+- [ ] Run `git pull origin <branch>` first
+- [ ] Update `docs/PROGRESS.md`
+- [ ] Update `docs/FEATURE_INVENTORY.md` if new features
+- [ ] Run tests: `.venv/bin/python -m pytest tests/ -v`
+- [ ] Create GitHub Issue for bugs/features found
+
+---
+
+## 🏗️ Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      PRESENTATION LAYER                      │
+│  ┌─────────────────┐    ┌─────────────────────────────────┐ │
+│  │   Streamlit     │    │      React + Vite               │ │
+│  │   (Port 8501)   │    │      (Port 5173)                │ │
+│  └────────┬────────┘    └───────────────┬─────────────────┘ │
+│           └──────────────┬──────────────┘                    │
+│                          ▼                                   │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                   FastAPI Backend                      │  │
+│  │                    (Port 8000)                         │  │
+│  │  /api/v1/data, /api/v1/gates, /api/v1/knowledge       │  │
+│  └───────────────────────────────────────────────────────┘  │
+└──────────────────────────┼───────────────────────────────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      SERVICES LAYER                          │
+│  src/services/                                               │
+│  ├── gate_service.py    - Gate operations                   │
+│  ├── data_service.py    - Unified data loading              │
+│  └── analysis_service.py - Analysis pipelines               │
+└──────────────────────────┼───────────────────────────────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                        DATA LAYER                            │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
+│  │ SurrealDB    │  │ Intake       │  │ External APIs    │   │
+│  │ (Port 8001)  │  │ catalog.yaml │  │ CMEMS, ERA5, etc │   │
+│  └──────────────┘  └──────────────┘  └──────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
 ```

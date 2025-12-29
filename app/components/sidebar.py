@@ -468,31 +468,71 @@ def _render_analysis_params() -> AppConfig:
     
     # Spatial filter
     st.sidebar.subheader("🗺️ Spatial Filter")
-    use_filter = st.sidebar.checkbox("Apply Spatial Filter")
-    
-    lat_range = None
-    lon_range = None
-    
-    if use_filter:
-        lat_data = ds_sample["latitude"].values.flatten()
-        lon_data = ds_sample["longitude"].values.flatten()
-        
-        lat_min, lat_max = float(np.nanmin(lat_data)), float(np.nanmax(lat_data))
-        lon_min, lon_max = float(np.nanmin(lon_data)), float(np.nanmax(lon_data))
-        
-        lat_range = st.sidebar.slider(
-            "Latitude Range",
-            lat_min, lat_max, (lat_min, lat_max),
-        )
-        lon_range = st.sidebar.slider(
-            "Longitude Range",
-            lon_min, lon_max, (lon_min, lon_max),
-        )
     
     # Get gate info from session state
     selected_gate = st.session_state.get("selected_gate")
     gate_geometry = st.session_state.get("gate_geometry")
     gate_buffer = st.session_state.get("gate_buffer_km", 50.0)
+    
+    # Auto-apply gate bbox if a gate is selected
+    gate_bbox = None
+    if selected_gate and GATE_SERVICE_AVAILABLE and _gate_service:
+        try:
+            gate = _gate_service.get_gate(selected_gate)
+            if gate and gate.bbox:
+                gate_bbox = gate.bbox
+                st.sidebar.success(f"🎯 Using gate bounds: {gate.name}")
+        except Exception:
+            pass
+    
+    # If gate provides bbox, use it as default filter
+    if gate_bbox:
+        # Apply buffer (approximate: 1 degree ≈ 111 km)
+        buffer_deg = gate_buffer / 111.0
+        
+        default_lat_min = gate_bbox.lat_min - buffer_deg
+        default_lat_max = gate_bbox.lat_max + buffer_deg
+        default_lon_min = gate_bbox.lon_min - buffer_deg
+        default_lon_max = gate_bbox.lon_max + buffer_deg
+        
+        st.sidebar.info(f"📍 Gate bbox + {gate_buffer}km buffer")
+        
+        # Show gate filter is active
+        use_filter = st.sidebar.checkbox("Apply Gate Filter", value=True, key="gate_filter_checkbox")
+        
+        if use_filter:
+            lat_range = (default_lat_min, default_lat_max)
+            lon_range = (default_lon_min, default_lon_max)
+            
+            # Show the applied ranges
+            st.sidebar.caption(f"Lat: {lat_range[0]:.2f}° to {lat_range[1]:.2f}°")
+            st.sidebar.caption(f"Lon: {lon_range[0]:.2f}° to {lon_range[1]:.2f}°")
+        else:
+            lat_range = None
+            lon_range = None
+            use_filter = False
+    else:
+        # Manual spatial filter (when no gate selected)
+        use_filter = st.sidebar.checkbox("Apply Spatial Filter")
+        
+        lat_range = None
+        lon_range = None
+        
+        if use_filter:
+            lat_data = ds_sample["latitude"].values.flatten()
+            lon_data = ds_sample["longitude"].values.flatten()
+            
+            lat_min, lat_max = float(np.nanmin(lat_data)), float(np.nanmax(lat_data))
+            lon_min, lon_max = float(np.nanmin(lon_data)), float(np.nanmax(lon_data))
+            
+            lat_range = st.sidebar.slider(
+                "Latitude Range",
+                lat_min, lat_max, (lat_min, lat_max),
+            )
+            lon_range = st.sidebar.slider(
+                "Longitude Range",
+                lon_min, lon_max, (lon_min, lon_max),
+            )
     
     return AppConfig(
         mss_var=mss_var,
