@@ -1,16 +1,29 @@
 # 🤖 Copilot/AI Agent Instructions
 
-## 📋 TASK SYSTEM (READ FIRST!)
+## 🌿 BRANCH STRATEGY (READ FIRST!)
+
+**Check which branch you're on:**
+```bash
+git branch --show-current
+```
+
+| Branch | Agent Doc | Focus |
+|--------|-----------|-------|
+| `master` | `docs/AGENT_FULLSTACK.md` | React + API + Knowledge Graph |
+| `feature/gates-streamlit` | `docs/AGENT_GATES.md` | Streamlit + Gates + Dataset |
+
+**📖 Read your agent doc BEFORE starting any work!**
+
+See `docs/BRANCH_STRATEGY.md` for full details.
+
+---
+
+## 📋 TASK SYSTEM
 
 **Before ANY task, read:**
-1. `docs/TASKS/CONTEXT.md` - Awareness del codice esistente
-2. `docs/TASKS/*.md` - Task atomici con checklist
+1. Your branch-specific agent doc (see table above)
+2. `docs/TASKS/CONTEXT.md` - Awareness del codice esistente
 3. `docs/PROGRESS.md` - Stato attuale
-
-**Parallelizzazione Chat:**
-- Chat A: Task 1.1 → 1.2 → 1.3 (sequential)
-- Chat B: Task 2.1 CYGNSS (parallel OK)
-- Chat C: Task 3.1 SurrealDB (parallel OK)
 
 ## ⚠️ CRITICAL: Python Environment
 
