@@ -1,0 +1,120 @@
+{
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.terminal.activateEnvInCurrentTerminal": true,
+    "terminal.integrated.env.osx": {
+        "VIRTUAL_ENV": "${workspaceFolder}/.venv",
+        "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}"
+    },
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}"
+    ],
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.pytest_cache": true,
+        "*.pyc": true
+    },
+    // ═══════════════════════════════════════════════════════════
+    // 🤖 COPILOT PRO PLUS - CONFIGURAZIONE OTTIMIZZATA
+    // ═══════════════════════════════════════════════════════════
+    // 📝 Custom Instructions (globali per ogni chat)
+    "github.copilot.chat.codeGeneration.instructions": [
+        {
+            "text": "ALWAYS use the project virtual environment at .venv/bin/python. NEVER use system python3 or pip3. Use 'source .venv/bin/activate' before running any Python command."
+        },
+        {
+            "text": "This project uses SurrealDB (ws://localhost:8001) as the primary database, NOT Neo4j. Check docker ps for running containers."
+        },
+        {
+            "text": "Do NOT reinstall packages - they are already in .venv. If import fails, activate venv first."
+        },
+        {
+            "text": "Python: Use type hints, async/await for DB, Black formatting. TypeScript: strict mode, interfaces for props."
+        },
+        {
+            "text": "API endpoints go in api/routers/, business logic in api/services/, React components in frontend/src/components/"
+        }
+    ],
+    // 🔧 Agent Mode - MAX POWER
+    "chat.agent.enabled": true,
+    "chat.agent.maxRequests": 50,
+    "github.copilot.chat.agent.autoFix": true,
+    "github.copilot.chat.agent.thinkingTool": true,
+    "github.copilot.chat.summarizeAgentConversationHistory.enabled": true,
+    "chat.customAgentInSubagent.enabled": true,
+    // 🛠️ Tools Auto-Approval (safe commands)
+    "chat.tools.terminal.enableAutoApprove": true,
+    "chat.tools.terminal.autoApprove": {
+        "ls": true,
+        "cat": true,
+        "echo": true,
+        "pwd": true,
+        "git status": true,
+        "git branch": true,
+        "git log": true,
+        "git diff": true,
+        "npm run": true,
+        "pytest": true,
+        "python -c": true,
+        "source .venv/bin/activate": true,
+        "docker ps": true,
+        "curl localhost": true,
+        "rm": false,
+        "rmdir": false,
+        "pip install": false
+    },
+    // 📡 MCP Servers
+    "chat.mcp.access": true,
+    "chat.mcp.autoStart": "newAndOutdated",
+    "chat.mcp.discovery.enabled": true,
+    "chat.mcp.gallery.enabled": true,
+    // 🔍 Workspace Indexing (GitHub remote)
+    "github.copilot.chat.codesearch.enabled": true,
+    "github.copilot.chat.edits.suggestRelatedFilesFromGitHistory": true,
+    // 💬 Chat Settings
+    "chat.checkpoints.enabled": true,
+    "chat.checkpoints.showFileChanges": true,
+    "chat.editing.autoAcceptDelay": 0,
+    "chat.detectParticipant.enabled": true,
+    "chat.useAgentsMdFile": true,
+    "chat.useNestedAgentsMdFiles": true,
+    // ✨ Code Suggestions
+    "github.copilot.enable": {
+        "*": true,
+        "plaintext": true,
+        "markdown": true,
+        "scminput": true
+    },
+    "github.copilot.nextEditSuggestions.enabled": true,
+    "github.copilot.nextEditSuggestions.fixes": true,
+    "github.copilot.renameSuggestions.triggerAutomatically": true,
+    "editor.inlineSuggest.edits.allowCodeShifting": "always",
+    // 🧪 Experimental Features
+    "github.copilot.chat.newWorkspaceCreation.enabled": true,
+    "github.copilot.chat.virtualTools.threshold": 64,
+    "inlineChat.lineNaturalLanguageHint": true,
+    "github.copilot.chat.editor.temporalContext.enabled": true,
+    "search.searchView.semanticSearchBehavior": "always",
+    "workbench.settings.showAISearchToggle": true,
+    // 🎨 UI
+    "chat.viewTitle.enabled": true,
+    "chat.math.enabled": true,
+    "chat.notifyWindowOnConfirmation": true,
+    "chat.notifyWindowOnResponseReceived": false,
+    // 📍 Prompt Files & Custom Agents
+    "chat.promptFilesLocations": {
+        ".github/prompts": true
+    },
+    "chat.instructionsFilesLocations": {
+        ".github/instructions": true
+    },
+    "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+    "github.copilot.chat.customAgents.showOrganizationAndEnterpriseAgents": true
+}
