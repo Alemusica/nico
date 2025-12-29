@@ -4,6 +4,26 @@
 
 ---
 
+## ⚠️ CRITICAL WARNING FOR ALL AGENTS
+
+**BEFORE writing ANY code, READ:**
+1. `docs/ARCHITECTURE.md` - The NICO Unified Architecture diagram
+2. `config/datasets.yaml` - Provider configuration
+3. This file - Previous session context
+
+**The data flow MUST be:**
+```
+UI → Services (src/services/) → DataAccess → Infrastructure
+```
+
+**DO NOT:**
+- Hardcode file paths
+- Bypass the Services layer
+- Create new loaders without adding to DataService
+- Ignore the config files
+
+---
+
 ## 🔄 How to Use This File
 
 ### For AI Agents Starting a New Session:
@@ -21,7 +41,41 @@
 
 ## 📋 Session Log
 
-### 2025-01-XX - feature/gates-streamlit (Human: nicolocaron)
+### 2025-12-29 (Session 2) - feature/gates-streamlit (Human: nicolocaron)
+
+**MAJOR: Wired UI to Services Layer**
+
+**Architecture Work:**
+- Saved NICO Unified Architecture diagram to `docs/ARCHITECTURE.md`
+- Created `docs/ARCHITECTURE_GAP.md` documenting the UI→Services gap
+- Fixed the gap: sidebar now calls DataService properly
+
+**Implementation:**
+- `DataService.load()` now routes based on `config/datasets.yaml`
+- Added `_load_noaa()` and `_load_nasa()` providers
+- Updated `_load_cmems()` and `_load_era5()` to use config
+- `_load_data_for_gate()` follows architecture:
+  1. Gets dataset from user selection OR gate.datasets OR default
+  2. Builds DataRequest
+  3. Calls DataService.load() → routes to correct provider
+
+**Data Flow Now Working:**
+```
+User selects gate → clicks "Load Data" → sidebar._load_data_for_gate()
+  → DataService.build_request() → DataService.load()
+  → routes to _load_cmems/_load_era5/_load_noaa/_load_nasa
+  → returns xarray.Dataset → stored in session_state.datasets
+  → graphs render!
+```
+
+**Pending:**
+- Test with real CMEMS credentials
+- Add dataset selector in catalog tab
+- Time range selector in UI
+
+---
+
+### 2025-12-29 (Session 1) - feature/gates-streamlit (Human: nicolocaron)
 
 **Completed:**
 - ✅ Phase 0-8 of Unified Architecture implementation
