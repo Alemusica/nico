@@ -199,5 +199,5 @@ class TestResolution:
         """Test spatial resolution enum."""
         from src.core.models import SpatialResolution
         
-        assert SpatialResolution.QUARTER_DEGREE.value == 0.25
-        assert SpatialResolution.HALF_DEGREE.value == 0.5
+        assert SpatialResolution.MEDIUM.value == "0.25"
+        assert SpatialResolution.LOW.value == "0.5"

@@ -107,6 +107,19 @@ class BoundingBox(BaseModel):
         return (self.lon_min, self.lon_max)
     
     @property
+    def center(self) -> Tuple[float, float]:
+        """Return center point as (lat, lon)."""
+        center_lat = (self.lat_min + self.lat_max) / 2
+        if self.crosses_dateline:
+            # Handle dateline crossing
+            center_lon = (self.lon_min + self.lon_max + 360) / 2
+            if center_lon > 180:
+                center_lon -= 360
+        else:
+            center_lon = (self.lon_min + self.lon_max) / 2
+        return (center_lat, center_lon)
+    
+    @property
     def as_list(self) -> List[float]:
         """Return as [lat_min, lat_max, lon_min, lon_max] for API compatibility."""
         return [self.lat_min, self.lat_max, self.lon_min, self.lon_max]
@@ -134,16 +147,27 @@ class TimeRange(BaseModel):
     Temporal range for data queries.
     
     Attributes:
-        start: Start date in ISO format (YYYY-MM-DD)
-        end: End date in ISO format (YYYY-MM-DD)
+        start: Start date (string YYYY-MM-DD or datetime)
+        end: End date (string YYYY-MM-DD or datetime)
     
     Example:
         >>> tr = TimeRange(start="2024-01-01", end="2024-12-31")
         >>> print(tr.start_date)
         datetime(2024, 1, 1)
+        
+        >>> from datetime import datetime
+        >>> tr = TimeRange(start=datetime(2024, 1, 1), end=datetime(2024, 12, 31))
     """
-    start: str = Field(..., description="Start date (YYYY-MM-DD)")
-    end: str = Field(..., description="End date (YYYY-MM-DD)")
+    start: str = Field(..., description="Start date (YYYY-MM-DD or datetime)")
+    end: str = Field(..., description="End date (YYYY-MM-DD or datetime)")
+    
+    @field_validator('start', 'end', mode='before')
+    @classmethod
+    def convert_datetime(cls, v):
+        """Convert datetime to string if needed."""
+        if isinstance(v, datetime):
+            return v.strftime('%Y-%m-%d')
+        return v
     
     @field_validator('start', 'end')
     @classmethod
@@ -202,9 +226,15 @@ class GateModel(BaseModel):
     id: str = Field(..., description="Unique gate identifier")
     name: str = Field(..., description="Display name with emoji")
     file: str = Field(..., description="Shapefile filename")
-    description: str = Field(..., description="Human-readable description")
-    region: str = Field(..., description="Geographic region")
+    description: str = Field(default="", description="Human-readable description")
+    region: str = Field(default="", description="Geographic region")
     closest_passes: Optional[List[int]] = Field(default=None, description="Pre-computed closest satellite passes")
+    # Optional: bounding box for fallback when shapefile not available
+    lat_min: Optional[float] = Field(default=None, ge=-90, le=90)
+    lat_max: Optional[float] = Field(default=None, ge=-90, le=90)
+    lon_min: Optional[float] = Field(default=None, ge=-180, le=180)
+    lon_max: Optional[float] = Field(default=None, ge=-180, le=180)
+    importance: Optional[str] = Field(default=None, description="Scientific importance")
     
     class Config:
         json_schema_extra = {
@@ -257,6 +287,7 @@ class DataRequest(BaseModel):
     bbox: BoundingBox
     time_range: TimeRange
     variables: List[str] = Field(default_factory=list)
+    dataset_id: str = Field(default="cmems_sla", description="Dataset identifier")
     gate_id: Optional[str] = Field(default=None, description="Gate identifier")
     pass_number: Optional[int] = Field(default=None, description="Satellite pass number")
     source: Optional[DataSource] = Field(default=None, description="Data source")
@@ -276,6 +307,7 @@ class DataRequest(BaseModel):
                     "end": "2024-12-31"
                 },
                 "variables": ["sla", "adt"],
+                "dataset_id": "cmems_sla",
                 "gate_id": "fram_strait",
                 "source": "cmems"
             }

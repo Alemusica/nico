@@ -88,7 +88,7 @@ class DataService:
         variables: Optional[List[str]] = None,
         dataset_id: str = "cmems_sla",
         temporal_resolution: TemporalResolution = TemporalResolution.DAILY,
-        spatial_resolution: SpatialResolution = SpatialResolution.QUARTER_DEGREE
+        spatial_resolution: SpatialResolution = SpatialResolution.MEDIUM
     ) -> DataRequest:
         """
         Build a data request.
