@@ -51,27 +51,12 @@ def run_app():
         unsafe_allow_html=True,
     )
     
-    # === NEW: Unified Data Selector ===
-    if DATA_SELECTOR_AVAILABLE:
-        logger.debug("Rendering data selector")
-        try:
-            selection = render_data_selector()
-            logger.debug(f"Selection: source={selection.source}, gate={selection.gate_id}")
-        except Exception as e:
-            logger.error(f"Data selector error: {e}", exc_info=True)
-            st.error(f"❌ Data selector error: {e}")
-            # Fallback to old sidebar
-            config = render_sidebar()
-            selection = None
-        
-        # Handle data load request
-        if selection and is_data_load_requested():
-            _handle_data_load(selection)
-            clear_load_request()
-    else:
-        # Fallback to old sidebar
-        logger.info("Using fallback sidebar")
-        config = render_sidebar()
+    # === SIDEBAR: Data loading + Settings ===
+    # The sidebar handles local file loading and analysis parameters
+    config = render_sidebar()
+    
+    # Store config for tabs
+    st.session_state.app_config = config
     
     # Check if data is loaded - but always show catalog tab
     if not st.session_state.get("datasets"):
@@ -80,15 +65,20 @@ def run_app():
         return
     
     # Main content tabs (all tabs when data is loaded)
-    config = st.session_state.get("app_config")
     render_tabs(config)
 
 
 def _handle_data_load(selection):
     """Handle data loading from the new selector."""
+    logger.info(f"Data load requested: {selection.selected_datasets}")
     
     if not selection.confirmed:
         st.warning("Please confirm the data request")
+        return
+    
+    # For now, if no datasets selected, just show message
+    if not selection.selected_datasets:
+        st.info("📁 Use **Local Files** or **Upload Files** in the sidebar to load NetCDF data for visualization.")
         return
     
     with st.spinner("Loading data..."):
@@ -99,9 +89,11 @@ def _handle_data_load(selection):
             
             # Build request from selection
             datasets_loaded = []
+            cycle_info = []
             
             for ds_id in selection.selected_datasets:
                 variables = selection.selected_variables.get(ds_id, [])
+                logger.debug(f"Loading dataset {ds_id} with variables {variables}")
                 
                 # Load dataset
                 data = data_service.load_dataset(
@@ -112,21 +104,34 @@ def _handle_data_load(selection):
                 )
                 
                 if data is not None:
-                    datasets_loaded.append({
-                        "id": ds_id,
-                        "data": data,
-                        "variables": variables
-                    })
+                    # If it's an xarray dataset, add directly
+                    import xarray as xr
+                    if isinstance(data, xr.Dataset):
+                        datasets_loaded.append(data)
+                        cycle_info.append({
+                            "filename": ds_id,
+                            "cycle": len(datasets_loaded),
+                            "path": ds_id,
+                        })
+                    else:
+                        datasets_loaded.append({
+                            "id": ds_id,
+                            "data": data,
+                            "variables": variables
+                        })
             
             if datasets_loaded:
                 st.session_state.datasets = datasets_loaded
+                st.session_state.cycle_info = cycle_info
                 st.session_state.current_selection = selection
+                logger.info(f"Loaded {len(datasets_loaded)} dataset(s)")
                 st.success(f"✅ Loaded {len(datasets_loaded)} dataset(s)")
                 st.rerun()
             else:
-                st.error("No data loaded. Check your selection.")
+                st.warning("No data loaded. Try loading local files from the sidebar.")
                 
         except Exception as e:
+            logger.error(f"Data load error: {e}", exc_info=True)
             st.error(f"Error loading data: {e}")
 
 

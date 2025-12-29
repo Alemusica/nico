@@ -1,6 +1,6 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2025-01-XX (Session 2)
+> Last Updated: 2025-12-29 (Session 3)
 > Agent: Use this file to track progress. Update after each task.
 
 ---
@@ -49,55 +49,46 @@ https://github.com/Alemusica/nico/issues/12
 | 3 | Gates Module | ✅ DONE | src/gates/{catalog,loader,buffer,passes}.py |
 | 4 | Services Layer | ✅ DONE | src/services/{gate,data,analysis}_service.py |
 | 5 | API Integration | ✅ DONE | api/routers/gates_router.py |
-| 6 | Streamlit v2 | ✅ DONE | app/components/sidebar_v2.py |
+| 6 | Streamlit v2 | ✅ DONE | app/components/sidebar_v2.py, data_selector.py |
 | 7 | Data Loaders | ✅ DONE | src/data/unified_loader.py |
 | 8 | Tests | ✅ DONE | tests/test_core_models.py, test_gate_service.py |
-| 9 | Docs Update | 🔄 IN PROGRESS | Update docstrings, README |
+| 9 | Docs Update | ✅ DONE | FEATURE_INVENTORY.md, CHANGELOG.md |
 | 10 | Merge | ⬜ TODO | Merge to master, cleanup |
 
 ---
 
-## 📝 Progress Log
+## � BUG FIXES (2025-12-29)
 
-### 2024-12-28 - Task 3.1 Causal Graph
-**Status**: ✅ DONE
-**What was done**:
-- Created `src/data_manager/causal_graph.py`
-- CausalEdge dataclass + CausalGraphDB async class
-- 4 KNOWN_CAUSAL_CHAINS pre-seeded (NAO→precipitation, precipitation→runoff, wind→SST, SLCCI→SLA r=0.866)
-- Methods: add_edge, get_precursors, get_effects, get_causal_chain
-
-**Blockers**:
-- Docker not running (runtime test skipped)
-
-**Next**:
-- Integration with pcmci_engine.py
+| Issue | Status | Description |
+|-------|--------|-------------|
+| #13 | ✅ CLOSED | GateService missing get_gate() method |
+| #14 | ✅ CLOSED | TimeRange string vs datetime type error |
+| #15 | ✅ CLOSED | Centralized Logging System implemented |
 
 ---
 
-### 2024-12-28 - Task 2.1 CYGNSS Client
-**Status**: ✅ DONE
-**What was done**:
-- Created `src/surge_shazam/data/cygnss_client.py`
-- CYGNSS L3 Global Daily V3.1 client using `earthaccess`
-- Search granules, download to xarray.Dataset
-- Latency: 2-24h (NASA PO.DAAC)
+## 🔧 INFRASTRUCTURE (2025-12-29)
 
-**Blockers**:
-- None
-
-**Next**:
-- Task 3.1 causal_graph.py
+| Component | Status | Files |
+|-----------|--------|-------|
+| Logging System | ✅ DONE | src/core/logging_config.py |
+| Feature Inventory | ✅ DONE | docs/FEATURE_INVENTORY.md |
+| Issue Documentation | ✅ DONE | docs/ISSUES/BUG_001, BUG_002, FEATURE_003 |
 
 ---
 
-### 2025-12-29 - Unified Architecture Planning
-**Status**: ✅ DONE
-**What was done**:
-- Created `docs/ROADMAP_UNIFIED_ARCHITECTURE.md` - Full refactoring plan
-- Created `docs/GATES_CATALOG.md` - Gates documentation
-- Created `docs/MODELS.md` - Pydantic models reference
-- Created `docs/ISSUES/ISSUE_001_unified_architecture.md` - GitHub issue
+## 📊 VISUALIZATION STATUS
+
+| Feature | Location | Status | Notes |
+|---------|----------|--------|-------|
+| DOT Slope Timeline | app/components/analysis_tab.py | ✅ READY | Needs xarray datasets |
+| Monthly 12-Subplot | app/components/monthly_tab.py | ✅ READY | Needs xarray datasets |
+| DOT Profiles | app/components/profiles_tab.py | ✅ READY | Needs xarray datasets |
+| Spatial View | app/components/spatial_tab.py | ✅ READY | Needs xarray datasets |
+| Map View | app/components/map_tab.py | ✅ READY | Needs xarray datasets |
+| Dataset Catalog | app/components/catalog_tab.py | ✅ WORKING | Direct intake access |
+
+**To see graphs**: Load local NetCDF files using sidebar → Local Files
 - Updated `docs/ARCHITECTURE.md` with v2.0 section
 
 **Blockers**:
