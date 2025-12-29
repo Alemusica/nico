@@ -70,6 +70,25 @@
 
 ---
 
+### 2025-12-29 - Unified Architecture Planning
+**Status**: ✅ DONE
+**What was done**:
+- Created `docs/ROADMAP_UNIFIED_ARCHITECTURE.md` - Full refactoring plan
+- Created `docs/GATES_CATALOG.md` - Gates documentation
+- Created `docs/MODELS.md` - Pydantic models reference
+- Created `docs/ISSUES/ISSUE_001_unified_architecture.md` - GitHub issue
+- Updated `docs/ARCHITECTURE.md` with v2.0 section
+
+**Blockers**:
+- None
+
+**Next**:
+- Phase 1: Create `src/core/models.py`
+- Phase 2: Create `config/` directory with YAML files
+- Phase 3: Create `src/gates/` module
+
+---
+
 ### [DATE] - Task X.X
 **Status**: ✅ / ❌ / 🔄
 **What was done**:
@@ -80,6 +99,26 @@
 
 **Next**:
 - ...
+
+---
+
+## 🏗️ Architecture Refactoring (v2.0)
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 0: Documentation | ✅ DONE | Roadmap, Models, Gates docs |
+| Phase 1: Core Models | ⬜ TODO | `src/core/models.py` |
+| Phase 2: Config | ⬜ TODO | `config/` directory |
+| Phase 3: Gates Module | ⬜ TODO | `src/gates/` |
+| Phase 4: Services | ⬜ TODO | `src/services/` |
+| Phase 5: API | ⬜ TODO | `gates_router.py` |
+| Phase 6: Streamlit | ⬜ TODO | Refactor sidebar |
+| Phase 7: React | ⬜ TODO | Gates component |
+| Phase 8: Loaders | ⬜ TODO | Migrate from Legacy |
+| Phase 9: Testing | ⬜ TODO | 80% coverage |
+| Phase 10: Merge | ⬜ TODO | Final cleanup |
+
+📄 See `docs/ROADMAP_UNIFIED_ARCHITECTURE.md` for details.
 
 ---
 

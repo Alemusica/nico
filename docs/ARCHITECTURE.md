@@ -234,4 +234,41 @@ tests/
 
 ---
 
+## 🚀 Architecture Evolution (v2.0)
+
+> **Status**: In Progress  
+> **Tracking**: See `docs/ROADMAP_UNIFIED_ARCHITECTURE.md`
+
+The architecture is being refactored to support:
+- **Unified Gates Module** (`src/gates/`)
+- **Centralized Config** (`config/`)
+- **Services Layer** (`src/services/`)
+- **Shared Pydantic Models** (`src/core/models.py`)
+
+### New Components (v2.0)
+
+```
+config/                    # Centralized YAML configs
+├── gates.yaml            # Ocean gates catalog
+├── datasets.yaml         # Dataset providers
+└── defaults.yaml         # Default parameters
+
+src/gates/                # Gates module
+├── catalog.py            # GateCatalog class
+├── loader.py             # Shapefile loading
+└── buffer.py             # Buffer calculations
+
+src/services/             # Business logic layer
+├── gate_service.py       # Gate operations
+├── data_service.py       # Data operations
+└── analysis_service.py   # Analysis operations
+```
+
+### Related Documentation
+- [ROADMAP_UNIFIED_ARCHITECTURE.md](ROADMAP_UNIFIED_ARCHITECTURE.md) - Full refactoring plan
+- [MODELS.md](MODELS.md) - Pydantic models reference
+- [GATES_CATALOG.md](GATES_CATALOG.md) - Gates documentation
+
+---
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
