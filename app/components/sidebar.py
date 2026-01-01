@@ -4,25 +4,11 @@ Sidebar Component - Simplified
 
 import os
 from pathlib import Path
-from dataclasses import dataclass
 from typing import Any, Optional
 
 import streamlit as st
 
-
-@dataclass
-class AppConfig:
-    """Application configuration from sidebar."""
-    selected_gate: str = None
-    gate_geometry: Any = None
-    gate_buffer_km: float = 50.0
-    selected_dataset_type: str = "SLCCI"
-    slcci_base_dir: str = "/Users/nicolocaron/Desktop/ARCFRESH/J2"
-    slcci_geoid_path: str = "/Users/nicolocaron/Desktop/ARCFRESH/TUM_ogmoc.nc"
-    pass_mode: str = "manual"
-    pass_number: int = 248
-    cycle_start: int = 1
-    cycle_end: int = 100
+from ..state import AppConfig
 
 
 try:
@@ -165,7 +151,7 @@ def _render_cycle_range(config: AppConfig) -> AppConfig:
         config.cycle_start = st.number_input("Start", 1, 300, st.session_state.get("cycle_start", 1), key="cycle_start")
         st.session_state["cycle_start"] = config.cycle_start
     with col2:
-        config.cycle_end = st.number_input("End", 1, 300, st.session_state.get("cycle_end", 100), key="cycle_end")
+        config.cycle_end = st.number_input("End", 1, 300, st.session_state.get("cycle_end", 10), key="cycle_end")  # Default 10 per test
         st.session_state["cycle_end"] = config.cycle_end
     return config
 

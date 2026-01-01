@@ -4,6 +4,23 @@ Session State Management
 """
 
 import streamlit as st
+from dataclasses import dataclass
+from typing import Any, Optional
+
+
+@dataclass
+class AppConfig:
+    """Application configuration from sidebar."""
+    selected_gate: Optional[str] = None
+    gate_geometry: Any = None
+    gate_buffer_km: float = 50.0
+    selected_dataset_type: str = "SLCCI"
+    slcci_base_dir: str = "/Users/nicolocaron/Desktop/ARCFRESH/J2"
+    slcci_geoid_path: str = "/Users/nicolocaron/Desktop/ARCFRESH/TUM_ogmoc.nc"
+    pass_mode: str = "manual"
+    pass_number: int = 248
+    cycle_start: int = 1
+    cycle_end: int = 10  # Default: primi 10 cicli per test veloci
 
 
 def init_session_state():
