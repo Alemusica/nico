@@ -122,6 +122,9 @@ class SLCCIService:
         PassData
             Container with all analysis results, or None if no data
         """
+        import os
+        os.environ['SHAPE_RESTORE_SHX'] = 'YES'  # Fix missing .shx files
+        
         cycles = cycles or self.config.cycles
         
         logger.info(f"Loading pass {pass_number} for gate: {Path(gate_path).name}")
@@ -208,6 +211,9 @@ class SLCCIService:
         List[Tuple[int, float]]
             List of (pass_number, distance_km) sorted by distance
         """
+        import os
+        os.environ['SHAPE_RESTORE_SHX'] = 'YES'  # Fix missing .shx files
+        
         cycles = cycles or list(range(1, 100))  # Use subset for speed
         
         gate_gdf = gpd.read_file(gate_path).to_crs("EPSG:4326")
@@ -292,6 +298,9 @@ class SLCCIService:
         
         Adapted from legacy/j2_utils.py::load_filtered_cycles_serial_J2
         """
+        import os
+        os.environ['SHAPE_RESTORE_SHX'] = 'YES'  # Fix missing .shx files
+        
         lat_buffer = lat_buffer_deg or self.config.lat_buffer_deg
         lon_buffer = lon_buffer_deg or self.config.lon_buffer_deg
         
