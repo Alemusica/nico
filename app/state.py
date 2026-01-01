@@ -11,16 +11,29 @@ from typing import Any, Optional
 @dataclass
 class AppConfig:
     """Application configuration from sidebar."""
+    # Gate selection
     selected_gate: Optional[str] = None
     gate_geometry: Any = None
     gate_buffer_km: float = 50.0
+    
+    # Data source
     selected_dataset_type: str = "SLCCI"
     slcci_base_dir: str = "/Users/nicolocaron/Desktop/ARCFRESH/J2"
     slcci_geoid_path: str = "/Users/nicolocaron/Desktop/ARCFRESH/TUM_ogmoc.nc"
+    
+    # Pass selection
     pass_mode: str = "manual"
     pass_number: int = 248
+    
+    # Cycle range
     cycle_start: int = 1
     cycle_end: int = 10  # Default: primi 10 cicli per test veloci
+    
+    # Processing parameters (from SLCCI PLOTTER notebook)
+    use_flag: bool = True           # Quality flag filter
+    lon_bin_size: float = 0.01      # Longitude binning size (degrees)
+    lat_buffer_deg: float = 2.0     # Latitude buffer for spatial filter
+    lon_buffer_deg: float = 5.0     # Longitude buffer for spatial filter
 
 
 def init_session_state():
