@@ -62,15 +62,88 @@ geometry = service.get_gate_geometry("fram_strait")
 
 ---
 
+## �️ SLCCI Data Service
+
+### SLCCIService (`src/services/slcci_service.py`)
+**Status**: ✅ Implemented | **Used in**: Streamlit
+
+Service for loading and processing ESA Sea Level CCI (SLCCI) data.
+
+```python
+from src.services import SLCCIService, SLCCIConfig
+
+# Initialize with config
+config = SLCCIConfig(
+    base_dir="/path/to/J2",
+    geoid_path="/path/to/TUM_ogmoc.nc",
+    cycles=list(range(1, 282)),
+)
+service = SLCCIService(config)
+
+# Find closest passes to gate
+closest_passes = service.find_closest_pass(gate_path="/path/to/gate.shp", n_passes=5)
+
+# Load pass data with DOT computation
+pass_data = service.load_pass_data(
+    gate_path="/path/to/gate.shp",
+    pass_number=248,
+)
+
+# Access results
+print(f"Observations: {len(pass_data.df)}")
+print(f"Slope series: {pass_data.slope_series}")
+print(f"DOT profile: {pass_data.profile_mean}")
+```
+
+**Features**:
+- Load SLCCI NetCDF files (SLCCI_ALTDB_J2_CycleXXX_V2.nc)
+- Geoid interpolation using TUM_ogmoc.nc
+- DOT calculation: corssh - geoid
+- Pass filtering (auto-detect or manual)
+- Slope computation along gate (m/100km)
+- DOT matrix building for temporal analysis
+
+**Files**:
+- `src/services/slcci_service.py` (600+ lines)
+- Uses: `legacy/j2_utils.py` patterns (migrated)
+
+---
+
+### SLCCI Visualization Tabs
+**Status**: ✅ Implemented | **Used in**: Streamlit
+
+Three separate tabs for SLCCI analysis:
+
+1. **Slope Timeline** (`app/components/slcci_slope_tab.py`)
+   - Interactive Plotly timeline
+   - Trend line overlay
+   - Statistics summary
+   - CSV download
+
+2. **DOT Profile** (`app/components/slcci_profile_tab.py`)
+   - Profile across gate (distance in km)
+   - West/East labels
+   - Linear fit overlay
+   - Temporal variation explorer
+
+3. **Spatial Map** (`app/components/slcci_spatial_tab.py`)
+   - Interactive MapBox map
+   - DOT color-coded points
+   - Gate geometry overlay
+   - Multiple basemap styles
+
+---
+
 ## 📊 Data Processing & Visualization
 
 ### DOT Calculation (`legacy/j2_utils.py`)
-**Status**: 🔄 In Legacy | **Needs**: Migration to services
+**Status**: ✅ Migrated to SLCCIService | **Used in**: Streamlit
 
 ```python
-def calculate_dot(ds_cycle):
-    """DOT = corssh - geoid"""
-    return ds_cycle["corssh"] - ds_cycle["geoid"]
+# Now use SLCCIService instead:
+from src.services import SLCCIService
+pass_data = service.load_pass_data(gate_path, pass_number)
+# DOT already computed in pass_data.df["dot"]
 ```
 
 ### Slope Analysis (`src/analysis/slope.py`)

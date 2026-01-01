@@ -77,7 +77,7 @@ https://github.com/Alemusica/nico/issues/12
 
 ---
 
-## � BUG FIXES (2025-12-29)
+## 🐛 BUG FIXES (2025-12-29)
 
 | Issue | Status | Description |
 |-------|--------|-------------|
@@ -97,10 +97,34 @@ https://github.com/Alemusica/nico/issues/12
 
 ---
 
+## 🛰️ SLCCI INTEGRATION (2026-01-01)
+
+| Task | Status | Files |
+|------|--------|-------|
+| SLCCIService | ✅ DONE | src/services/slcci_service.py |
+| Geoid Interpolation | ✅ DONE | Using TUM_ogmoc.nc |
+| Pass Finding | ✅ DONE | find_closest_pass() |
+| DOT Calculation | ✅ DONE | DOT = corssh - geoid |
+| Slope Timeline Tab | ✅ DONE | app/components/slcci_slope_tab.py |
+| DOT Profile Tab | ✅ DONE | app/components/slcci_profile_tab.py |
+| Spatial Map Tab | ✅ DONE | app/components/slcci_spatial_tab.py |
+| Sidebar Integration | ✅ DONE | SLCCI loader in sidebar |
+
+**Key Features:**
+- Auto-detect closest passes to gate
+- DOT computation (corssh - TUM geoid)
+- 3 separate tabs (not combined): Slope Timeline, DOT Profile, Spatial Map
+- Interactive Plotly plots with download options
+
+---
+
 ## 📊 VISUALIZATION STATUS
 
 | Feature | Location | Status | Notes |
 |---------|----------|--------|-------|
+| SLCCI Slope Timeline | app/components/slcci_slope_tab.py | ✅ NEW | Interactive Plotly |
+| SLCCI DOT Profile | app/components/slcci_profile_tab.py | ✅ NEW | West/East labels |
+| SLCCI Spatial Map | app/components/slcci_spatial_tab.py | ✅ NEW | MapBox + Gate overlay |
 | DOT Slope Timeline | app/components/analysis_tab.py | ✅ READY | Needs xarray datasets |
 | Monthly 12-Subplot | app/components/monthly_tab.py | ✅ READY | Needs xarray datasets |
 | DOT Profiles | app/components/profiles_tab.py | ✅ READY | Needs xarray datasets |
@@ -108,16 +132,19 @@ https://github.com/Alemusica/nico/issues/12
 | Map View | app/components/map_tab.py | ✅ READY | Needs xarray datasets |
 | Dataset Catalog | app/components/catalog_tab.py | ✅ WORKING | Direct intake access |
 
-**To see graphs**: Load local NetCDF files using sidebar → Local Files
-- Updated `docs/ARCHITECTURE.md` with v2.0 section
+**To see SLCCI graphs**: 
+1. Select gate from sidebar
+2. Expand "🛰️ SLCCI Data (ESA CCI)" section
+3. Set paths to J2 data and TUM_ogmoc.nc
+4. Click "Load SLCCI Data"
+5. Navigate to Slope Timeline / DOT Profile / Spatial Map tabs
 
 **Blockers**:
 - None
 
 **Next**:
-- Phase 1: Create `src/core/models.py`
-- Phase 2: Create `config/` directory with YAML files
-- Phase 3: Create `src/gates/` module
+- Monthly analysis tab for SLCCI (12 subplots)
+- CMEMS integration with similar pattern
 
 ---
 

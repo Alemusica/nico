@@ -325,6 +325,9 @@ def _render_gate_selector_v2() -> dict | None:
             st.sidebar.markdown("---")
             if st.sidebar.button("🚀 Load Data for Gate", type="primary", key="load_gate_data_btn"):
                 _load_data_for_gate(selected_gate_id, buffer_km)
+            
+            # === SLCCI DATA LOADER ===
+            _render_slcci_loader(selected_gate_id, gate)
                 
     else:
         st.session_state["gate_geometry"] = None
@@ -440,6 +443,201 @@ def _load_data_for_gate(gate_id: str, buffer_km: float):
         st.sidebar.error(f"❌ Error loading data: {e}")
         import traceback
         st.sidebar.code(traceback.format_exc())
+
+
+def _render_slcci_loader(gate_id: str, gate):
+    """
+    Render SLCCI (ESA Sea Level CCI) data loader section.
+    
+    This loads data from local SLCCI NetCDF files using the SLCCIService.
+    """
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🛰️ SLCCI Data (ESA CCI)")
+    
+    # Check if SLCCI service is available
+    try:
+        from src.services.slcci_service import SLCCIService, SLCCIConfig
+        slcci_available = True
+    except ImportError as e:
+        st.sidebar.warning(f"⚠️ SLCCI Service not available: {e}")
+        slcci_available = False
+        return
+    
+    # Configuration
+    base_dir = st.sidebar.text_input(
+        "SLCCI Data Directory",
+        value="/Users/nicolocaron/Desktop/ARCFRESH/J2",
+        key="slcci_base_dir",
+        help="Path to folder containing SLCCI_ALTDB_*.nc files"
+    )
+    
+    geoid_path = st.sidebar.text_input(
+        "Geoid File (TUM_ogmoc.nc)",
+        value="/Users/nicolocaron/Desktop/ARCFRESH/TUM_ogmoc.nc",
+        key="slcci_geoid_path",
+        help="Path to TUM geoid file for DOT calculation"
+    )
+    
+    # Pass selection
+    st.sidebar.markdown("**Pass Selection**")
+    
+    pass_mode = st.sidebar.radio(
+        "Pass Mode",
+        ["🔍 Auto-detect", "📝 Manual"],
+        key="slcci_pass_mode",
+        horizontal=True,
+    )
+    
+    # Get gate shapefile path
+    gates_dir = Path(__file__).parent.parent.parent / "gates"
+    gate_shp = None
+    
+    # Try to find gate shapefile
+    if gate and hasattr(gate, 'shapefile'):
+        gate_shp = gates_dir / gate.shapefile
+    elif gate_id:
+        # Search for matching shapefile
+        import glob
+        patterns = [
+            f"*{gate_id}*.shp",
+            f"*{gate_id.replace('_', '-')}*.shp",
+            f"*{gate_id.replace('_', ' ')}*.shp",
+        ]
+        for pattern in patterns:
+            matches = list(gates_dir.glob(pattern))
+            if matches:
+                gate_shp = matches[0]
+                break
+    
+    if gate_shp and gate_shp.exists():
+        st.sidebar.caption(f"📁 Gate file: {gate_shp.name}")
+    else:
+        st.sidebar.warning("⚠️ Gate shapefile not found")
+        gate_shp = st.sidebar.text_input(
+            "Gate Shapefile Path",
+            key="slcci_gate_path",
+            help="Full path to gate shapefile"
+        )
+        if gate_shp:
+            gate_shp = Path(gate_shp)
+    
+    # Pass number input
+    if pass_mode == "📝 Manual":
+        pass_number = st.sidebar.number_input(
+            "Pass Number",
+            min_value=1,
+            max_value=500,
+            value=248,
+            key="slcci_pass_number",
+            help="Satellite pass number to load"
+        )
+    else:
+        pass_number = None
+        st.sidebar.caption("Will find closest pass to gate automatically")
+    
+    # Cycle range
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        cycle_start = st.number_input("Start Cycle", min_value=1, max_value=300, value=1, key="slcci_cycle_start")
+    with col2:
+        cycle_end = st.number_input("End Cycle", min_value=1, max_value=300, value=100, key="slcci_cycle_end")
+    
+    # Load button
+    if st.sidebar.button("🚀 Load SLCCI Data", type="primary", key="load_slcci_btn"):
+        _load_slcci_data(
+            gate_path=str(gate_shp) if gate_shp else None,
+            pass_number=pass_number,
+            base_dir=base_dir,
+            geoid_path=geoid_path,
+            cycles=list(range(int(cycle_start), int(cycle_end) + 1)),
+        )
+
+
+def _load_slcci_data(
+    gate_path: str,
+    pass_number: int | None,
+    base_dir: str,
+    geoid_path: str,
+    cycles: list,
+):
+    """Load SLCCI data using SLCCIService."""
+    from src.services.slcci_service import SLCCIService, SLCCIConfig
+    
+    if not gate_path or not Path(gate_path).exists():
+        st.sidebar.error("❌ Gate shapefile path is required")
+        return
+    
+    if not Path(base_dir).exists():
+        st.sidebar.error(f"❌ SLCCI data directory not found: {base_dir}")
+        return
+    
+    if not Path(geoid_path).exists():
+        st.sidebar.error(f"❌ Geoid file not found: {geoid_path}")
+        return
+    
+    # Initialize service
+    config = SLCCIConfig(
+        base_dir=base_dir,
+        geoid_path=geoid_path,
+        cycles=cycles,
+        use_flag=True,
+    )
+    service = SLCCIService(config)
+    
+    with st.spinner("🔄 Loading SLCCI data..."):
+        try:
+            # Auto-detect pass if not specified
+            if pass_number is None:
+                st.sidebar.info("🔍 Finding closest passes to gate...")
+                closest_passes = service.find_closest_pass(gate_path, n_passes=5)
+                
+                if closest_passes:
+                    st.sidebar.success(f"✅ Found {len(closest_passes)} passes")
+                    
+                    # Show dropdown to select pass
+                    pass_options = [f"Pass {p[0]} ({p[1]:.1f} km)" for p in closest_passes]
+                    selected_pass_idx = st.sidebar.selectbox(
+                        "Select Pass",
+                        range(len(pass_options)),
+                        format_func=lambda i: pass_options[i],
+                        key="slcci_closest_pass_select"
+                    )
+                    pass_number = closest_passes[selected_pass_idx][0]
+                else:
+                    st.sidebar.error("❌ No passes found near gate")
+                    return
+            
+            # Load pass data
+            st.sidebar.info(f"📊 Loading pass {pass_number}...")
+            pass_data = service.load_pass_data(
+                gate_path=gate_path,
+                pass_number=pass_number,
+                cycles=cycles,
+            )
+            
+            if pass_data is None:
+                st.sidebar.error(f"❌ No data found for pass {pass_number}")
+                return
+            
+            # Store in session state
+            st.session_state["slcci_pass_data"] = pass_data
+            st.session_state["slcci_service"] = service
+            
+            # Success message
+            st.sidebar.success(
+                f"✅ Loaded {len(pass_data.df):,} observations\n"
+                f"• Pass: {pass_data.pass_number}\n"
+                f"• Cycles: {pass_data.df['cycle'].nunique()}\n"
+                f"• Strait: {pass_data.strait_name}"
+            )
+            
+            # Rerun to update tabs
+            st.rerun()
+            
+        except Exception as e:
+            st.sidebar.error(f"❌ Error loading SLCCI data: {e}")
+            import traceback
+            st.sidebar.code(traceback.format_exc())
 
 
 def _generate_demo_data(gate, buffer_km: float):
