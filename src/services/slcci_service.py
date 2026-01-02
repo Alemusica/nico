@@ -54,6 +54,7 @@ class SLCCIConfig:
     use_flag: bool = True
     lat_buffer_deg: float = 2.0
     lon_buffer_deg: float = 5.0
+    lon_bin_size: float = 0.01  # Longitude binning resolution (degrees)
     
     # Data source: "local" or "api"
     source: DataSource = "local"
@@ -212,7 +213,8 @@ class SLCCIService:
         
         # 6. Build DOT matrix using LONGITUDE BINNING (like SLCCI PLOTTER)
         dot_matrix, time_periods, lon_centers, x_km = self._build_dot_matrix(
-            df, gate_lon_pts, gate_lat_pts
+            df, gate_lon_pts, gate_lat_pts, 
+            lon_bin_size=self.config.lon_bin_size
         )
         
         # Use lon_centers for profiles instead of gate points

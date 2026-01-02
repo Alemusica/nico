@@ -298,6 +298,7 @@ def _load_slcci_data(config: AppConfig):
             use_flag=config.use_flag,
             lat_buffer_deg=config.lat_buffer_deg,
             lon_buffer_deg=config.lon_buffer_deg,
+            lon_bin_size=getattr(config, 'lon_bin_size', 0.01),  # From sidebar slider
             source=source_mode,  # "local" or "api"
             satellite="J2",
         )
