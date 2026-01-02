@@ -53,17 +53,19 @@ class CMEMSConfig:
     # Data paths
     base_dir: str = "/Users/nicolocaron/Desktop/ARCFRESH/COPERNICUS DATA"
     
-    # Date range
-    start_date: date = field(default_factory=lambda: date(2002, 1, 1))
-    end_date: date = field(default_factory=lambda: date(2024, 12, 31))
+    # Data source mode: "local" or "api"
+    source_mode: str = "local"
     
     # Processing parameters
     lon_bin_size: float = 0.1  # Binning resolution (degrees)
-    buffer_deg: float = 5.0  # Geographic buffer for filtering
+    buffer_deg: float = 0.5  # Geographic buffer for filtering (degrees)
     min_points_per_month: int = 10  # Minimum points for valid month
     
     # Jason coverage limit
     max_latitude: float = 66.0  # Jason satellite coverage limit
+    
+    # Satellites to include (default: all)
+    satellites: List[str] = field(default_factory=lambda: ["J1", "J2", "J3"])
 
 
 @dataclass
@@ -170,11 +172,18 @@ class CMEMSService:
     """
     Service for loading and processing CMEMS L3 1Hz altimetry data.
     
+    Supports both LOCAL files and API access.
     Merges Jason-1, Jason-2, Jason-3 data automatically.
     Produces PassData objects compatible with the standard visualization tabs.
     
+    Local file structure expected:
+        base_dir/
+        ├── J1_netcdf/YYYY/MM/dt_global_j1_phy_l3_1hz_*.nc
+        ├── J2_netcdf/YYYY/MM/dt_global_j2_phy_l3_1hz_*.nc
+        └── J3_netcdf/YYYY/MM/dt_global_j3_phy_l3_1hz_*.nc
+    
     Example usage:
-        config = CMEMSConfig(base_dir="/path/to/COPERNICUS DATA")
+        config = CMEMSConfig(base_dir="/path/to/COPERNICUS DATA", source_mode="local")
         service = CMEMSService(config)
         pass_data = service.load_pass_data(gate_path="/path/to/gate.shp")
     """
@@ -192,6 +201,59 @@ class CMEMSService:
     # ==========================================================================
     # PUBLIC METHODS
     # ==========================================================================
+    
+    def count_files(self) -> Dict[str, int]:
+        """
+        Count NetCDF files available for each satellite.
+        Useful for sidebar display.
+        
+        Returns:
+            Dict with satellite names as keys and file counts as values.
+        """
+        base_dir = Path(self.config.base_dir)
+        counts = {}
+        total = 0
+        
+        for sat in self.config.satellites:
+            folder = base_dir / f"{sat}_netcdf"
+            if folder.exists():
+                count = len(list(folder.rglob("*.nc")))
+                counts[sat] = count
+                total += count
+            else:
+                counts[sat] = 0
+        
+        counts["total"] = total
+        return counts
+    
+    def get_date_range(self) -> Dict[str, Any]:
+        """
+        Get date range of available data by checking file names.
+        Pattern: dt_global_jX_phy_l3_1hz_YYYYMMDD_*.nc
+        
+        Returns:
+            Dict with min_date, max_date, and years list.
+        """
+        base_dir = Path(self.config.base_dir)
+        years = set()
+        
+        for sat in self.config.satellites:
+            folder = base_dir / f"{sat}_netcdf"
+            if folder.exists():
+                # Check year folders
+                for year_folder in folder.iterdir():
+                    if year_folder.is_dir() and year_folder.name.isdigit():
+                        years.add(int(year_folder.name))
+        
+        if not years:
+            return {"min_date": None, "max_date": None, "years": []}
+        
+        sorted_years = sorted(years)
+        return {
+            "min_date": f"{sorted_years[0]}-01-01",
+            "max_date": f"{sorted_years[-1]}-12-31",
+            "years": sorted_years
+        }
     
     @log_call(logger)
     def load_pass_data(self, gate_path: str) -> Optional[PassData]:
@@ -310,51 +372,67 @@ class CMEMSService:
     # ==========================================================================
     
     def _load_all_jason_files(self, gate_bounds: Dict[str, float]) -> Optional[pd.DataFrame]:
-        """Load and merge all Jason-1/2/3 files within gate bounds."""
+        """
+        Load and merge all Jason-1/2/3 files within gate bounds.
+        
+        File structure expected:
+            base_dir/J1_netcdf/YYYY/MM/*.nc
+            base_dir/J2_netcdf/YYYY/MM/*.nc
+            base_dir/J3_netcdf/YYYY/MM/*.nc
+        """
         
         base_dir = Path(self.config.base_dir)
         
-        jason_folders = {
-            "J1": base_dir / "J1_netcdf",
-            "J2": base_dir / "J2_netcdf",
-            "J3": base_dir / "J3_netcdf",
-        }
+        # Map satellite config names to folder names
+        jason_folders = {}
+        for sat in self.config.satellites:
+            folder = base_dir / f"{sat}_netcdf"
+            if folder.exists():
+                jason_folders[sat] = folder
+            else:
+                logger.warning(f"Folder not found: {folder}")
         
-        # Find all NetCDF files
+        if not jason_folders:
+            logger.error(f"No satellite folders found in {base_dir}")
+            return None
+        
+        # Find all NetCDF files (recursive search in YYYY/MM structure)
         all_files = []
         for jason, folder in jason_folders.items():
-            if folder.exists():
-                nc_files = list(folder.rglob("*.nc"))
-                all_files.extend([(jason, f) for f in nc_files])
-                logger.info(f"{jason}: {len(nc_files)} files found")
+            # Use rglob to find all .nc files recursively
+            nc_files = list(folder.rglob("*.nc"))
+            all_files.extend([(jason, f) for f in nc_files])
+            logger.info(f"{jason}: {len(nc_files)} files found in {folder}")
         
         if not all_files:
             logger.error("No NetCDF files found")
             return None
         
-        logger.info(f"Processing {len(all_files)} total files...")
+        logger.info(f"Processing {len(all_files)} total files (this may take a while)...")
         
-        # Process files
+        # Process files with progress
         data_chunks = []
         processed = 0
         skipped = 0
+        with_data = 0
         
         for jason, nc_file in all_files:
             processed += 1
             
-            if processed % 100 == 0:
-                logger.debug(f"Processed {processed}/{len(all_files)} files")
+            if processed % 500 == 0:
+                logger.info(f"Progress: {processed}/{len(all_files)} files, {with_data} with data in gate")
             
             try:
                 chunk = self._process_single_file(jason, nc_file, gate_bounds)
                 if chunk is not None and len(chunk) > 0:
                     data_chunks.append(chunk)
+                    with_data += 1
             except Exception as e:
                 skipped += 1
                 if skipped % 50 == 0:
                     logger.debug(f"Skipped {skipped} files (last error: {e})")
         
-        logger.info(f"Processed: {processed}, Skipped: {skipped}, Chunks: {len(data_chunks)}")
+        logger.info(f"Processed: {processed}, Skipped: {skipped}, With data: {with_data}")
         
         if not data_chunks:
             return None
@@ -369,10 +447,8 @@ class CMEMSService:
         df = df.dropna(subset=['time'])
         df = df.sort_values('time')
         
-        # Filter by date range
-        start = pd.Timestamp(self.config.start_date)
-        end = pd.Timestamp(self.config.end_date)
-        df = df[(df['time'] >= start) & (df['time'] <= end)]
+        # NO date range filter - use ALL data in the folder
+        logger.info(f"Total observations: {len(df):,} from {df['time'].min()} to {df['time'].max()}")
         
         return df
     

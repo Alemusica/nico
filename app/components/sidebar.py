@@ -87,20 +87,14 @@ def render_sidebar() -> AppConfig:
         # === CMEMS-SPECIFIC OPTIONS ===
         st.sidebar.divider()
         
-        # === 3. DATA PATHS ===
+        # === 3. DATA PATHS (includes source mode) ===
         st.sidebar.subheader("3. CMEMS Data Paths")
         config = _render_cmems_paths(config)
         
         st.sidebar.divider()
         
-        # === 4. DATE RANGE ===
-        st.sidebar.subheader("4. Date Range")
-        config = _render_cmems_date_range(config)
-        
-        st.sidebar.divider()
-        
-        # === 5. PROCESSING PARAMETERS ===
-        with st.sidebar.expander("5. Processing Parameters", expanded=False):
+        # === 4. PROCESSING PARAMETERS ===
+        with st.sidebar.expander("4. Processing Parameters", expanded=False):
             config = _render_cmems_params(config)
         
         # === 66°N WARNING ===
@@ -304,54 +298,63 @@ def _render_processing_params(config: AppConfig) -> AppConfig:
 # ============================================================
 
 def _render_cmems_paths(config: AppConfig) -> AppConfig:
-    """Render CMEMS data path inputs."""
+    """Render CMEMS data path inputs and source mode."""
+    
+    # Source mode (like SLCCI)
+    config.cmems_source_mode = st.sidebar.radio(
+        "Source Mode",
+        ["local", "api"],
+        format_func=lambda x: "📁 LOCAL Files" if x == "local" else "🌐 CMEMS API",
+        horizontal=True,
+        key="sidebar_cmems_source_mode",
+        help="LOCAL=NetCDF files on disk, API=Copernicus Marine Service"
+    )
+    
+    if config.cmems_source_mode == "api":
+        st.sidebar.info("🚧 API mode coming soon. Using local files for now.")
+        config.cmems_source_mode = "local"
     
     config.cmems_base_dir = st.sidebar.text_input(
         "CMEMS Data Directory",
-        value="/Users/nicolocaron/Desktop/ARCFRESH/CMEMS_L3_1Hz",
+        value="/Users/nicolocaron/Desktop/ARCFRESH/COPERNICUS DATA",
         key="sidebar_cmems_dir",
-        help="Folder containing CMEMS L3 1Hz files (J1/J2/J3 merged)"
+        help="Folder containing J1_netcdf/, J2_netcdf/, J3_netcdf/ subfolders"
     )
     
-    # Show available files info
+    # Show available files info using CMEMSService
     from pathlib import Path
-    cmems_path = Path(config.cmems_base_dir)
-    if cmems_path.exists():
-        nc_files = list(cmems_path.glob("*.nc"))
-        st.sidebar.caption(f"📁 {len(nc_files)} NetCDF files found")
-    else:
-        st.sidebar.warning("⚠️ Directory not found")
+    try:
+        from src.services.cmems_service import CMEMSService, CMEMSConfig
+        temp_config = CMEMSConfig(base_dir=config.cmems_base_dir)
+        temp_service = CMEMSService(temp_config)
+        file_counts = temp_service.count_files()
+        date_info = temp_service.get_date_range()
+        
+        if file_counts["total"] > 0:
+            st.sidebar.caption(f"📁 {file_counts['total']:,} NetCDF files found")
+            # Show per-satellite breakdown
+            sat_info = " | ".join([f"{k}: {v}" for k, v in file_counts.items() if k != "total"])
+            st.sidebar.caption(f"   {sat_info}")
+            if date_info["years"]:
+                st.sidebar.caption(f"📅 Years: {date_info['years'][0]} - {date_info['years'][-1]}")
+        else:
+            st.sidebar.warning("⚠️ 0 NetCDF files found")
+    except Exception as e:
+        cmems_path = Path(config.cmems_base_dir)
+        if not cmems_path.exists():
+            st.sidebar.warning("⚠️ Directory not found")
+        else:
+            st.sidebar.warning(f"⚠️ Error checking files: {e}")
     
     return config
 
 
 def _render_cmems_date_range(config: AppConfig) -> AppConfig:
-    """Render CMEMS date range selection."""
-    import datetime
-    
-    col1, col2 = st.sidebar.columns(2)
-    
-    with col1:
-        config.cmems_start_date = st.date_input(
-            "Start Date",
-            value=datetime.date(2002, 1, 1),
-            key="sidebar_cmems_start",
-            help="Start date for CMEMS data"
-        )
-    
-    with col2:
-        config.cmems_end_date = st.date_input(
-            "End Date",
-            value=datetime.date(2020, 12, 31),
-            key="sidebar_cmems_end",
-            help="End date for CMEMS data"
-        )
-    
-    # Show date range info
-    if config.cmems_start_date and config.cmems_end_date:
-        n_years = (config.cmems_end_date - config.cmems_start_date).days / 365.25
-        st.sidebar.caption(f"📅 {n_years:.1f} years selected")
-    
+    """
+    CMEMS date range - REMOVED.
+    We load ALL data from the folder, no date filtering.
+    """
+    st.sidebar.info("📅 Loading ALL data from folder (no date filter)")
     return config
 
 
@@ -541,38 +544,31 @@ def _load_cmems_data(config: AppConfig):
     
     try:
         from src.services.cmems_service import CMEMSService, CMEMSConfig
-        import datetime
-        
-        # Convert dates
-        start_date = config.cmems_start_date
-        end_date = config.cmems_end_date
-        
-        if isinstance(start_date, datetime.date) and not isinstance(start_date, datetime.datetime):
-            start_date = datetime.datetime.combine(start_date, datetime.time.min)
-        if isinstance(end_date, datetime.date) and not isinstance(end_date, datetime.datetime):
-            end_date = datetime.datetime.combine(end_date, datetime.time.max)
         
         cmems_config = CMEMSConfig(
             base_dir=str(cmems_path),
-            start_date=start_date,
-            end_date=end_date,
+            source_mode=getattr(config, 'cmems_source_mode', 'local'),
             lon_bin_size=getattr(config, 'cmems_lon_bin_size', 0.1),
             buffer_deg=getattr(config, 'cmems_buffer_deg', 0.5),
         )
         
         service = CMEMSService(cmems_config)
         
-        with st.spinner("Loading CMEMS data (J1/J2/J3 merged)..."):
+        # Show file count
+        file_counts = service.count_files()
+        st.sidebar.info(f"📁 Found {file_counts['total']:,} files to process...")
+        
+        with st.spinner(f"Loading CMEMS data ({file_counts['total']:,} files)... This may take several minutes."):
             # Check gate coverage
-            coverage_warning = service.check_gate_coverage(gate_path)
-            if coverage_warning:
-                st.sidebar.warning(coverage_warning)
+            coverage_info = service.check_gate_coverage(gate_path)
+            if coverage_info.get("warning"):
+                st.sidebar.warning(f"⚠️ {coverage_info['warning']}")
             
             # Load pass data
             pass_data = service.load_pass_data(gate_path=gate_path)
             
             if pass_data is None:
-                st.sidebar.error("❌ No data found for this gate/date range")
+                st.sidebar.error("❌ No data found for this gate")
                 return
             
             # Store in session state (using same key as SLCCI for unified tabs)
@@ -584,13 +580,16 @@ def _load_cmems_data(config: AppConfig):
             # Success message
             n_obs = len(pass_data.df) if hasattr(pass_data, 'df') else 0
             n_months = pass_data.df['year_month'].nunique() if hasattr(pass_data, 'df') and 'year_month' in pass_data.df.columns else 0
+            time_range = ""
+            if hasattr(pass_data, 'df') and 'time' in pass_data.df.columns:
+                time_range = f"\n- Period: {pass_data.df['time'].min().strftime('%Y-%m')} → {pass_data.df['time'].max().strftime('%Y-%m')}"
             
             st.sidebar.success(f"""
             ✅ CMEMS Data Loaded!
             - Gate: {pass_data.strait_name}
             - Pass: {pass_data.pass_number} (synthetic)
             - Observations: {n_obs:,}
-            - Monthly periods: {n_months}
+            - Monthly periods: {n_months}{time_range}
             - Satellites: J1+J2+J3 merged
             """)
             
