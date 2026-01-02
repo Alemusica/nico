@@ -207,11 +207,19 @@ class SLCCIService:
             logger.warning(f"Empty DataFrame for pass {pass_number}")
             return None
         
-        # 5. Build gate profile points
-        gate_lon_pts, gate_lat_pts, x_km = self._get_gate_profile_points(gate_gdf)
+        # 5. Build gate profile points (for reference)
+        gate_lon_pts, gate_lat_pts, _ = self._get_gate_profile_points(gate_gdf)
         
-        # 6. Compute DOT matrix and slope series
-        dot_matrix, time_periods = self._build_dot_matrix(df, gate_lon_pts, gate_lat_pts)
+        # 6. Build DOT matrix using LONGITUDE BINNING (like SLCCI PLOTTER)
+        dot_matrix, time_periods, lon_centers, x_km = self._build_dot_matrix(
+            df, gate_lon_pts, gate_lat_pts
+        )
+        
+        # Use lon_centers for profiles instead of gate points
+        gate_lon_pts = lon_centers
+        gate_lat_pts = np.full_like(lon_centers, df["lat"].mean())  # Approx lat
+        
+        # 7. Compute slope series using x_km from longitude bins
         slope_series = self._compute_slope_series(dot_matrix, x_km)
         
         # 7. Compute profile mean
@@ -638,42 +646,91 @@ class SLCCIService:
         df: pd.DataFrame,
         gate_lon_pts: np.ndarray,
         gate_lat_pts: np.ndarray,
-        search_radius: float = 0.5,
-    ) -> Tuple[np.ndarray, List]:
+        lon_bin_size: float = 0.01,
+    ) -> Tuple[np.ndarray, List, np.ndarray, np.ndarray]:
         """
-        Build DOT matrix along gate profile for each time period.
+        Build DOT matrix using LONGITUDE BINNING (like SLCCI PLOTTER notebook).
         
+        This bins the satellite data by longitude (not by distance to gate points),
+        which is the correct method for computing cross-gate DOT profiles.
+        
+        Parameters
+        ----------
+        df : pd.DataFrame
+            DataFrame with 'lon', 'lat', 'dot', 'year_month' columns
+        gate_lon_pts : np.ndarray
+            Gate longitude points (used for reference, not binning)
+        gate_lat_pts : np.ndarray
+            Gate latitude points
+        lon_bin_size : float
+            Longitude bin size in degrees (default 0.01°)
+            
         Returns
         -------
         dot_matrix : np.ndarray
-            Shape (n_gate_pts, n_time_periods)
+            Shape (n_lon_bins, n_time_periods) - DOT values binned by longitude
         time_periods : List
-            List of time periods
+            List of year-month periods
+        lon_centers : np.ndarray
+            Center longitude of each bin
+        x_km : np.ndarray
+            Distance in km from first bin (for slope calculation)
         """
         time_periods = sorted(df["year_month"].unique())
-        n_gate_pts = len(gate_lon_pts)
         n_time = len(time_periods)
         
-        dot_matrix = np.full((n_gate_pts, n_time), np.nan, dtype=float)
-        gate_coords = np.column_stack([gate_lon_pts, gate_lat_pts])
+        # Determine longitude range from DATA (not gate)
+        lon_min = df["lon"].min()
+        lon_max = df["lon"].max()
         
+        # Create longitude bins
+        lon_bins = np.arange(lon_min, lon_max + lon_bin_size, lon_bin_size)
+        lon_centers = (lon_bins[:-1] + lon_bins[1:]) / 2
+        n_lon_bins = len(lon_centers)
+        
+        logger.info(f"Longitude binning: {lon_min:.3f}° to {lon_max:.3f}°, "
+                    f"{n_lon_bins} bins of {lon_bin_size}°")
+        
+        # Create DOT matrix: rows = longitude bins, columns = time periods
+        dot_matrix = np.full((n_lon_bins, n_time), np.nan, dtype=float)
+        
+        # Fill matrix by binning data for each time period
         for it, period in enumerate(time_periods):
             month_data = df[df["year_month"] == period]
             if month_data.empty:
                 continue
             
-            month_coords = month_data[["lon", "lat"]].to_numpy()
-            month_dots = month_data["dot"].to_numpy()
+            # Bin by longitude
+            month_data_copy = month_data.copy()
+            month_data_copy["lon_bin"] = pd.cut(
+                month_data_copy["lon"],
+                bins=lon_bins,
+                labels=False,
+                include_lowest=True
+            )
             
-            # Use KDTree for spatial matching
-            tree = cKDTree(month_coords)
-            idx_lists = tree.query_ball_point(gate_coords, r=search_radius)
+            # Average DOT in each longitude bin
+            binned = month_data_copy.groupby("lon_bin")["dot"].mean()
             
-            for ig, idx_near in enumerate(idx_lists):
-                if idx_near:
-                    dot_matrix[ig, it] = np.nanmean(month_dots[idx_near])
+            # Fill matrix
+            for bin_idx in binned.index:
+                if pd.notna(bin_idx) and int(bin_idx) < n_lon_bins:
+                    dot_matrix[int(bin_idx), it] = binned[bin_idx]
         
-        return dot_matrix, time_periods
+        # Calculate distance in km from first bin (for slope calculation)
+        R_earth = 6371.0
+        mean_lat = df["lat"].mean()
+        lat_rad = np.deg2rad(mean_lat)
+        lon_rad = np.deg2rad(lon_centers)
+        dlon = lon_rad - lon_rad[0]
+        x_km = R_earth * np.abs(dlon) * np.cos(lat_rad)
+        
+        valid_count = np.sum(np.isfinite(dot_matrix))
+        total_count = dot_matrix.size
+        logger.info(f"DOT matrix: {valid_count}/{total_count} valid values "
+                    f"({100*valid_count/total_count:.1f}%)")
+        
+        return dot_matrix, time_periods, lon_centers, x_km
     
     def _compute_slope_series(
         self,

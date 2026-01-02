@@ -66,7 +66,7 @@ def _render_empty_tabs(config: AppConfig):
 
 def _render_slcci_tabs(slcci_data, config: AppConfig):
     """Render tabs for SLCCI satellite data."""
-    tab1, tab2, tab3 = st.tabs(["Slope Timeline", "DOT Profile", "Spatial Map"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Slope Timeline", "DOT Profile", "Spatial Map", "Monthly Analysis"])
     
     with tab1:
         _render_slope_timeline(slcci_data, config)
@@ -75,6 +75,8 @@ def _render_slcci_tabs(slcci_data, config: AppConfig):
     with tab3:
         _render_spatial_map(slcci_data, config)
 
+    with tab4:
+        _render_slcci_monthly_analysis(slcci_data, config)
 
 def _render_slope_timeline(slcci_data, config: AppConfig):
     """Render slope timeline chart."""
@@ -333,3 +335,144 @@ def _render_data_explorer(datasets, config):
                 st.dataframe(data.head(100))
             else:
                 st.write(data)
+
+
+def _render_slcci_monthly_analysis(slcci_data, config):
+    """
+    Render 12-month DOT analysis (like SLCCI PLOTTER notebook).
+    Shows DOT vs Longitude for each month (1-12) with linear regression.
+    """
+    st.subheader("12 Months DOT Analysis")
+    
+    df = getattr(slcci_data, 'df', None)
+    strait_name = getattr(slcci_data, 'strait_name', 'Unknown')
+    pass_number = getattr(slcci_data, 'pass_number', 0)
+    
+    if df is None or (hasattr(df, 'empty') and df.empty):
+        st.warning("No data available for monthly analysis.")
+        return
+    
+    required = ['lon', 'dot', 'month']
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        st.error(f"Missing columns: {missing}")
+        return
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        show_regression = st.checkbox("Show linear regression", value=True, key="monthly_reg")
+    with col2:
+        slope_units = st.selectbox("Slope units", ["mm/m", "m/100km"], index=0, key="monthly_units")
+    
+    from plotly.subplots import make_subplots
+    
+    month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    
+    fig = make_subplots(
+        rows=3, cols=4,
+        subplot_titles=[f"{month_names[i]} ({i+1})" for i in range(12)],
+        horizontal_spacing=0.05,
+        vertical_spacing=0.1
+    )
+    
+    R_earth = 6371.0
+    mean_lat = df['lat'].mean() if 'lat' in df.columns else 70.0
+    lat_rad = np.deg2rad(mean_lat)
+    
+    slopes_info = []
+    
+    for month in range(1, 13):
+        row = (month - 1) // 4 + 1
+        col = (month - 1) % 4 + 1
+        
+        month_df = df[df['month'] == month].copy()
+        if len(month_df) < 2:
+            continue
+        
+        lon = month_df['lon'].values
+        dot = month_df['dot'].values
+        
+        mask = np.isfinite(lon) & np.isfinite(dot)
+        if np.sum(mask) < 2:
+            continue
+        
+        lon_valid = lon[mask]
+        dot_valid = dot[mask]
+        
+        fig.add_trace(
+            go.Scatter(
+                x=lon_valid, y=dot_valid, mode='markers',
+                marker=dict(size=3, color='steelblue', opacity=0.5),
+                showlegend=False
+            ),
+            row=row, col=col
+        )
+        
+        if show_regression and len(lon_valid) > 2:
+            try:
+                lon_rad_arr = np.deg2rad(lon_valid)
+                dlon_rad = lon_rad_arr - lon_rad_arr.min()
+                x_km = R_earth * dlon_rad * np.cos(lat_rad)
+                
+                slope_m_km, intercept = np.polyfit(x_km, dot_valid, 1)
+                
+                if slope_units == "mm/m":
+                    slope_display = slope_m_km * 1000
+                else:
+                    slope_display = slope_m_km * 100
+                
+                slopes_info.append({
+                    'month': month,
+                    'name': month_names[month-1],
+                    'slope': slope_display,
+                    'n_points': len(lon_valid)
+                })
+                
+                lon_line = np.linspace(lon_valid.min(), lon_valid.max(), 50)
+                lon_line_rad = np.deg2rad(lon_line)
+                dlon_line_rad = lon_line_rad - lon_rad_arr.min()
+                x_km_line = R_earth * dlon_line_rad * np.cos(lat_rad)
+                dot_line = slope_m_km * x_km_line + intercept
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=lon_line, y=dot_line, mode='lines',
+                        line=dict(color='red', width=2),
+                        showlegend=False
+                    ),
+                    row=row, col=col
+                )
+            except Exception:
+                pass
+    
+    fig.update_layout(
+        title=f"{strait_name} - Pass {pass_number} - Monthly DOT vs Longitude",
+        height=700,
+        template="plotly_white",
+        showlegend=False
+    )
+    
+    for i in range(1, 13):
+        row = (i - 1) // 4 + 1
+        col = (i - 1) % 4 + 1
+        if row == 3:
+            fig.update_xaxes(title_text="Lon (°)", row=row, col=col)
+        if col == 1:
+            fig.update_yaxes(title_text="DOT (m)", row=row, col=col)
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    if slopes_info:
+        with st.expander("Monthly Slopes Summary"):
+            slopes_df = pd.DataFrame(slopes_info)
+            slopes_df.columns = ['Month #', 'Month', f'Slope ({slope_units})', 'N Points']
+            st.dataframe(slopes_df, use_container_width=True)
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Mean Slope", f"{slopes_df[f'Slope ({slope_units})'].mean():.4f}")
+            with col2:
+                st.metric("Std Dev", f"{slopes_df[f'Slope ({slope_units})'].std():.4f}")
+            with col3:
+                st.metric("Months with Data", len(slopes_df))
