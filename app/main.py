@@ -58,8 +58,11 @@ def run_app():
     # Store config for tabs
     st.session_state.app_config = config
     
-    # Check if data is loaded - but always show catalog tab
-    if not st.session_state.get("datasets"):
+    # Check if SLCCI data or generic datasets are loaded
+    slcci_data = st.session_state.get("slcci_pass_data")
+    datasets = st.session_state.get("datasets")
+    
+    if not slcci_data and not datasets:
         # Show catalog-only view when no data loaded
         render_catalog_only_view()
         return
