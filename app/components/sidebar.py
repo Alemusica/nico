@@ -1,12 +1,17 @@
 """
-Sidebar Component - SLCCI Analysis
-===================================
+Sidebar Component - SLCCI & CMEMS Analysis
+===========================================
 Controls following SLCCI PLOTTER notebook workflow:
 1. Gate Selection (region + gate)
-2. Data Paths (SLCCI files + geoid)
-3. Pass Selection (auto/manual)
-4. Cycle Range
-5. Processing Parameters (binning, flags)
+2. Data Source Selection (SLCCI/CMEMS with comparison mode)
+3. Data Paths (SLCCI files + geoid / CMEMS folders)
+4. Pass Selection (auto/manual for SLCCI, from filename for CMEMS)
+5. Cycle Range (SLCCI only)
+6. Processing Parameters (binning, flags)
+
+Comparison Mode:
+- Load SLCCI and CMEMS separately
+- Toggle comparison to overlay plots
 """
 
 import os
@@ -15,7 +20,7 @@ from typing import Optional
 
 import streamlit as st
 
-from ..state import AppConfig
+from ..state import AppConfig, store_slcci_data, store_cmems_data, is_comparison_mode, set_comparison_mode
 
 
 # Initialize GateService
@@ -165,15 +170,58 @@ def _render_gate_selection(config: AppConfig) -> AppConfig:
 
 
 def _render_data_source(config: AppConfig) -> AppConfig:
-    """Render data source selector."""
+    """Render data source selector with comparison mode option."""
     
+    # Main dataset selector
     config.selected_dataset_type = st.sidebar.radio(
         "Dataset",
         ["SLCCI", "CMEMS", "ERA5"],
         horizontal=True,
         key="sidebar_datasource",
-        help="SLCCI=Sea Level CCI, CMEMS/ERA5=API"
+        help="SLCCI=Sea Level CCI (J2), CMEMS=Copernicus L3 1Hz (J1/J2/J3)"
     )
+    
+    # Store in session state for tabs
+    st.session_state["selected_dataset_type"] = config.selected_dataset_type
+    
+    # === COMPARISON MODE ===
+    st.sidebar.divider()
+    
+    # Check if both datasets are loaded
+    slcci_loaded = st.session_state.get("dataset_slcci") is not None
+    cmems_loaded = st.session_state.get("dataset_cmems") is not None
+    
+    if slcci_loaded or cmems_loaded:
+        st.sidebar.markdown("**📊 Loaded Data:**")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if slcci_loaded:
+                slcci_data = st.session_state.get("dataset_slcci")
+                st.success(f"✅ SLCCI\nPass {getattr(slcci_data, 'pass_number', '?')}")
+            else:
+                st.info("⬜ SLCCI")
+        with col2:
+            if cmems_loaded:
+                cmems_data = st.session_state.get("dataset_cmems")
+                pass_num = getattr(cmems_data, 'pass_number', None)
+                pass_str = f"Pass {pass_num}" if pass_num else "Synthetic"
+                st.success(f"✅ CMEMS\n{pass_str}")
+            else:
+                st.info("⬜ CMEMS")
+        
+        # Comparison toggle (only if both loaded)
+        if slcci_loaded and cmems_loaded:
+            comparison_enabled = st.sidebar.checkbox(
+                "🔀 **Comparison Mode**",
+                value=is_comparison_mode(),
+                key="sidebar_comparison_mode",
+                help="Overlay SLCCI and CMEMS plots for comparison"
+            )
+            set_comparison_mode(comparison_enabled)
+            config.comparison_mode = comparison_enabled
+            
+            if comparison_enabled:
+                st.sidebar.success("✅ Comparison mode: Plots will overlay both datasets")
     
     # For SLCCI, add LOCAL/API selector
     if config.selected_dataset_type == "SLCCI":
@@ -346,6 +394,22 @@ def _render_cmems_paths(config: AppConfig) -> AppConfig:
         else:
             st.sidebar.warning(f"⚠️ Error checking files: {e}")
     
+    # Show pass number from gate filename (if available)
+    gate_path = _get_gate_shapefile(config.selected_gate)
+    if gate_path:
+        try:
+            from src.services.cmems_service import _extract_pass_from_gate_name
+            strait_name, pass_number = _extract_pass_from_gate_name(gate_path)
+            
+            if pass_number is not None:
+                st.sidebar.success(f"🎯 **Pass {pass_number}** found in gate filename")
+                st.sidebar.caption(f"Gate: {strait_name}")
+            else:
+                st.sidebar.info("ℹ️ No pass number in gate filename (synthetic pass)")
+                st.sidebar.caption(f"Gate: {strait_name}")
+        except Exception as e:
+            pass  # Silently continue if extraction fails
+    
     return config
 
 
@@ -373,16 +437,16 @@ def _render_cmems_params(config: AppConfig) -> AppConfig:
         help="Binning resolution for CMEMS (0.05° - 0.50°, coarser than SLCCI)"
     )
     
-    # Buffer around gate
+    # Buffer around gate - default 5.0° (from Copernicus notebook)
     config.cmems_buffer_deg = st.slider(
         "Gate Buffer (°)",
-        min_value=0.1,
-        max_value=2.0,
-        value=0.5,
-        step=0.1,
+        min_value=1.0,
+        max_value=10.0,
+        value=5.0,  # Changed from 0.5 to 5.0 as per Copernicus notebook
+        step=0.5,
         format="%.1f",
         key="sidebar_cmems_buffer",
-        help="Buffer around gate for data extraction"
+        help="Buffer around gate for data extraction (default 5.0° from notebook)"
     )
     
     return config
@@ -488,8 +552,8 @@ def _load_slcci_data(config: AppConfig):
                 st.sidebar.error(f"❌ No data for pass {pass_number}")
                 return
             
-            # Store in session state
-            st.session_state["slcci_pass_data"] = pass_data
+            # Store in session state using dedicated function
+            store_slcci_data(pass_data)
             st.session_state["slcci_service"] = service
             st.session_state["slcci_config"] = config
             st.session_state["datasets"] = {}  # Clear generic
@@ -499,7 +563,7 @@ def _load_slcci_data(config: AppConfig):
             n_cyc = pass_data.df['cycle'].nunique() if hasattr(pass_data, 'df') and 'cycle' in pass_data.df.columns else 0
             
             st.sidebar.success(f"""
-            ✅ Data Loaded!
+            ✅ SLCCI Data Loaded!
             - Pass: {pass_number}
             - Observations: {n_obs:,}
             - Cycles: {n_cyc}
@@ -571,8 +635,8 @@ def _load_cmems_data(config: AppConfig):
                 st.sidebar.error("❌ No data found for this gate")
                 return
             
-            # Store in session state (using same key as SLCCI for unified tabs)
-            st.session_state["slcci_pass_data"] = pass_data
+            # Store in session state using dedicated function
+            store_cmems_data(pass_data)
             st.session_state["cmems_service"] = service
             st.session_state["cmems_config"] = config
             st.session_state["datasets"] = {}  # Clear generic
@@ -584,10 +648,14 @@ def _load_cmems_data(config: AppConfig):
             if hasattr(pass_data, 'df') and 'time' in pass_data.df.columns:
                 time_range = f"\n- Period: {pass_data.df['time'].min().strftime('%Y-%m')} → {pass_data.df['time'].max().strftime('%Y-%m')}"
             
+            # Show pass number properly
+            pass_num = pass_data.pass_number
+            pass_display = f"Pass {pass_num}" if pass_num else "Synthetic pass"
+            
             st.sidebar.success(f"""
             ✅ CMEMS Data Loaded!
             - Gate: {pass_data.strait_name}
-            - Pass: {pass_data.pass_number} (synthetic)
+            - {pass_display}
             - Observations: {n_obs:,}
             - Monthly periods: {n_months}{time_range}
             - Satellites: J1+J2+J3 merged

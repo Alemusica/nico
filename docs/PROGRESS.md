@@ -1,6 +1,6 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-02 (Session - CMEMS Service + Tab 5 Geostrophic)
+> Last Updated: 2026-01-02 (Session - Comparison Mode + Export)
 > Agent: Use this file to track progress. Update after each task.
 
 ---
@@ -12,6 +12,33 @@
 - [ ] Letto `docs/UNIFIED_DATA_PIPELINE.md`? ← NEW!
 - [ ] Verificato codice esistente?
 - [ ] Usando `.venv/bin/python`?
+
+---
+
+## 🆕 COMPARISON MODE & EXPORT (2026-01-02) 
+
+### New Features Implemented
+
+| Task | Status | Files |
+|------|--------|-------|
+| Pass extraction from filename | ✅ DONE | `cmems_service.py` - `_extract_pass_from_gate_name()` |
+| CMEMS buffer fix (5.0°) | ✅ DONE | From Copernicus notebook |
+| Separate session state keys | ✅ DONE | `state.py` - `dataset_slcci`, `dataset_cmems` |
+| Comparison mode toggle | ✅ DONE | `sidebar.py` - checkbox when both loaded |
+| Comparison tabs overlay | ✅ DONE | `tabs.py` - `_render_comparison_tabs()` |
+| Export tab (CSV + PNG) | ✅ DONE | `tabs.py` - `_render_export_tab()` |
+
+### Comparison Mode Pattern (from COMPARISON_BATCH.ipynb)
+- **SLCCI**: Orange (`tab:orange`) 
+- **CMEMS**: Blue (`tab:blue`)
+- Overlay plots on same figure
+- Statistics comparison side-by-side
+
+### Pass Number Extraction Patterns
+- `_pass_XXX` at end → `("Strait Name", 248)`
+- `_XXX` trailing number → `("Strait Name", 248)`
+- `pass_XXX` anywhere → `("Strait Name", 248)`
+- No pass found → `("Strait Name", None)` (synthetic pass)
 
 ---
 

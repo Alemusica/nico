@@ -1,6 +1,7 @@
 # 📊 NICO Visualization Architecture
 
-> **State of the Art** - Documentazione completa dell'architettura di visualizzazione per SLCCI e futuri dataset.
+> **State of the Art** - Documentazione completa dell'architettura di visualizzazione per SLCCI e CMEMS dataset.
+> **Last Updated**: 2026-01-02 (Comparison Mode + Export)
 
 ---
 
@@ -11,7 +12,44 @@ L'architettura è progettata per essere **estendibile** ad altri dataset (CMEMS,
 
 ---
 
-## 📐 Architettura delle 4 Tabs
+## 🔀 Comparison Mode (NEW)
+
+Quando entrambi SLCCI e CMEMS sono caricati, l'utente può attivare **Comparison Mode** per sovrapporre i plot.
+
+| Colore | Dataset | Pattern |
+|--------|---------|---------|
+| 🟠 Orange (`tab:orange`) | SLCCI J2 | Along-track altimetry |
+| 🔵 Blue (`tab:blue`) | CMEMS J1/J2/J3 | Merged along-track |
+
+### Comparison Tabs
+
+1. **Slope Comparison**: Overlay time series
+2. **DOT Profile Comparison**: Overlay mean profiles with WEST/EAST labels
+3. **Spatial Map**: Both datasets + gate line
+
+```python
+# Color scheme (from COMPARISON_BATCH.ipynb)
+COLOR_SLCCI = "tab:orange"
+COLOR_CMEMS = "tab:blue"
+
+# Example overlay
+fig.add_trace(go.Scatter(x=time_slcci, y=slope_slcci, name="SLCCI", line=dict(color=COLOR_SLCCI)))
+fig.add_trace(go.Scatter(x=time_cmems, y=slope_cmems, name="CMEMS", line=dict(color=COLOR_CMEMS)))
+```
+
+---
+
+## 📥 Export Tab (NEW)
+
+| Export Type | Format | Function |
+|-------------|--------|----------|
+| Raw Data | CSV | `st.download_button()` |
+| Slope Series | CSV | Combined SLCCI + CMEMS |
+| Figures | PNG | Plotly camera icon / menu |
+
+---
+
+## 📐 Architettura delle 6 Tabs
 
 ### Tab 1: Slope Timeline
 **Scopo**: Mostrare l'evoluzione temporale della pendenza SSH lungo il gate.

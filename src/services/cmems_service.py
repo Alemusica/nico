@@ -58,7 +58,7 @@ class CMEMSConfig:
     
     # Processing parameters
     lon_bin_size: float = 0.1  # Binning resolution (degrees)
-    buffer_deg: float = 0.5  # Geographic buffer for filtering (degrees)
+    buffer_deg: float = 5.0  # Geographic buffer for filtering (degrees) - from Copernicus notebook
     min_points_per_month: int = 10  # Minimum points for valid month
     
     # Jason coverage limit
@@ -115,31 +115,47 @@ def _load_gate_gdf(gate_path: str) -> gpd.GeoDataFrame:
     return gate_gdf.to_crs("EPSG:4326")
 
 
-def _extract_pass_from_gate_name(gate_path: str) -> Tuple[str, int]:
+def _extract_pass_from_gate_name(gate_path: str) -> Tuple[str, Optional[int]]:
     """
     Extract strait name and pass number from gate filename.
     
-    Example: "barents_sea_opening_S3_pass_481.shp" -> ("Barents Sea Opening", 481)
+    Examples:
+        - "barents_sea_opening_S3_pass_481.shp" -> ("Barents Sea Opening", 481)
+        - "denmark_strait_TPJ_pass_248.shp" -> ("Denmark Strait", 248)
+        - "fram_strait.shp" -> ("Fram Strait", None)
+    
+    Returns:
+        Tuple of (strait_name, pass_number or None if not found)
     """
     filename = Path(gate_path).stem
+    pass_number = None
     
-    # Try to extract pass number from end of filename
-    match = re.search(r'_(\d+)$', filename)
+    # Pattern 1: _pass_XXX at end (most common)
+    match = re.search(r'_pass[_]?(\d+)$', filename, re.IGNORECASE)
     if match:
         pass_number = int(match.group(1))
+        logger.info(f"Extracted pass {pass_number} from gate filename (pattern: _pass_XXX)")
     else:
-        # Try other patterns like "pass_XXX"
-        match = re.search(r'pass[_]?(\d+)', filename, re.IGNORECASE)
+        # Pattern 2: Trailing number after underscore (e.g., gate_name_481)
+        match = re.search(r'_(\d{2,4})$', filename)
         if match:
             pass_number = int(match.group(1))
+            logger.info(f"Extracted pass {pass_number} from gate filename (pattern: trailing number)")
         else:
-            pass_number = 0  # Default if not found
+            # Pattern 3: pass_XXX anywhere in name
+            match = re.search(r'pass[_]?(\d+)', filename, re.IGNORECASE)
+            if match:
+                pass_number = int(match.group(1))
+                logger.info(f"Extracted pass {pass_number} from gate filename (pattern: pass_XXX)")
+            else:
+                logger.info(f"No pass number found in gate filename: {filename}")
     
     # Clean up strait name
-    name_part = re.sub(r'_?\d+$', '', filename)  # Remove trailing numbers
-    name_part = re.sub(r'_pass$', '', name_part, flags=re.IGNORECASE)  # Remove "pass"
-    name_part = re.sub(r'_S\d$', '', name_part)  # Remove satellite markers like _S3
-    name_part = name_part.replace('_', ' ').title()
+    name_part = re.sub(r'_pass[_]?\d+$', '', filename, flags=re.IGNORECASE)  # Remove _pass_XXX
+    name_part = re.sub(r'_\d{2,4}$', '', name_part)  # Remove trailing numbers
+    name_part = re.sub(r'_TPJ$', '', name_part, flags=re.IGNORECASE)  # Remove satellite markers
+    name_part = re.sub(r'_S\d$', '', name_part)  # Remove _S3, _S2, etc.
+    name_part = name_part.replace('_', ' ').replace('-', ' ').title()
     
     return name_part, pass_number
 
