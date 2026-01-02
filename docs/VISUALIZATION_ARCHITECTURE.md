@@ -121,6 +121,33 @@ slope_m_100km = slope_m_km * 100  # m/100km
 
 ---
 
+### Tab 5: Geostrophic Velocity *(NEW)*
+**Scopo**: Calcolare e visualizzare la velocità geostrifica cross-gate.
+
+| Attributo | Tipo | Descrizione |
+|-----------|------|-------------|
+| `v_geostrophic_series` | `pd.Series` | Serie temporale v_geo (m/s) con DatetimeIndex |
+| `mean_latitude` | `float` | Latitudine media del gate |
+| `coriolis_f` | `float` | Parametro di Coriolis f = 2Ω sin(lat) |
+
+**Formula geostrofica**:
+```python
+# Geostrophic balance: v = -g/f * (dη/dx)
+g = 9.81  # m/s²
+OMEGA = 7.2921e-5  # rad/s
+f = 2 * OMEGA * np.sin(np.deg2rad(latitude))
+
+# dη/dx from slope
+v_geostrophic = -g / f * slope_m_m  # m/s
+```
+
+**Visualizzazioni**:
+1. Time series di v_geostrophic (cm/s)
+2. Climatologia mensile (bar chart)
+3. Statistiche (mean, std, max, min)
+
+---
+
 ## 🔌 Interfaccia PassData Standard
 
 Qualsiasi dataset deve fornire un oggetto con questi attributi:
@@ -148,21 +175,55 @@ class PassData:
     df: pd.DataFrame              # Columns: lat, lon, dot, month, time, cycle, ...
     gate_lon_pts: np.ndarray      # Gate line longitude points
     gate_lat_pts: np.ndarray      # Gate line latitude points
+    
+    # Tab 5: Geostrophic Velocity (NEW)
+    v_geostrophic_series: pd.Series  # DatetimeIndex, values in m/s
+    mean_latitude: float             # Gate center latitude
+    coriolis_f: float                # Coriolis parameter (s⁻¹)
 ```
 
 ---
 
 ## 🔧 Parametri di Configurazione
 
+### SLCCI Configuration
+
 Da `SLCCIConfig` in sidebar:
 
-| Parametro | Tipo | Default | Descrizione |
-|-----------|------|---------|-------------|
-| `lon_bin_size` | float | 0.05 | Dimensione bin longitudine (gradi) |
-| `lat_tolerance` | float | 0.5 | Tolleranza latitudine per filtraggio |
-| `min_points` | int | 10 | Minimo punti per periodo valido |
-| `start_date` | date | 2019-01-01 | Data inizio analisi |
-| `end_date` | date | 2024-12-31 | Data fine analisi |
+| Parametro | Tipo | Default | Range | Descrizione |
+|-----------|------|---------|-------|-------------|
+| `lon_bin_size` | float | 0.01 | 0.01-0.10 | Dimensione bin longitudine (gradi) |
+| `lat_buffer_deg` | float | 2.0 | - | Buffer latitudine per filtraggio |
+| `lon_buffer_deg` | float | 5.0 | - | Buffer longitudine per filtraggio |
+| `use_flag` | bool | True | - | Usa flag qualità SLCCI |
+| `cycle_start` | int | 1 | - | Ciclo iniziale J2 |
+| `cycle_end` | int | 300 | - | Ciclo finale J2 |
+
+### CMEMS Configuration *(NEW)*
+
+Da `CMEMSConfig` in sidebar:
+
+| Parametro | Tipo | Default | Range | Descrizione |
+|-----------|------|---------|-------|-------------|
+| `lon_bin_size` | float | 0.10 | 0.05-0.50 | Binning più coarse di SLCCI |
+| `buffer_deg` | float | 0.5 | 0.1-2.0 | Buffer attorno al gate |
+| `max_latitude` | float | 66.0 | - | Limite copertura Jason |
+| `start_date` | date | 2002-01-01 | - | Inizio serie temporale |
+| `end_date` | date | 2020-12-31 | - | Fine serie temporale |
+
+---
+
+## 🛰️ Differenze SLCCI vs CMEMS
+
+| Aspetto | SLCCI | CMEMS L3 1Hz |
+|---------|-------|--------------|
+| **Satelliti** | J2 singolo | J1+J2+J3 merged |
+| **Selezione Pass** | Manual/Auto | Nessuna (gate = pass sintetico) |
+| **DOT Calculation** | DOT = SSH - Geoid | DOT = sla_filtered + mdt |
+| **Geoid** | TUM_ogmoc.nc esterno | MDT incluso nei dati |
+| **lon_bin_size** | 0.01°-0.10° | 0.05°-0.50° |
+| **Lat Coverage** | ~±66° | ±66° (warning automatico) |
+| **Aggregation** | Per cycle → mensile | Già mensile |
 
 ---
 
@@ -171,15 +232,15 @@ Da `SLCCIConfig` in sidebar:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        DATA SOURCE                               │
-│   NetCDF (SLCCI) │ CMEMS API │ ERA5 API │ Other Sources         │
+│   NetCDF (SLCCI) │ CMEMS L3 1Hz │ ERA5 API │ Other Sources      │
 └─────────────────────┬───────────────────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                        SERVICE LAYER                             │
-│   SLCCIService.load_pass_data()                                 │
-│   CMEMSService.load_pass_data()  (future)                       │
-│   ERA5Service.load_pass_data()   (future)                       │
+│   SLCCIService.load_pass_data()   → Single satellite (J2)       │
+│   CMEMSService.load_pass_data()   → Merged (J1+J2+J3)           │
+│   ERA5Service.load_pass_data()    → Future                       │
 │                                                                  │
 │   Output: PassData object with standard attributes              │
 └─────────────────────┬───────────────────────────────────────────┘
@@ -194,10 +255,11 @@ Da `SLCCIConfig` in sidebar:
 ┌─────────────────────────────────────────────────────────────────┐
 │                        TABS LAYER                                │
 │   tabs.py → render_tabs()                                       │
-│   ├── _render_slope_timeline()    uses: slope_series, time_array│
-│   ├── _render_dot_profile()       uses: profile_mean, x_km      │
-│   ├── _render_spatial_map()       uses: df, gate_*_pts          │
-│   └── _render_monthly_analysis()  uses: df (with month column)  │
+│   ├── _render_slope_timeline()       uses: slope_series, time   │
+│   ├── _render_dot_profile()          uses: profile_mean, x_km   │
+│   ├── _render_spatial_map()          uses: df, gate_*_pts       │
+│   ├── _render_monthly_analysis()     uses: df (month column)    │
+│   └── _render_geostrophic_velocity() uses: v_geostrophic_series │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

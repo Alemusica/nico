@@ -52,11 +52,12 @@ def _render_empty_tabs(config: AppConfig):
 
 def _render_slcci_tabs(slcci_data, config: AppConfig):
     """Render tabs for SLCCI satellite data using PassData attributes."""
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Slope Timeline", 
         "DOT Profile", 
         "Spatial Map", 
-        "Monthly Analysis"
+        "Monthly Analysis",
+        "Geostrophic Velocity"
     ])
     
     with tab1:
@@ -67,6 +68,8 @@ def _render_slcci_tabs(slcci_data, config: AppConfig):
         _render_spatial_map(slcci_data, config)
     with tab4:
         _render_monthly_analysis(slcci_data, config)
+    with tab5:
+        _render_geostrophic_velocity(slcci_data, config)
 
 
 # ==============================================================================
@@ -535,6 +538,245 @@ def _render_monthly_analysis(slcci_data, config: AppConfig):
                 st.metric("Std Dev", f"{slopes_df[f'Slope ({slope_units})'].std():.4f}")
             with col3:
                 st.metric("Months with Data", len(slopes_df))
+
+
+
+# ==============================================================================
+# TAB 5: GEOSTROPHIC VELOCITY
+# ==============================================================================
+def _render_geostrophic_velocity(slcci_data, config):
+    """
+    Render geostrophic velocity analysis.
+    Uses the formula: v = -g/f * (dη/dx) where f = 2Ω sin(lat)
+    """
+    st.subheader("Geostrophic Velocity Analysis")
+    
+    # Constants
+    g = 9.81  # m/s²
+    OMEGA = 7.2921e-5  # Earth's angular velocity (rad/s)
+    R_earth = 6371.0  # km
+    
+    # Get data from PassData
+    df = getattr(slcci_data, 'df', None)
+    strait_name = getattr(slcci_data, 'strait_name', 'Unknown')
+    pass_number = getattr(slcci_data, 'pass_number', 0)
+    
+    # Check if v_geostrophic_series is already computed (from CMEMS service)
+    v_geostrophic_series = getattr(slcci_data, 'v_geostrophic_series', None)
+    mean_latitude = getattr(slcci_data, 'mean_latitude', None)
+    coriolis_f = getattr(slcci_data, 'coriolis_f', None)
+    
+    if v_geostrophic_series is not None and len(v_geostrophic_series) > 0:
+        # Use pre-computed values (CMEMS style)
+        st.info(f"Using pre-computed geostrophic velocities at lat={mean_latitude:.2f}° (f={coriolis_f:.2e} s⁻¹)")
+        
+        time_index = v_geostrophic_series.index
+        v_values = v_geostrophic_series.values
+        
+        # Plot time series
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=time_index,
+            y=v_values * 100,  # Convert m/s to cm/s
+            mode='lines+markers',
+            name='v_geostrophic',
+            line=dict(color='steelblue', width=2),
+            marker=dict(size=6)
+        ))
+        
+        fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+        
+        fig.update_layout(
+            title=f"{strait_name} - Geostrophic Velocity Time Series",
+            xaxis_title="Time",
+            yaxis_title="Geostrophic Velocity (cm/s)",
+            height=450,
+            template="plotly_white"
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Monthly climatology
+        st.subheader("Monthly Climatology")
+        monthly_clim = v_geostrophic_series.groupby(v_geostrophic_series.index.month).mean()
+        
+        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        
+        fig_clim = go.Figure()
+        fig_clim.add_trace(go.Bar(
+            x=[month_names[m-1] for m in monthly_clim.index],
+            y=monthly_clim.values * 100,
+            marker_color=['steelblue' if v >= 0 else 'coral' for v in monthly_clim.values],
+            name='Mean Velocity'
+        ))
+        
+        fig_clim.add_hline(y=0, line_dash="solid", line_color="black", line_width=1)
+        
+        fig_clim.update_layout(
+            title=f"{strait_name} - Monthly Mean Geostrophic Velocity",
+            xaxis_title="Month",
+            yaxis_title="Velocity (cm/s)",
+            height=400,
+            template="plotly_white"
+        )
+        
+        st.plotly_chart(fig_clim, use_container_width=True)
+        
+        # Statistics
+        with st.expander("Geostrophic Velocity Statistics"):
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Mean", f"{v_values.mean() * 100:.2f} cm/s")
+            with col2:
+                st.metric("Std Dev", f"{v_values.std() * 100:.2f} cm/s")
+            with col3:
+                st.metric("Max", f"{v_values.max() * 100:.2f} cm/s")
+            with col4:
+                st.metric("Min", f"{v_values.min() * 100:.2f} cm/s")
+        
+        return
+    
+    # Otherwise compute from raw data (SLCCI style)
+    if df is None or (hasattr(df, 'empty') and df.empty):
+        st.warning("No data available for geostrophic velocity calculation.")
+        return
+    
+    # Check required columns
+    required = ['lon', 'dot', 'month']
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        st.error(f"Missing columns: {missing}")
+        return
+    
+    # Get mean latitude for Coriolis parameter
+    if 'lat' in df.columns:
+        mean_lat = df['lat'].mean()
+    else:
+        mean_lat = st.number_input("Mean latitude (°)", value=70.0, step=0.1)
+    
+    lat_rad = np.deg2rad(mean_lat)
+    f = 2 * OMEGA * np.sin(lat_rad)
+    
+    st.info(f"Computing geostrophic velocity at lat={mean_lat:.2f}° (f={f:.2e} s⁻¹)")
+    
+    # Check for year column for time series
+    has_year = 'year' in df.columns
+    
+    if has_year:
+        df['year_month'] = pd.to_datetime(df['year'].astype(str) + '-' + df['month'].astype(str).str.zfill(2) + '-01')
+        groups = df.groupby('year_month')
+    else:
+        groups = df.groupby('month')
+    
+    # Calculate slope and geostrophic velocity for each period
+    results = []
+    
+    for period, group_df in groups:
+        lon = group_df['lon'].values
+        dot = group_df['dot'].values
+        
+        mask = np.isfinite(lon) & np.isfinite(dot)
+        if np.sum(mask) < 3:
+            continue
+        
+        lon_valid = lon[mask]
+        dot_valid = dot[mask]
+        
+        # Convert longitude to meters
+        lon_rad_arr = np.deg2rad(lon_valid)
+        dlon_rad = lon_rad_arr - lon_rad_arr.min()
+        x_m = R_earth * 1000 * dlon_rad * np.cos(lat_rad)
+        
+        try:
+            slope_m_m, _ = np.polyfit(x_m, dot_valid, 1)
+            v_geo = -g / f * slope_m_m
+            
+            results.append({
+                'period': period,
+                'slope_m_m': slope_m_m,
+                'v_geostrophic_m_s': v_geo,
+                'v_geostrophic_cm_s': v_geo * 100,
+                'n_points': len(lon_valid)
+            })
+        except Exception:
+            continue
+    
+    if not results:
+        st.warning("Could not compute geostrophic velocities. Check data quality.")
+        return
+    
+    results_df = pd.DataFrame(results)
+    
+    # Plot time series or monthly values
+    fig = go.Figure()
+    
+    if has_year:
+        x_vals = results_df['period']
+        title_suffix = "Time Series"
+    else:
+        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        x_vals = [month_names[int(m)-1] for m in results_df['period']]
+        title_suffix = "Monthly"
+    
+    fig.add_trace(go.Scatter(
+        x=x_vals,
+        y=results_df['v_geostrophic_cm_s'],
+        mode='lines+markers',
+        name='v_geostrophic',
+        line=dict(color='steelblue', width=2),
+        marker=dict(size=6)
+    ))
+    
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+    
+    fig.update_layout(
+        title=f"{strait_name} - Pass {pass_number} - Geostrophic Velocity ({title_suffix})",
+        xaxis_title="Time" if has_year else "Month",
+        yaxis_title="Geostrophic Velocity (cm/s)",
+        height=450,
+        template="plotly_white"
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Statistics
+    with st.expander("Geostrophic Velocity Statistics"):
+        col1, col2, col3, col4 = st.columns(4)
+        v_vals = results_df['v_geostrophic_cm_s'].values
+        with col1:
+            st.metric("Mean", f"{np.mean(v_vals):.2f} cm/s")
+        with col2:
+            st.metric("Std Dev", f"{np.std(v_vals):.2f} cm/s")
+        with col3:
+            st.metric("Max", f"{np.max(v_vals):.2f} cm/s")
+        with col4:
+            st.metric("Min", f"{np.min(v_vals):.2f} cm/s")
+        
+        st.subheader("Detailed Results")
+        display_df = results_df.copy()
+        display_df.columns = ['Period', 'Slope (m/m)', 'v_geo (m/s)', 'v_geo (cm/s)', 'N Points']
+        st.dataframe(display_df, use_container_width=True)
+    
+    # Physical interpretation
+    with st.expander("Physical Interpretation"):
+        mean_v = np.mean(v_vals)
+        st.markdown(f"""
+        **Geostrophic Balance Formula:**
+        
+        v = -g/f × (dη/dx)
+        
+        Where:
+        - g = 9.81 m/s² (gravity)
+        - f = 2Ω sin(lat) = {f:.2e} s⁻¹ (Coriolis at {mean_lat:.1f}°)
+        - dη/dx = DOT slope along gate
+        
+        **Results:**
+        - Mean geostrophic velocity: **{mean_v:.2f} cm/s**
+        - Positive values → flow northward
+        - Negative values → flow southward
+        """)
 
 
 # ==============================================================================

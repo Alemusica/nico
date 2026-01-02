@@ -19,14 +19,16 @@ class AppConfig:
     # Data source
     selected_dataset_type: str = "SLCCI"
     data_source_mode: str = "local"  # "local" or "api"
+    
+    # === SLCCI SETTINGS ===
     slcci_base_dir: str = "/Users/nicolocaron/Desktop/ARCFRESH/J2"
     slcci_geoid_path: str = "/Users/nicolocaron/Desktop/ARCFRESH/TUM_ogmoc.nc"
     
-    # Pass selection
+    # Pass selection (SLCCI only)
     pass_mode: str = "manual"
     pass_number: int = 248
     
-    # Cycle range
+    # Cycle range (SLCCI only)
     cycle_start: int = 1
     cycle_end: int = 10  # Default: primi 10 cicli per test veloci
     
@@ -35,6 +37,13 @@ class AppConfig:
     lon_bin_size: float = 0.01      # Longitude binning size (degrees)
     lat_buffer_deg: float = 2.0     # Latitude buffer for spatial filter
     lon_buffer_deg: float = 5.0     # Longitude buffer for spatial filter
+    
+    # === CMEMS SETTINGS ===
+    cmems_base_dir: str = "/Users/nicolocaron/Desktop/ARCFRESH/CMEMS_L3_1Hz"
+    cmems_start_date: Any = None    # datetime.date
+    cmems_end_date: Any = None      # datetime.date
+    cmems_lon_bin_size: float = 0.10  # Coarser than SLCCI (0.05-0.50)
+    cmems_buffer_deg: float = 0.5   # Buffer around gate
 
 
 def init_session_state():

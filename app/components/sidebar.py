@@ -74,13 +74,46 @@ def render_sidebar() -> AppConfig:
         with st.sidebar.expander("6. Processing Parameters", expanded=False):
             config = _render_processing_params(config)
         
+        # === 66°N WARNING ===
+        _render_latitude_warning(config)
+        
         st.sidebar.divider()
         
         # === LOAD BUTTON ===
         if st.sidebar.button("Load SLCCI Data", type="primary", use_container_width=True):
             _load_slcci_data(config)
+    
+    elif config.selected_dataset_type == "CMEMS":
+        # === CMEMS-SPECIFIC OPTIONS ===
+        st.sidebar.divider()
+        
+        # === 3. DATA PATHS ===
+        st.sidebar.subheader("3. CMEMS Data Paths")
+        config = _render_cmems_paths(config)
+        
+        st.sidebar.divider()
+        
+        # === 4. DATE RANGE ===
+        st.sidebar.subheader("4. Date Range")
+        config = _render_cmems_date_range(config)
+        
+        st.sidebar.divider()
+        
+        # === 5. PROCESSING PARAMETERS ===
+        with st.sidebar.expander("5. Processing Parameters", expanded=False):
+            config = _render_cmems_params(config)
+        
+        # === 66°N WARNING ===
+        _render_latitude_warning(config)
+        
+        st.sidebar.divider()
+        
+        # === LOAD BUTTON ===
+        if st.sidebar.button("Load CMEMS Data", type="primary", use_container_width=True):
+            _load_cmems_data(config)
+    
     else:
-        # Non-SLCCI data sources
+        # Non-SLCCI/CMEMS data sources (ERA5, etc.)
         st.sidebar.divider()
         if st.sidebar.button("Load Data", type="primary", use_container_width=True):
             _load_generic_data(config)
@@ -266,6 +299,127 @@ def _render_processing_params(config: AppConfig) -> AppConfig:
     return config
 
 
+# ============================================================
+# CMEMS-SPECIFIC FUNCTIONS
+# ============================================================
+
+def _render_cmems_paths(config: AppConfig) -> AppConfig:
+    """Render CMEMS data path inputs."""
+    
+    config.cmems_base_dir = st.sidebar.text_input(
+        "CMEMS Data Directory",
+        value="/Users/nicolocaron/Desktop/ARCFRESH/CMEMS_L3_1Hz",
+        key="sidebar_cmems_dir",
+        help="Folder containing CMEMS L3 1Hz files (J1/J2/J3 merged)"
+    )
+    
+    # Show available files info
+    from pathlib import Path
+    cmems_path = Path(config.cmems_base_dir)
+    if cmems_path.exists():
+        nc_files = list(cmems_path.glob("*.nc"))
+        st.sidebar.caption(f"📁 {len(nc_files)} NetCDF files found")
+    else:
+        st.sidebar.warning("⚠️ Directory not found")
+    
+    return config
+
+
+def _render_cmems_date_range(config: AppConfig) -> AppConfig:
+    """Render CMEMS date range selection."""
+    import datetime
+    
+    col1, col2 = st.sidebar.columns(2)
+    
+    with col1:
+        config.cmems_start_date = st.date_input(
+            "Start Date",
+            value=datetime.date(2002, 1, 1),
+            key="sidebar_cmems_start",
+            help="Start date for CMEMS data"
+        )
+    
+    with col2:
+        config.cmems_end_date = st.date_input(
+            "End Date",
+            value=datetime.date(2020, 12, 31),
+            key="sidebar_cmems_end",
+            help="End date for CMEMS data"
+        )
+    
+    # Show date range info
+    if config.cmems_start_date and config.cmems_end_date:
+        n_years = (config.cmems_end_date - config.cmems_start_date).days / 365.25
+        st.sidebar.caption(f"📅 {n_years:.1f} years selected")
+    
+    return config
+
+
+def _render_cmems_params(config: AppConfig) -> AppConfig:
+    """Render CMEMS-specific processing parameters."""
+    
+    # Longitude binning size - SLIDER da 0.05 a 0.50 (lower res than SLCCI)
+    config.cmems_lon_bin_size = st.slider(
+        "Lon Bin Size (°)",
+        min_value=0.05,
+        max_value=0.50,
+        value=0.10,
+        step=0.05,
+        format="%.2f",
+        key="sidebar_cmems_lon_bin",
+        help="Binning resolution for CMEMS (0.05° - 0.50°, coarser than SLCCI)"
+    )
+    
+    # Buffer around gate
+    config.cmems_buffer_deg = st.slider(
+        "Gate Buffer (°)",
+        min_value=0.1,
+        max_value=2.0,
+        value=0.5,
+        step=0.1,
+        format="%.1f",
+        key="sidebar_cmems_buffer",
+        help="Buffer around gate for data extraction"
+    )
+    
+    return config
+
+
+def _render_latitude_warning(config: AppConfig) -> AppConfig:
+    """
+    Show warning if gate is above 66°N (Jason satellite coverage limit).
+    Applies to both SLCCI and CMEMS.
+    """
+    if not GATE_SERVICE_AVAILABLE or not config.selected_gate:
+        return config
+    
+    gate = _gate_service.get_gate(config.selected_gate)
+    if not gate:
+        return config
+    
+    # Try to get gate latitude from shapefile
+    gate_path = _get_gate_shapefile(config.selected_gate)
+    if gate_path:
+        try:
+            import geopandas as gpd
+            gdf = gpd.read_file(gate_path)
+            max_lat = gdf.geometry.bounds['maxy'].max()
+            
+            if max_lat > 66.0:
+                st.sidebar.warning(f"""
+                ⚠️ **Latitude Warning**
+                
+                Gate extends to {max_lat:.2f}°N.
+                
+                Jason satellites (J1/J2/J3) coverage is limited to ±66°.
+                Data beyond 66°N may be sparse or unavailable.
+                """)
+        except Exception:
+            pass
+    
+    return config
+
+
 def _load_slcci_data(config: AppConfig):
     """Load SLCCI data using SLCCIService (local or API)."""
     
@@ -360,13 +514,95 @@ def _load_slcci_data(config: AppConfig):
 
 
 def _load_generic_data(config: AppConfig):
-    """Load data from CMEMS or ERA5 API."""
+    """Load data from ERA5 or other APIs."""
     
     if not config.selected_gate:
         st.sidebar.warning("Select a gate first")
         return
     
     st.sidebar.info(f"Loading {config.selected_dataset_type}... (not implemented yet)")
+
+
+def _load_cmems_data(config: AppConfig):
+    """Load CMEMS L3 1Hz data using CMEMSService."""
+    from pathlib import Path
+    
+    # Validate CMEMS path
+    cmems_path = Path(config.cmems_base_dir)
+    if not cmems_path.exists():
+        st.sidebar.error(f"❌ Path not found: {config.cmems_base_dir}")
+        return
+    
+    # Get gate shapefile
+    gate_path = _get_gate_shapefile(config.selected_gate)
+    if not gate_path:
+        st.sidebar.error("❌ Select a gate first")
+        return
+    
+    try:
+        from src.services.cmems_service import CMEMSService, CMEMSConfig
+        import datetime
+        
+        # Convert dates
+        start_date = config.cmems_start_date
+        end_date = config.cmems_end_date
+        
+        if isinstance(start_date, datetime.date) and not isinstance(start_date, datetime.datetime):
+            start_date = datetime.datetime.combine(start_date, datetime.time.min)
+        if isinstance(end_date, datetime.date) and not isinstance(end_date, datetime.datetime):
+            end_date = datetime.datetime.combine(end_date, datetime.time.max)
+        
+        cmems_config = CMEMSConfig(
+            base_dir=str(cmems_path),
+            start_date=start_date,
+            end_date=end_date,
+            lon_bin_size=getattr(config, 'cmems_lon_bin_size', 0.1),
+            buffer_deg=getattr(config, 'cmems_buffer_deg', 0.5),
+        )
+        
+        service = CMEMSService(cmems_config)
+        
+        with st.spinner("Loading CMEMS data (J1/J2/J3 merged)..."):
+            # Check gate coverage
+            coverage_warning = service.check_gate_coverage(gate_path)
+            if coverage_warning:
+                st.sidebar.warning(coverage_warning)
+            
+            # Load pass data
+            pass_data = service.load_pass_data(gate_path=gate_path)
+            
+            if pass_data is None:
+                st.sidebar.error("❌ No data found for this gate/date range")
+                return
+            
+            # Store in session state (using same key as SLCCI for unified tabs)
+            st.session_state["slcci_pass_data"] = pass_data
+            st.session_state["cmems_service"] = service
+            st.session_state["cmems_config"] = config
+            st.session_state["datasets"] = {}  # Clear generic
+            
+            # Success message
+            n_obs = len(pass_data.df) if hasattr(pass_data, 'df') else 0
+            n_months = pass_data.df['year_month'].nunique() if hasattr(pass_data, 'df') and 'year_month' in pass_data.df.columns else 0
+            
+            st.sidebar.success(f"""
+            ✅ CMEMS Data Loaded!
+            - Gate: {pass_data.strait_name}
+            - Pass: {pass_data.pass_number} (synthetic)
+            - Observations: {n_obs:,}
+            - Monthly periods: {n_months}
+            - Satellites: J1+J2+J3 merged
+            """)
+            
+            st.rerun()
+            
+    except ImportError as e:
+        st.sidebar.error(f"❌ CMEMSService not available: {e}")
+    except Exception as e:
+        st.sidebar.error(f"❌ Error loading CMEMS: {e}")
+        import traceback
+        with st.sidebar.expander("Traceback"):
+            st.code(traceback.format_exc())
 
 
 def _get_gate_shapefile(gate_id: Optional[str]) -> Optional[str]:
