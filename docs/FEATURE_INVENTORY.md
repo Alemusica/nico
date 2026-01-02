@@ -89,11 +89,28 @@ pass_data = service.load_pass_data(
     pass_number=248,
 )
 
-# Access results
+# Access results (PassData interface)
 print(f"Observations: {len(pass_data.df)}")
-print(f"Slope series: {pass_data.slope_series}")
-print(f"DOT profile: {pass_data.profile_mean}")
+print(f"Slope series: {pass_data.slope_series}")      # Shape: (n_periods,)
+print(f"Time array: {pass_data.time_array}")          # Shape: (n_periods,)
+print(f"DOT profile mean: {pass_data.profile_mean}")  # Shape: (n_lon_bins,)
+print(f"Distance x_km: {pass_data.x_km}")             # Shape: (n_lon_bins,)
+print(f"DOT matrix: {pass_data.dot_matrix.shape}")    # Shape: (n_lon_bins, n_periods)
 ```
+
+**PassData Attributes** (Standard Interface for all datasets):
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `strait_name` | str | Name of the gate/strait |
+| `pass_number` | int | Satellite pass number |
+| `slope_series` | np.ndarray | Slope per time period (m/100km) |
+| `time_array` | np.ndarray | Dates for each period |
+| `time_periods` | list | Period labels (YYYY-MM) |
+| `profile_mean` | np.ndarray | Mean DOT per lon bin |
+| `x_km` | np.ndarray | Distance in km along longitude |
+| `dot_matrix` | np.ndarray | DOT values [space, time] |
+| `df` | DataFrame | Raw data (lat, lon, dot, month, time) |
+| `gate_lon_pts`, `gate_lat_pts` | np.ndarray | Gate line coordinates |
 
 **Features**:
 - Load SLCCI NetCDF files (SLCCI_ALTDB_J2_CycleXXX_V2.nc)
@@ -102,6 +119,7 @@ print(f"DOT profile: {pass_data.profile_mean}")
 - Pass filtering (auto-detect or manual)
 - Slope computation along gate (m/100km)
 - DOT matrix building for temporal analysis
+- `lon_bin_size` configurable (default 0.05°)
 
 **Files**:
 - `src/services/slcci_service.py` (600+ lines)
@@ -109,28 +127,48 @@ print(f"DOT profile: {pass_data.profile_mean}")
 
 ---
 
-### SLCCI Visualization Tabs
-**Status**: ✅ Implemented | **Used in**: Streamlit
+### SLCCI Visualization (tabs.py) ✅ STATE OF THE ART
+**Status**: ✅ Complete | **Used in**: Streamlit | **Date**: 2026-01-02
 
-Three separate tabs for SLCCI analysis:
+**Single unified file**: `app/components/tabs.py` (450+ lines)
 
-1. **Slope Timeline** (`app/components/slcci_slope_tab.py`)
-   - Interactive Plotly timeline
-   - Trend line overlay
-   - Statistics summary
-   - CSV download
+Following SLCCI PLOTTER notebook workflow exactly:
 
-2. **DOT Profile** (`app/components/slcci_profile_tab.py`)
-   - Profile across gate (distance in km)
-   - West/East labels
-   - Linear fit overlay
-   - Temporal variation explorer
+| Tab | Function | X-axis | Y-axis |
+|-----|----------|--------|--------|
+| 1. Slope Timeline | `_render_slope_timeline()` | `time_array` | `slope_series` (m/100km) |
+| 2. DOT Profile | `_render_dot_profile()` | `x_km` (Distance km) | `profile_mean` (DOT m) |
+| 3. Spatial Map | `_render_spatial_map()` | lon | lat (MapBox) |
+| 4. Monthly Analysis | `_render_monthly_analysis()` | Longitude (°) | DOT (m) + regression |
 
-3. **Spatial Map** (`app/components/slcci_spatial_tab.py`)
-   - Interactive MapBox map
-   - DOT color-coded points
-   - Gate geometry overlay
-   - Multiple basemap styles
+**Key Implementation Pattern**:
+```python
+# tabs.py uses getattr for flexible data access
+slope_series = getattr(slcci_data, 'slope_series', None)
+time_array = getattr(slcci_data, 'time_array', None)
+profile_mean = getattr(slcci_data, 'profile_mean', None)
+x_km = getattr(slcci_data, 'x_km', None)  # Distance in km, NOT latitude!
+```
+
+**Tab Features**:
+- **Slope Timeline**: Trend line, statistics, unit conversion (m/100km ↔ cm/km)
+- **DOT Profile**: Mean profile, ±1 std band, individual periods view, WEST/EAST labels
+- **Spatial Map**: Color by dot/corssh/geoid, gate overlay, 5000 point sampling
+- **Monthly Analysis**: 12 subplots, linear regression per month, slopes summary table
+
+**Architecture Documentation**: `docs/VISUALIZATION_ARCHITECTURE.md`
+
+---
+
+### Legacy Tab Files (DEPRECATED)
+**Status**: ⚠️ Deprecated - Use tabs.py instead
+
+These files are no longer used:
+- ~~`app/components/slcci_slope_tab.py`~~
+- ~~`app/components/slcci_profile_tab.py`~~ 
+- ~~`app/components/slcci_spatial_tab.py`~~
+
+All functionality consolidated in `app/components/tabs.py`
 
 ---
 
