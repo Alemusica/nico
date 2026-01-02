@@ -61,6 +61,29 @@ class PassData:
 
 
 # ==============================================================================
+# HELPER FUNCTIONS
+# ==============================================================================
+
+def _load_gate_gdf(gate_path: str) -> gpd.GeoDataFrame:
+    """
+    Load gate shapefile and ensure it's in EPSG:4326.
+    
+    Handles missing CRS by assuming EPSG:3413 (Polar Stereographic).
+    """
+    import os
+    os.environ['SHAPE_RESTORE_SHX'] = 'YES'  # Fix missing .shx files
+    
+    gate_gdf = gpd.read_file(gate_path)
+    
+    # Handle missing CRS - assume EPSG:3413 (polar stereographic) if None
+    if gate_gdf.crs is None:
+        logger.info("Gate shapefile missing CRS, assuming EPSG:3413 (Polar Stereographic)")
+        gate_gdf = gate_gdf.set_crs("EPSG:3413")
+    
+    return gate_gdf.to_crs("EPSG:4326")
+
+
+# ==============================================================================
 # SLCCI SERVICE CLASS
 # ==============================================================================
 
@@ -122,15 +145,12 @@ class SLCCIService:
         PassData
             Container with all analysis results, or None if no data
         """
-        import os
-        os.environ['SHAPE_RESTORE_SHX'] = 'YES'  # Fix missing .shx files
-        
         cycles = cycles or self.config.cycles
         
         logger.info(f"Loading pass {pass_number} for gate: {Path(gate_path).name}")
         
         # 1. Load gate geometry
-        gate_gdf = gpd.read_file(gate_path).to_crs("EPSG:4326")
+        gate_gdf = _load_gate_gdf(gate_path)
         strait_name = self._extract_strait_name(gate_path)
         
         # 2. Load satellite data
@@ -211,12 +231,9 @@ class SLCCIService:
         List[Tuple[int, float]]
             List of (pass_number, distance_km) sorted by distance
         """
-        import os
-        os.environ['SHAPE_RESTORE_SHX'] = 'YES'  # Fix missing .shx files
-        
         cycles = cycles or list(range(1, 100))  # Use subset for speed
         
-        gate_gdf = gpd.read_file(gate_path).to_crs("EPSG:4326")
+        gate_gdf = _load_gate_gdf(gate_path)
         gate_centroid = gate_gdf.geometry.centroid.iloc[0]
         gate_lon, gate_lat = gate_centroid.x, gate_centroid.y
         
@@ -298,14 +315,11 @@ class SLCCIService:
         
         Adapted from legacy/j2_utils.py::load_filtered_cycles_serial_J2
         """
-        import os
-        os.environ['SHAPE_RESTORE_SHX'] = 'YES'  # Fix missing .shx files
-        
         lat_buffer = lat_buffer_deg or self.config.lat_buffer_deg
         lon_buffer = lon_buffer_deg or self.config.lon_buffer_deg
         
         # Load gate bounds
-        gate = gpd.read_file(gate_path).to_crs("EPSG:4326")
+        gate = _load_gate_gdf(gate_path)
         lon_min_g, lat_min_g, lon_max_g, lat_max_g = gate.total_bounds
         
         lat_min = lat_min_g - lat_buffer

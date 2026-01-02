@@ -237,38 +237,17 @@ def _render_processing_params(config: AppConfig) -> AppConfig:
         help="Filter data using SLCCI quality flags"
     )
     
-    # Longitude binning size
-    config.lon_bin_size = st.number_input(
+    # Longitude binning size - SLIDER da 0.01 a 0.1
+    config.lon_bin_size = st.slider(
         "Lon Bin Size (°)",
-        min_value=0.001,
-        max_value=1.0,
+        min_value=0.01,
+        max_value=0.10,
         value=0.01,
-        step=0.005,
-        format="%.3f",
+        step=0.01,
+        format="%.2f",
         key="sidebar_lon_bin",
-        help="Binning resolution for slope calculation"
+        help="Binning resolution for slope calculation (0.01° - 0.10°)"
     )
-    
-    # Spatial buffer
-    col1, col2 = st.columns(2)
-    with col1:
-        config.lat_buffer_deg = st.number_input(
-            "Lat Buffer (°)",
-            min_value=0.5,
-            max_value=10.0,
-            value=2.0,
-            step=0.5,
-            key="sidebar_lat_buf"
-        )
-    with col2:
-        config.lon_buffer_deg = st.number_input(
-            "Lon Buffer (°)",
-            min_value=0.5,
-            max_value=20.0,
-            value=5.0,
-            step=0.5,
-            key="sidebar_lon_buf"
-        )
     
     return config
 
