@@ -141,12 +141,26 @@ def _render_data_source(config: AppConfig) -> AppConfig:
     """Render data source selector."""
     
     config.selected_dataset_type = st.sidebar.radio(
-        "Source",
+        "Dataset",
         ["SLCCI", "CMEMS", "ERA5"],
         horizontal=True,
         key="sidebar_datasource",
-        help="SLCCI=Local NetCDF files, CMEMS/ERA5=API"
+        help="SLCCI=Sea Level CCI, CMEMS/ERA5=API"
     )
+    
+    # For SLCCI, add LOCAL/API selector
+    if config.selected_dataset_type == "SLCCI":
+        config.data_source_mode = st.sidebar.radio(
+            "Source Mode",
+            ["local", "api"],
+            format_func=lambda x: "📁 LOCAL Files" if x == "local" else "🌐 CEDA API",
+            horizontal=True,
+            key="sidebar_source_mode",
+            help="LOCAL=NetCDF files on disk, API=CEDA OPeNDAP"
+        )
+        
+        if config.data_source_mode == "api":
+            st.sidebar.caption("⚡ Faster downloads with bbox filtering")
     
     return config
 
@@ -253,15 +267,17 @@ def _render_processing_params(config: AppConfig) -> AppConfig:
 
 
 def _load_slcci_data(config: AppConfig):
-    """Load SLCCI data using SLCCIService."""
+    """Load SLCCI data using SLCCIService (local or API)."""
     
-    # Validate paths
-    if not Path(config.slcci_base_dir).exists():
-        st.sidebar.error(f"❌ Path not found: {config.slcci_base_dir}")
-        return
-    
+    # Validate geoid path (always needed)
     if not Path(config.slcci_geoid_path).exists():
         st.sidebar.error(f"❌ Geoid not found: {config.slcci_geoid_path}")
+        return
+    
+    # Validate local paths if using local source
+    source_mode = getattr(config, 'data_source_mode', 'local')
+    if source_mode == "local" and not Path(config.slcci_base_dir).exists():
+        st.sidebar.error(f"❌ Path not found: {config.slcci_base_dir}")
         return
     
     # Get gate shapefile
@@ -282,6 +298,8 @@ def _load_slcci_data(config: AppConfig):
             use_flag=config.use_flag,
             lat_buffer_deg=config.lat_buffer_deg,
             lon_buffer_deg=config.lon_buffer_deg,
+            source=source_mode,  # "local" or "api"
+            satellite="J2",
         )
         
         service = SLCCIService(slcci_config)

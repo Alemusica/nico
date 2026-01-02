@@ -18,6 +18,7 @@ class AppConfig:
     
     # Data source
     selected_dataset_type: str = "SLCCI"
+    data_source_mode: str = "local"  # "local" or "api"
     slcci_base_dir: str = "/Users/nicolocaron/Desktop/ARCFRESH/J2"
     slcci_geoid_path: str = "/Users/nicolocaron/Desktop/ARCFRESH/TUM_ogmoc.nc"
     

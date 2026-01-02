@@ -121,3 +121,4 @@ docs/_build/
 site/
 references.bib
 *.log
+config/credentials.yaml

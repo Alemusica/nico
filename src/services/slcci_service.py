@@ -7,9 +7,14 @@ This service wraps the functions from legacy/j2_utils.py into a clean service la
 following the NICO Unified Architecture pattern.
 
 Data Flow:
-    UI → SLCCIService → load_filtered_cycles_serial_J2 → NetCDF files
+    UI → SLCCIService → load_filtered_cycles_serial_J2 → NetCDF files (local)
+                      → OR fetch via CEDAClient → CEDA API (remote)
                       → interpolate_geoid → TUM_ogmoc.nc
                       → DOT calculation → DataFrame
+                      
+Supported Sources:
+    - "local": Load from local NetCDF files (default)
+    - "api": Load via CEDA OPeNDAP API
 """
 
 import os
@@ -18,7 +23,7 @@ import pandas as pd
 import xarray as xr
 import geopandas as gpd
 from pathlib import Path
-from typing import Optional, List, Dict, Tuple, Any
+from typing import Optional, List, Dict, Tuple, Any, Literal
 from dataclasses import dataclass, field
 from scipy.interpolate import RegularGridInterpolator
 from scipy.spatial import cKDTree
@@ -26,6 +31,9 @@ from scipy.spatial import cKDTree
 from src.core.logging_config import get_logger, log_call
 
 logger = get_logger(__name__)
+
+# Data source type
+DataSource = Literal["local", "api"]
 
 
 # ==============================================================================
@@ -35,12 +43,23 @@ logger = get_logger(__name__)
 @dataclass
 class SLCCIConfig:
     """Configuration for SLCCI data loading."""
+    # Local source settings
     base_dir: str = "/Users/nicolocaron/Desktop/ARCFRESH/J2"
     geoid_path: str = "/Users/nicolocaron/Desktop/ARCFRESH/TUM_ogmoc.nc"
+    
+    # Cycles
     cycles: List[int] = field(default_factory=lambda: list(range(1, 282)))
+    
+    # Processing settings
     use_flag: bool = True
     lat_buffer_deg: float = 2.0
     lon_buffer_deg: float = 5.0
+    
+    # Data source: "local" or "api"
+    source: DataSource = "local"
+    
+    # API settings
+    satellite: str = "J2"  # J1 or J2
 
 
 @dataclass
@@ -91,18 +110,19 @@ class SLCCIService:
     """
     Service for loading and processing ESA Sea Level CCI data.
     
+    Supports two data sources:
+    - "local": Load from local NetCDF files
+    - "api": Load via CEDA OPeNDAP API
+    
     Example usage:
+        # Local files
         service = SLCCIService()
+        pass_data = service.load_pass_data(gate_path="/path/to/gate.shp", pass_number=248)
         
-        # Load data for a gate
-        pass_data = service.load_pass_data(
-            gate_path="/path/to/gate.shp",
-            pass_number=248,
-        )
-        
-        # Or find closest pass automatically
-        closest_pass = service.find_closest_pass(gate_path="/path/to/gate.shp")
-        pass_data = service.load_pass_data(gate_path, pass_number=closest_pass)
+        # API (CEDA)
+        config = SLCCIConfig(source="api", satellite="J2")
+        service = SLCCIService(config)
+        pass_data = service.load_pass_data(gate_path="/path/to/gate.shp", pass_number=248)
     """
     
     def __init__(self, config: Optional[SLCCIConfig] = None):
@@ -110,12 +130,22 @@ class SLCCIService:
         self.config = config or SLCCIConfig()
         self._geoid_interp: Optional[RegularGridInterpolator] = None
         self._gate_points_cache: Dict = {}
+        self._ceda_client = None  # Lazy-loaded
         
         # Validate paths exist
-        if not os.path.exists(self.config.base_dir):
-            logger.warning(f"SLCCI base_dir not found: {self.config.base_dir}")
+        if self.config.source == "local":
+            if not os.path.exists(self.config.base_dir):
+                logger.warning(f"SLCCI base_dir not found: {self.config.base_dir}")
         if not os.path.exists(self.config.geoid_path):
             logger.warning(f"Geoid file not found: {self.config.geoid_path}")
+    
+    @property
+    def ceda_client(self):
+        """Lazy-load CEDA client."""
+        if self._ceda_client is None:
+            from src.services.ceda_client import CEDAClient
+            self._ceda_client = CEDAClient()
+        return self._ceda_client
     
     # ==========================================================================
     # PUBLIC METHODS
@@ -312,6 +342,117 @@ class SLCCIService:
     ) -> Optional[xr.Dataset]:
         """
         Load and filter satellite altimetry cycles for a specific region.
+        
+        Routes to local file loading or API based on config.source.
+        """
+        if self.config.source == "api":
+            return self._load_filtered_cycles_api(
+                cycles, gate_path, pass_number, lat_buffer_deg, lon_buffer_deg
+            )
+        else:
+            return self._load_filtered_cycles_local(
+                cycles, gate_path, pass_number, lat_buffer_deg, lon_buffer_deg
+            )
+    
+    def _load_filtered_cycles_api(
+        self,
+        cycles: List[int],
+        gate_path: str,
+        pass_number: Optional[int] = None,
+        lat_buffer_deg: Optional[float] = None,
+        lon_buffer_deg: Optional[float] = None,
+    ) -> Optional[xr.Dataset]:
+        """
+        Load cycles from CEDA API with spatial filtering.
+        """
+        lat_buffer = lat_buffer_deg or self.config.lat_buffer_deg
+        lon_buffer = lon_buffer_deg or self.config.lon_buffer_deg
+        
+        # Load gate bounds
+        gate = _load_gate_gdf(gate_path)
+        lon_min_g, lat_min_g, lon_max_g, lat_max_g = gate.total_bounds
+        
+        # Build bbox for API (lon_min, lat_min, lon_max, lat_max)
+        bbox = (
+            lon_min_g - lon_buffer,
+            lat_min_g - lat_buffer,
+            lon_max_g + lon_buffer,
+            lat_max_g + lat_buffer,
+        )
+        
+        logger.info(f"Loading from CEDA API, cycles {min(cycles)}-{max(cycles)}, bbox={bbox}")
+        
+        # Fetch via API
+        ds = self.ceda_client.fetch_cycles(
+            satellite=self.config.satellite,
+            cycles=cycles,
+            bbox=bbox,
+            use_cache=True,
+        )
+        
+        if ds is None or ds.sizes.get("time", 0) == 0:
+            logger.warning("No data returned from CEDA API")
+            return None
+        
+        # Post-process to match local format
+        ds = self._postprocess_api_data(ds, pass_number)
+        
+        return ds
+    
+    def _postprocess_api_data(
+        self,
+        ds: xr.Dataset,
+        pass_number: Optional[int] = None,
+    ) -> xr.Dataset:
+        """Post-process API data to match local file format."""
+        # Wrap longitude
+        if "longitude" in ds:
+            lon = ds["longitude"].values
+            lon_wrapped = self._wrap_longitude(lon)
+            ds = ds.assign_coords(longitude=(("time",), lon_wrapped))
+        
+        # Decode time if needed (days since 1950-01-01)
+        if "time" in ds and not np.issubdtype(ds["time"].dtype, np.datetime64):
+            try:
+                time_vals = pd.to_datetime(ds["time"].values, origin="1950-01-01", unit="D")
+                ds = ds.assign_coords(time=time_vals)
+            except Exception as e:
+                logger.warning(f"Could not decode time: {e}")
+        
+        # Quality filtering
+        if self.config.use_flag and "flag" in ds:
+            valid_mask = ds["flag"] == 0
+            ds = ds.where(valid_mask, drop=True)
+        
+        # Standardize pass variable
+        for var in ["pass", "track", "pass_number", "track_number"]:
+            if var in ds.variables and var != "pass":
+                ds = ds.rename({var: "pass"})
+                break
+        
+        # Filter by pass number
+        if pass_number is not None and "pass" in ds:
+            pass_vals = np.round(ds["pass"].values).astype(int)
+            mask_pass = pass_vals == int(pass_number)
+            if mask_pass.sum() > 0:
+                ds = ds.isel(time=mask_pass)
+            else:
+                logger.warning(f"No data for pass {pass_number} in API response")
+        
+        ds.attrs["satellite_type"] = self.config.satellite
+        
+        return ds
+    
+    def _load_filtered_cycles_local(
+        self,
+        cycles: List[int],
+        gate_path: str,
+        pass_number: Optional[int] = None,
+        lat_buffer_deg: Optional[float] = None,
+        lon_buffer_deg: Optional[float] = None,
+    ) -> Optional[xr.Dataset]:
+        """
+        Load and filter satellite altimetry cycles from local files.
         
         Adapted from legacy/j2_utils.py::load_filtered_cycles_serial_J2
         """
