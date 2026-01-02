@@ -1,6 +1,6 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-02 (Session - SLCCI Visualization Complete)
+> Last Updated: 2026-01-02 (Session - CMEMS Service + Tab 5 Geostrophic)
 > Agent: Use this file to track progress. Update after each task.
 
 ---
@@ -109,7 +109,20 @@ https://github.com/Alemusica/nico/issues/12
 | lon_bin_size Config | ✅ DONE | SLCCIConfig in sidebar |
 | Documentation | ✅ DONE | docs/VISUALIZATION_ARCHITECTURE.md |
 
-### 🎯 4 Tabs Implemented (Following SLCCI PLOTTER exactly)
+---
+
+## � CMEMS INTEGRATION (2026-01-02) ✅ NEW
+
+| Task | Status | Files |
+|------|--------|-------|
+| CMEMSService | ✅ DONE | src/services/cmems_service.py |
+| DOT Calculation | ✅ DONE | DOT = sla_filtered + mdt (MDT included) |
+| Jason Merge | ✅ DONE | J1+J2+J3 merged automatically |
+| Monthly Slopes | ✅ DONE | Binning + linear regression |
+| Geostrophic Velocity | ✅ DONE | v = -g/f * (dη/dx) |
+| 66°N Coverage Warning | ✅ DONE | check_gate_coverage() |
+
+### 🎯 5 Tabs Implemented
 
 | Tab | X-axis | Y-axis | Data Source |
 |-----|--------|--------|-------------|
@@ -117,10 +130,20 @@ https://github.com/Alemusica/nico/issues/12
 | **2. DOT Profile** | `x_km` (Distance km) | `profile_mean` (DOT m) | PassData attributes |
 | **3. Spatial Map** | lon | lat | DataFrame + gate overlay |
 | **4. Monthly Analysis** | Longitude (°) | DOT (m) | 12 subplots + regression |
+| **5. Geostrophic Velocity** | time | v_geo (cm/s) | NEW! v = -g/f * slope |
 
-### 🔑 Key Implementation Details
+### 🔑 Key Differences SLCCI vs CMEMS
 
-**PassData Interface** (standard per tutti i dataset):
+| Aspect | SLCCI | CMEMS |
+|--------|-------|-------|
+| DOT Calculation | corssh - TUM_ogmoc | sla_filtered + mdt |
+| Satellites | J2 single | J1+J2+J3 merged |
+| Pass Selection | Auto/Manual | None (gate = synthetic pass) |
+| lon_bin_size | 0.01-0.10° | 0.05-0.50° |
+| External Geoid | ✅ Required | ❌ MDT included |
+| Coverage | Global | ±66° latitude |
+
+### 📄 PassData Interface Extended
 ```python
 class PassData:
     strait_name: str
@@ -132,6 +155,10 @@ class PassData:
     dot_matrix: np.ndarray        # Shape: (n_lon_bins, n_periods)
     df: pd.DataFrame              # Columns: lat, lon, dot, month, time
     gate_lon_pts, gate_lat_pts: np.ndarray
+    # NEW for Tab 5 (Geostrophic):
+    v_geostrophic_series: np.ndarray  # Shape: (n_periods,) in m/s
+    mean_latitude: float              # For Coriolis display
+    coriolis_f: float                 # f = 2Ω sin(lat)
 ```
 
 **Logica tabs.py** (usa getattr per compatibilità):
@@ -160,19 +187,21 @@ x_km = getattr(slcci_data, 'x_km', None)
 | Spatial Map | tabs.py → _render_spatial_map | ✅ WORKING | MapBox + Gate overlay |
 | Monthly Analysis | tabs.py → _render_monthly_analysis | ✅ WORKING | 12 subplots + linear regression |
 
-**To see SLCCI graphs**: 
+**To see SLCCI/CMEMS graphs**: 
 1. Select gate from sidebar
 2. Expand "🛰️ SLCCI Data (ESA CCI)" section
 3. Set paths to J2 data and TUM_ogmoc.nc
 4. Click "Load SLCCI Data"
-5. All 4 tabs now work correctly!
+5. All 5 tabs now work correctly!
 
 **Blockers**: NONE ✅
 
 **Next Steps**:
-- [ ] Apply same architecture to CMEMS dataset
+- [x] Apply same architecture to CMEMS dataset ✅
+- [x] Create CMEMSService with PassData interface ✅
+- [x] Add Tab 5 (Geostrophic Velocity) ✅
+- [ ] Integrate CMEMS into sidebar.py
 - [ ] Apply same architecture to ERA5 dataset
-- [ ] Create CMEMSService with PassData interface
 - [ ] Create ERA5Service with PassData interface
 
 ---

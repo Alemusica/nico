@@ -160,6 +160,83 @@ x_km = getattr(slcci_data, 'x_km', None)  # Distance in km, NOT latitude!
 
 ---
 
+## 🌊 CMEMS Data Service
+
+### CMEMSService (`src/services/cmems_service.py`)
+**Status**: ✅ Implemented | **Used in**: Streamlit | **Date**: 2026-01-02
+
+Service for loading Copernicus Marine (CMEMS) L3 1Hz along-track altimetry data.
+
+```python
+from src.services.cmems_service import CMEMSService, CMEMSConfig
+
+# Initialize with config
+config = CMEMSConfig(
+    base_dir="/path/to/COPERNICUS DATA",
+    start_date=date(2002, 1, 1),
+    end_date=date(2024, 12, 31),
+    lon_bin_size=0.1,  # 0.05-0.50° (coarser than SLCCI)
+    max_latitude=66.0,  # Jason coverage limit
+)
+service = CMEMSService(config)
+
+# Check gate coverage
+coverage = service.check_gate_coverage("/path/to/gate.shp")
+if coverage["warning"]:
+    print(f"⚠️ {coverage['warning']}")
+
+# Load pass data
+pass_data = service.load_pass_data(gate_path="/path/to/gate.shp")
+
+# Access results (same PassData interface as SLCCI + geostrophic)
+print(f"Observations: {len(pass_data.df)}")
+print(f"Slope series: {pass_data.slope_series}")
+print(f"v_geostrophic: {pass_data.v_geostrophic_series}")  # NEW! m/s
+print(f"Mean latitude: {pass_data.mean_latitude}")
+print(f"Coriolis f: {pass_data.coriolis_f}")
+```
+
+**Key Differences from SLCCI**:
+| Aspect | SLCCI | CMEMS |
+|--------|-------|-------|
+| DOT | corssh - TUM_ogmoc | sla_filtered + mdt |
+| Satellites | J2 single | J1+J2+J3 merged |
+| Pass Selection | Auto/Manual | Gate name = synthetic pass |
+| lon_bin_size | 0.01-0.10° | 0.05-0.50° |
+| External Geoid | ✅ Required | ❌ MDT included |
+| Coverage | Global | ±66° latitude |
+
+**Extended PassData Attributes** (CMEMS adds):
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `v_geostrophic_series` | np.ndarray | Geostrophic velocity (m/s) |
+| `mean_latitude` | float | Mean lat for Coriolis display |
+| `coriolis_f` | float | Coriolis parameter f = 2Ω sin(lat) |
+
+**Files**:
+- `src/services/cmems_service.py` (520+ lines)
+
+---
+
+### Tab 5: Geostrophic Velocity (NEW)
+**Status**: ✅ Implemented | **Date**: 2026-01-02
+
+Function: `_render_geostrophic_velocity()` in `app/components/tabs.py`
+
+**Formula**: v = -g/f × (dη/dx)
+- g = 9.81 m/s² (gravity)
+- f = 2Ω sin(lat) (Coriolis parameter)
+- dη/dx = DOT slope along gate
+
+**Features**:
+- Time series plot (cm/s)
+- Monthly climatology bar chart
+- Statistics (mean, std, max, min)
+- Physical interpretation expander
+- Works for both SLCCI and CMEMS data
+
+---
+
 ### Legacy Tab Files (DEPRECATED)
 **Status**: ⚠️ Deprecated - Use tabs.py instead
 
