@@ -34,7 +34,7 @@ def render_sidebar() -> AppConfig:
     
     Returns AppConfig with all settings.
     """
-    st.sidebar.title("NICO Settings")
+    st.sidebar.title("Settings")
     
     config = AppConfig()
     
