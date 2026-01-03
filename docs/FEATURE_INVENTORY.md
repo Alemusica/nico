@@ -249,6 +249,71 @@ All functionality consolidated in `app/components/tabs.py`
 
 ---
 
+## 🔀 Comparison Mode (NEW!)
+
+### SLCCI vs CMEMS Overlay
+**Status**: ✅ Implemented | **Date**: 2026-01-02 | **Branch**: `feature/gates-streamlit`
+
+Compare SLCCI satellite altimetry with CMEMS L3 data on the same plots.
+
+```python
+# In Streamlit, load both datasets then enable comparison
+# sidebar.py handles the toggle automatically
+
+# Colors defined in tabs.py
+COLOR_SLCCI = "darkorange"  # 🟠
+COLOR_CMEMS = "steelblue"   # 🔵
+```
+
+**Workflow**:
+1. Select SLCCI → Load SLCCI Data
+2. Select CMEMS → Load CMEMS Data  
+3. Both loaded? Checkbox "🔀 Comparison Mode" appears
+4. Enable comparison → 5 overlay tabs appear
+
+**Comparison Tabs** (in `tabs.py`):
+
+| Tab | Function | Description |
+|-----|----------|-------------|
+| 1. Slope Timeline | `_render_slope_comparison()` | Both slopes on same plot |
+| 2. DOT Profile | `_render_dot_profile_comparison()` | Both profiles overlaid |
+| 3. Spatial Map | `_render_spatial_map_comparison()` | Points with different colors |
+| 4. Geostrophic Velocity | `_render_geostrophic_comparison()` | v_geo + monthly climatology |
+| 5. Export | `_render_export_tab()` | CSV downloads for both datasets |
+
+**Session State Keys** (in `state.py`):
+```python
+st.session_state["dataset_slcci"]    # SLCCI PassData
+st.session_state["dataset_cmems"]    # CMEMS PassData  
+st.session_state["comparison_mode"]  # bool
+```
+
+**State Functions**:
+- `store_slcci_data(pass_data)` - Store SLCCI separately
+- `store_cmems_data(pass_data)` - Store CMEMS separately
+- `get_slcci_data()` / `get_cmems_data()` - Retrieve
+- `is_comparison_mode()` / `set_comparison_mode(bool)` - Toggle
+
+**Pass Number Extraction** (from gate filename):
+```python
+# In cmems_service.py: _extract_pass_from_gate_name()
+# Patterns detected:
+"barents_sea_opening_S3_pass_481.shp"  → ("Barents Sea Opening", 481)
+"denmark_strait_TPJ_pass_248.shp"      → ("Denmark Strait", 248)  
+"gate_name_481.shp"                    → ("Gate Name", 481)
+"fram_strait.shp"                      → ("Fram Strait", None)
+```
+
+**Files**:
+- `app/components/tabs.py` - All comparison rendering (1367 lines)
+- `app/state.py` - Session state management
+- `app/components/sidebar.py` - Comparison toggle UI
+- `src/services/cmems_service.py` - Pass extraction
+
+**Test Script**: `scripts/test_comparison_mode.py`
+
+---
+
 ## 📊 Data Processing & Visualization
 
 ### DOT Calculation (`legacy/j2_utils.py`)

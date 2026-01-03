@@ -17,6 +17,18 @@
 
 ## 🆕 COMPARISON MODE & EXPORT (2026-01-02) 
 
+### ✅ FUNCTIONAL TESTS PASSED (2026-01-02)
+
+| Test | Status | Result |
+|------|--------|--------|
+| SLCCI Service Import | ✅ PASS | Config + Service work |
+| CMEMS Service | ✅ PASS | 29010 rows, pass 481 extracted |
+| Pass Extraction | ✅ PASS | All 5 patterns work |
+| State Functions | ✅ PASS | store/get/clear work |
+| Tabs Imports | ✅ PASS | All comparison functions load |
+
+**Test Script**: `scripts/test_comparison_mode.py`
+
 ### New Features Implemented
 
 | Task | Status | Files |
@@ -27,6 +39,11 @@
 | Comparison mode toggle | ✅ DONE | `sidebar.py` - checkbox when both loaded |
 | Comparison tabs overlay | ✅ DONE | `tabs.py` - `_render_comparison_tabs()` |
 | Export tab (CSV + PNG) | ✅ DONE | `tabs.py` - `_render_export_tab()` |
+| Git Commit & Push | ✅ DONE | Commits: 536dc80, a4bc166 |
+
+### Comparison Mode Colors
+- **SLCCI**: `darkorange` (🟠)
+- **CMEMS**: `steelblue` (🔵)
 
 ### Comparison Mode Pattern (from COMPARISON_BATCH.ipynb)
 - **SLCCI**: Orange (`tab:orange`) 
