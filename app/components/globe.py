@@ -57,7 +57,12 @@ def render_globe_landing(on_gate_select: Optional[callable] = None):
     gates_data = _get_all_gates_positions()
     
     if not gates_data:
-        st.warning("No gates available. Check GateService configuration.")
+        # Use demo/fallback gates if service not available
+        st.info("🔧 Using demo gates (GateService not configured)")
+        gates_data = _get_demo_gates()
+    
+    if not gates_data:
+        st.error("No gates available and no demo data. Check configuration.")
         return
     
     # Get currently selected gate from session state
@@ -145,6 +150,23 @@ def _get_all_gates_positions() -> List[Dict[str, Any]]:
             continue
     
     return gates
+
+
+def _get_demo_gates() -> List[Dict[str, Any]]:
+    """
+    Return demo gates for display when GateService is not available.
+    These are the main Arctic straits used in NICO analysis.
+    """
+    return [
+        {"name": "fram_strait", "lon": 0.0, "lat": 79.0, "region": "Nordic Seas", "path": None},
+        {"name": "bering_strait", "lon": -168.5, "lat": 65.8, "region": "Pacific-Arctic", "path": None},
+        {"name": "davis_strait", "lon": -57.0, "lat": 66.5, "region": "Labrador Sea", "path": None},
+        {"name": "denmark_strait", "lon": -27.0, "lat": 66.0, "region": "Nordic Seas", "path": None},
+        {"name": "barents_sea_opening", "lon": 20.0, "lat": 74.0, "region": "Barents Sea", "path": None},
+        {"name": "nares_strait", "lon": -70.0, "lat": 80.5, "region": "Canadian Arctic", "path": None},
+        {"name": "lancaster_sound", "lon": -85.0, "lat": 74.0, "region": "Canadian Arctic", "path": None},
+        {"name": "hudson_strait", "lon": -70.0, "lat": 62.0, "region": "Hudson Bay", "path": None},
+    ]
 
 
 def _create_globe_figure(

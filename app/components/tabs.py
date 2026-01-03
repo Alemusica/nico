@@ -61,53 +61,172 @@ def render_tabs(config: AppConfig):
 
 
 def _render_empty_tabs(config: AppConfig):
-    """Render welcome tabs when no data is loaded - with 3D Globe."""
-    tab1, tab2, tab3 = st.tabs(["🌍 Globe", "Welcome", "Help"])
+    """Render welcome tabs when no data is loaded - with 3D Globe first."""
+    tab1, tab2, tab3 = st.tabs(["🌍 Globe", "🏠 Welcome", "❓ Help"])
     
     with tab1:
-        # Import and render the globe component
+        # Import and render the 3D globe component
         try:
             from .globe import render_globe_landing
             render_globe_landing()
         except ImportError as e:
             st.error(f"Globe component not available: {e}")
             st.info("Install plotly: `pip install plotly`")
+        except Exception as e:
+            st.error(f"Error rendering globe: {e}")
+            import traceback
+            st.code(traceback.format_exc())
     
     with tab2:
-        st.markdown("## Welcome to NICO Dashboard")
-        st.info("""
-        **Getting Started:**
-        
-        1. **Select a Region** from the sidebar
-        2. **Choose a Gate** for analysis
-        3. **Load Data** using:
-           - SLCCI local files (J2 satellite passes)
-           - CMEMS/ERA5 via API
-        
-        Data will appear in the appropriate tabs once loaded.
-        """)
-        
-        # Quick status
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Datasets Loaded", len(st.session_state.get("datasets", {})))
-        with col2:
-            st.metric("Selected Gate", st.session_state.get("selected_gate", "None"))
-        with col3:
-            st.metric("Data Type", st.session_state.get("selected_dataset_type", "None"))
+        _render_welcome_landing(config)
     
     with tab3:
-        st.markdown("## Help")
+        _render_help_tab()
+
+
+def _render_welcome_landing(config: AppConfig):
+    """Render the welcome/landing page content."""
+    st.markdown("## 🛰️ NICO Dashboard")
+    st.markdown("*Satellite Altimetry Analysis for Arctic Ocean*")
+    
+    st.info("""
+    **Getting Started:**
+    
+    1. **🌍 Globe Tab** - Click on a gate to select it
+    2. **Select Region** from the sidebar dropdown
+    3. **Choose a Gate** for detailed analysis
+    4. **Load Data** using one of three sources:
+       - 🟠 **SLCCI** - ESA Sea Level CCI (J2 satellite, local NetCDF)
+       - 🔵 **CMEMS** - Copernicus Marine (J1/J2/J3 merged, via API)
+       - 🟢 **DTUSpace** - DTU gridded DOT (v4, local NetCDF)
+    
+    Data will appear in analysis tabs once loaded.
+    """)
+    
+    st.divider()
+    
+    # Quick status dashboard
+    st.markdown("### 📊 Current Status")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        datasets_loaded = len(st.session_state.get("datasets", {}))
+        slcci = 1 if st.session_state.get("dataset_slcci") else 0
+        cmems = 1 if st.session_state.get("dataset_cmems") else 0
+        dtu = 1 if st.session_state.get("dataset_dtu") else 0
+        total = datasets_loaded + slcci + cmems + dtu
+        st.metric("Datasets Loaded", total)
+    
+    with col2:
+        gate = st.session_state.get("selected_gate", "None")
+        st.metric("Selected Gate", gate if gate else "None")
+    
+    with col3:
+        dtype = st.session_state.get("selected_dataset_type", "None")
+        st.metric("Data Source", dtype if dtype else "None")
+    
+    with col4:
+        # Try to get gate count
+        try:
+            from src.services import GateService
+            gs = GateService()
+            gate_count = len(gs.list_gates())
+        except:
+            gate_count = "?"
+        st.metric("Available Gates", gate_count)
+    
+    st.divider()
+    
+    # Dataset comparison
+    st.markdown("### 📡 Dataset Comparison")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("#### 🟠 SLCCI")
         st.markdown("""
-        ### SLCCI Data
-        - Uses local NetCDF files from J2 satellite
-        - Select pass number and cycle range
+        - **Type**: Along-track
+        - **Satellite**: Jason-2
+        - **Source**: Local NetCDF
+        - **Passes**: Per-orbit
+        - **Best for**: Single-pass analysis
+        """)
+    
+    with col2:
+        st.markdown("#### 🔵 CMEMS")
+        st.markdown("""
+        - **Type**: Along-track (merged)
+        - **Satellites**: J1, J2, J3
+        - **Source**: Copernicus API
+        - **Tracks**: Multi-satellite
+        - **Best for**: Time series
+        """)
+    
+    with col3:
+        st.markdown("#### 🟢 DTUSpace")
+        st.markdown("""
+        - **Type**: Gridded (lat×lon×time)
+        - **Product**: DOT monthly means
+        - **Source**: Local NetCDF
+        - **Resolution**: ~0.25° grid
+        - **Best for**: Spatial patterns
+        """)
+
+
+def _render_help_tab():
+    """Render the help documentation tab."""
+    st.markdown("## ❓ Help & Documentation")
+    
+    with st.expander("🟠 SLCCI Data", expanded=True):
+        st.markdown("""
+        **ESA Sea Level Climate Change Initiative**
+        
+        - Uses local NetCDF files from Jason-2 satellite
+        - Select pass number and cycle range in sidebar
         - Shows slope, DOT profiles, and spatial maps
         
-        ### Other Datasets
-        - CMEMS: Ocean data via API
-        - ERA5: Atmospheric reanalysis
-        - Monthly aggregations and profiles
+        **Required Files:**
+        - J2 data directory with cycle folders
+        - TUM geoid file (ogmoc.nc)
+        """)
+    
+    with st.expander("🔵 CMEMS Data"):
+        st.markdown("""
+        **Copernicus Marine Environment Monitoring Service**
+        
+        - Downloads data via Copernicus API
+        - Merged Jason-1, Jason-2, Jason-3 tracks
+        - Supports SEALEVEL_EUR_PHY_L3_NRT_019_003
+        
+        **Setup:**
+        - Configure credentials in `config/credentials.yaml`
+        - Or set COPERNICUS_USERNAME/PASSWORD env vars
+        """)
+    
+    with st.expander("🟢 DTUSpace Data"):
+        st.markdown("""
+        **DTU Space Gridded DOT Products**
+        
+        - Monthly mean Dynamic Ocean Topography
+        - Gridded at ~0.25° resolution
+        - 2006-2017 coverage (v4.0)
+        
+        **Required Files:**
+        - arctic_ocean_prod_DTUSpace_v4.0.nc
+        """)
+    
+    with st.expander("🚪 Gate System"):
+        st.markdown("""
+        **Oceanographic Gates**
+        
+        Gates define transects across straits for flux analysis.
+        
+        - **Fram Strait**: Arctic-Atlantic exchange
+        - **Bering Strait**: Pacific inflow
+        - **Davis Strait**: Labrador Sea connection
+        - **Denmark Strait**: Nordic Seas overflow
+        
+        Gate shapefiles are in `gates/` directory.
         """)
 
 
