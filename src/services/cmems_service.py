@@ -900,7 +900,7 @@ class CMEMSService:
         return lons, lats
 
     # ==========================================================================
-    # API MODE - CMEMS DIRECT DOWNLOAD
+    # API MODE - CMEMS DIRECT DOWNLOAD (L4 Dataset)
     # ==========================================================================
     
     def _load_from_api(
@@ -910,64 +910,70 @@ class CMEMSService:
         progress_callback: Optional[Callable[[int, int], None]] = None
     ) -> Optional[pd.DataFrame]:
         """
-        Load CMEMS data directly from Copernicus Marine API.
+        Load CMEMS data directly from Copernicus Marine API using copernicusmarine.subset().
+        
+        Uses L4 gridded dataset: cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D
+        Full time range: 1993-01-01 to present
         
         This is an alternative to loading local files, useful when:
         - Local data is not available
         - User wants the latest NRT data
         - User wants a specific time range
         
-        Uses the existing CMEMSClient from src/surge_shazam/data/cmems_client.py
+        Requires:
+            pip install copernicusmarine
+            Environment variables: CMEMS_USERNAME, CMEMS_PASSWORD
         """
-        import asyncio
-        
         try:
-            from src.surge_shazam.data.cmems_client import CMEMSClient
+            import copernicusmarine
         except ImportError:
-            logger.error("CMEMSClient not available. Use source_mode='local'")
+            logger.error("copernicusmarine not installed. Run: pip install copernicusmarine")
             return None
         
-        logger.info(f"🌐 Loading CMEMS data from API for {strait_name}")
+        logger.info(f"🌐 Loading CMEMS L4 data from API for {strait_name}")
         
-        # Create client
-        client = CMEMSClient()
+        # Dataset configuration for L4 multi-year reprocessed data
+        DATASET_ID = "cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D"
+        DATASET_VERSION = "202411"
         
-        # Define time range (last 5 years by default)
+        # Variables to download
+        # Full list: adt, err_sla, err_ugosa, err_vgosa, flag_ice, sla, tpa_correction, ugos, ugosa, vgos, vgosa
+        variables = ["adt", "sla", "ugos", "vgos"]  # Core variables for sea level analysis
+        
+        # Define time range - full dataset range
         from datetime import datetime, timedelta
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=5*365)
+        end_date = datetime.now() - timedelta(days=7)  # Usually ~1 week delay for L4
+        start_date = datetime(1993, 1, 1)  # Dataset starts from 1993
         
-        time_range = (
-            start_date.strftime("%Y-%m-%d"),
-            end_date.strftime("%Y-%m-%d")
-        )
+        # Limit to gate bounds
+        lon_min = max(-179.9375, gate_bounds['lon_min'])
+        lon_max = min(179.9375, gate_bounds['lon_max'])
+        lat_min = max(-89.9375, gate_bounds['lat_min'])
+        lat_max = min(89.9375, gate_bounds['lat_max'])
         
-        lat_range = (gate_bounds['lat_min'], gate_bounds['lat_max'])
-        lon_range = (gate_bounds['lon_min'], gate_bounds['lon_max'])
-        
-        logger.info(f"   Time: {time_range}")
-        logger.info(f"   Lat: {lat_range}, Lon: {lon_range}")
-        logger.info(f"   Dataset: {self.config.api_dataset}")
+        logger.info(f"   Dataset: {DATASET_ID} (v{DATASET_VERSION})")
+        logger.info(f"   Time: {start_date.date()} to {end_date.date()}")
+        logger.info(f"   Bounds: lon=[{lon_min:.2f}, {lon_max:.2f}], lat=[{lat_min:.2f}, {lat_max:.2f}]")
         
         if progress_callback:
             progress_callback(10, 100)  # 10% - starting download
         
-        # Download data (async)
+        # Download data using copernicusmarine.subset()
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            ds = loop.run_until_complete(
-                client.download(
-                    dataset=self.config.api_dataset,
-                    variables=self.config.api_variables,
-                    lat_range=lat_range,
-                    lon_range=lon_range,
-                    time_range=time_range,
-                )
+            ds = copernicusmarine.open_dataset(
+                dataset_id=DATASET_ID,
+                dataset_version=DATASET_VERSION,
+                variables=variables,
+                minimum_longitude=lon_min,
+                maximum_longitude=lon_max,
+                minimum_latitude=lat_min,
+                maximum_latitude=lat_max,
+                start_datetime=start_date.strftime("%Y-%m-%dT00:00:00"),
+                end_datetime=end_date.strftime("%Y-%m-%dT00:00:00"),
             )
-            loop.close()
         except Exception as e:
             logger.error(f"CMEMS API download failed: {e}")
+            logger.info("💡 Tip: Set CMEMS_USERNAME and CMEMS_PASSWORD environment variables")
             return None
         
         if ds is None:
@@ -981,62 +987,75 @@ class CMEMSService:
         logger.info("Converting xarray to DataFrame...")
         
         try:
-            # For gridded L4 data (sea level)
-            if 'sla' in ds.variables:
-                # Flatten the gridded data
-                ds_stacked = ds.stack(points=('latitude', 'longitude'))
+            df_list = []
+            total_times = len(ds.time.values)
+            
+            for t_idx, time_val in enumerate(ds.time.values):
+                slice_data = ds.sel(time=time_val)
                 
-                df_list = []
-                for t_idx, time_val in enumerate(ds.time.values):
-                    slice_data = ds.sel(time=time_val)
-                    
-                    # Get valid data points
-                    sla = slice_data['sla'].values.flatten()
-                    valid_mask = np.isfinite(sla)
-                    
-                    if np.sum(valid_mask) == 0:
-                        continue
-                    
-                    lats, lons = np.meshgrid(
-                        slice_data.latitude.values, 
-                        slice_data.longitude.values, 
-                        indexing='ij'
-                    )
-                    lats = lats.flatten()[valid_mask]
-                    lons = lons.flatten()[valid_mask]
-                    sla = sla[valid_mask]
-                    
-                    # ADT if available
-                    if 'adt' in slice_data.variables:
-                        adt = slice_data['adt'].values.flatten()[valid_mask]
-                    else:
-                        adt = sla  # Use SLA as DOT proxy
-                    
-                    df_chunk = pd.DataFrame({
-                        'time': pd.Timestamp(time_val),
-                        'lat': lats,
-                        'lon': lons,
-                        'sla_filtered': sla,
-                        'mdt': adt - sla if 'adt' in slice_data.variables else 0.0,
-                        'dot': adt,
-                        'satellite': 'CMEMS_L4',
-                        'cycle': -1,
-                        'track': -1,
-                    })
-                    df_list.append(df_chunk)
+                # Get SLA data
+                sla = slice_data['sla'].values.flatten()
+                valid_mask = np.isfinite(sla)
                 
-                if not df_list:
-                    logger.error("No valid data points in API response")
-                    return None
+                if np.sum(valid_mask) == 0:
+                    continue
                 
-                df = pd.concat(df_list, ignore_index=True)
+                # Get coordinate grids
+                lats, lons = np.meshgrid(
+                    slice_data.latitude.values, 
+                    slice_data.longitude.values, 
+                    indexing='ij'
+                )
+                lats = lats.flatten()[valid_mask]
+                lons = lons.flatten()[valid_mask]
+                sla = sla[valid_mask]
                 
-            else:
-                logger.error(f"Unknown data format. Variables: {list(ds.variables)}")
+                # ADT (Absolute Dynamic Topography = SLA + MDT)
+                if 'adt' in slice_data.variables:
+                    adt = slice_data['adt'].values.flatten()[valid_mask]
+                    mdt = adt - sla  # Derive MDT
+                else:
+                    adt = sla
+                    mdt = np.zeros_like(sla)
+                
+                # Geostrophic velocities (if available)
+                if 'ugos' in slice_data.variables:
+                    ugos = slice_data['ugos'].values.flatten()[valid_mask]
+                    vgos = slice_data['vgos'].values.flatten()[valid_mask]
+                else:
+                    ugos = np.full_like(sla, np.nan)
+                    vgos = np.full_like(sla, np.nan)
+                
+                df_chunk = pd.DataFrame({
+                    'time': pd.Timestamp(time_val),
+                    'lat': lats,
+                    'lon': lons,
+                    'sla_filtered': sla,
+                    'mdt': mdt,
+                    'dot': adt,
+                    'ugos': ugos,
+                    'vgos': vgos,
+                    'satellite': 'CMEMS_L4',
+                    'cycle': t_idx,  # Use time index as cycle
+                    'track': -1,  # No track info for L4 gridded data
+                })
+                df_list.append(df_chunk)
+                
+                # Update progress periodically
+                if progress_callback and t_idx % 100 == 0:
+                    progress_pct = 50 + int(40 * t_idx / total_times)
+                    progress_callback(progress_pct, 100)
+            
+            if not df_list:
+                logger.error("No valid data points in API response")
                 return None
-                
+            
+            df = pd.concat(df_list, ignore_index=True)
+            
         except Exception as e:
             logger.error(f"Failed to convert API data: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
         finally:
             ds.close()
@@ -1044,6 +1063,6 @@ class CMEMSService:
         if progress_callback:
             progress_callback(100, 100)  # 100% - done
         
-        logger.info(f"✅ Loaded {len(df):,} points from CMEMS API")
+        logger.info(f"✅ Loaded {len(df):,} points from CMEMS L4 API ({df['time'].min()} to {df['time'].max()})")
         
         return df
