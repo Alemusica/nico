@@ -620,48 +620,66 @@ def _load_cmems_data(config: AppConfig):
         
         # Show file count
         file_counts = service.count_files()
-        st.sidebar.info(f"📁 Found {file_counts['total']:,} files to process...")
+        total_files = file_counts['total']
+        st.sidebar.info(f"📁 Found {total_files:,} files to process...")
         
-        with st.spinner(f"Loading CMEMS data ({file_counts['total']:,} files)... This may take several minutes."):
-            # Check gate coverage
-            coverage_info = service.check_gate_coverage(gate_path)
-            if coverage_info.get("warning"):
-                st.sidebar.warning(f"⚠️ {coverage_info['warning']}")
-            
-            # Load pass data
-            pass_data = service.load_pass_data(gate_path=gate_path)
-            
-            if pass_data is None:
-                st.sidebar.error("❌ No data found for this gate")
-                return
-            
-            # Store in session state using dedicated function
-            store_cmems_data(pass_data)
-            st.session_state["cmems_service"] = service
-            st.session_state["cmems_config"] = config
-            st.session_state["datasets"] = {}  # Clear generic
-            
-            # Success message
-            n_obs = len(pass_data.df) if hasattr(pass_data, 'df') else 0
-            n_months = pass_data.df['year_month'].nunique() if hasattr(pass_data, 'df') and 'year_month' in pass_data.df.columns else 0
-            time_range = ""
-            if hasattr(pass_data, 'df') and 'time' in pass_data.df.columns:
-                time_range = f"\n- Period: {pass_data.df['time'].min().strftime('%Y-%m')} → {pass_data.df['time'].max().strftime('%Y-%m')}"
-            
-            # Show pass number properly
-            pass_num = pass_data.pass_number
-            pass_display = f"Pass {pass_num}" if pass_num else "Synthetic pass"
-            
-            st.sidebar.success(f"""
-            ✅ CMEMS Data Loaded!
-            - Gate: {pass_data.strait_name}
-            - {pass_display}
-            - Observations: {n_obs:,}
-            - Monthly periods: {n_months}{time_range}
-            - Satellites: J1+J2+J3 merged
-            """)
-            
-            st.rerun()
+        # Create progress bar
+        progress_bar = st.sidebar.progress(0, text="Preparing...")
+        status_text = st.sidebar.empty()
+        
+        def update_progress(processed: int, total: int):
+            """Callback to update progress bar."""
+            pct = processed / total if total > 0 else 0
+            progress_bar.progress(pct, text=f"Processing: {processed:,}/{total:,} files ({pct*100:.0f}%)")
+        
+        # Check gate coverage
+        coverage_info = service.check_gate_coverage(gate_path)
+        if coverage_info.get("warning"):
+            st.sidebar.warning(f"⚠️ {coverage_info['warning']}")
+        
+        status_text.text("Loading CMEMS data... (this may take several minutes)")
+        
+        # Load pass data with progress callback
+        pass_data = service.load_pass_data(
+            gate_path=gate_path, 
+            progress_callback=update_progress
+        )
+        
+        # Clear progress bar
+        progress_bar.empty()
+        status_text.empty()
+        
+        if pass_data is None:
+            st.sidebar.error("❌ No data found for this gate")
+            return
+        
+        # Store in session state using dedicated function
+        store_cmems_data(pass_data)
+        st.session_state["cmems_service"] = service
+        st.session_state["cmems_config"] = config
+        st.session_state["datasets"] = {}  # Clear generic
+        
+        # Success message
+        n_obs = len(pass_data.df) if hasattr(pass_data, 'df') else 0
+        n_months = pass_data.df['year_month'].nunique() if hasattr(pass_data, 'df') and 'year_month' in pass_data.df.columns else 0
+        time_range = ""
+        if hasattr(pass_data, 'df') and 'time' in pass_data.df.columns:
+            time_range = f"\n- Period: {pass_data.df['time'].min().strftime('%Y-%m')} → {pass_data.df['time'].max().strftime('%Y-%m')}"
+        
+        # Show pass number properly
+        pass_num = pass_data.pass_number
+        pass_display = f"Pass {pass_num}" if pass_num else "Synthetic pass"
+        
+        st.sidebar.success(f"""
+        ✅ CMEMS Data Loaded!
+        - Gate: {pass_data.strait_name}
+        - {pass_display}
+        - Observations: {n_obs:,}
+        - Monthly periods: {n_months}{time_range}
+        - Satellites: J1+J2+J3 merged
+        """)
+        
+        st.rerun()
             
     except ImportError as e:
         st.sidebar.error(f"❌ CMEMSService not available: {e}")

@@ -21,7 +21,7 @@ Key Differences from SLCCI:
 """
 import os
 from pathlib import Path
-from typing import Optional, List, Dict, Tuple, Any
+from typing import Optional, List, Dict, Tuple, Any, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, date
 import re
@@ -272,12 +272,17 @@ class CMEMSService:
         }
     
     @log_call(logger)
-    def load_pass_data(self, gate_path: str) -> Optional[PassData]:
+    def load_pass_data(
+        self, 
+        gate_path: str,
+        progress_callback: Optional[Callable[[int, int], None]] = None
+    ) -> Optional[PassData]:
         """
         Load CMEMS data for a gate and return PassData object.
         
         Args:
             gate_path: Path to gate shapefile
+            progress_callback: Optional callback(processed, total) for progress updates
             
         Returns:
             PassData object compatible with tabs.py visualization
@@ -307,8 +312,8 @@ class CMEMSService:
             "lat_max": min(bounds[3] + self.config.buffer_deg, self.config.max_latitude),
         }
         
-        # Load all Jason data
-        df = self._load_all_jason_files(gate_bounds)
+        # Load all Jason data with progress callback
+        df = self._load_all_jason_files(gate_bounds, progress_callback=progress_callback)
         
         if df is None or df.empty:
             logger.error(f"No data found for gate {strait_name}")
@@ -387,10 +392,21 @@ class CMEMSService:
     # PRIVATE METHODS - DATA LOADING
     # ==========================================================================
     
-    def _load_all_jason_files(self, gate_bounds: Dict[str, float]) -> Optional[pd.DataFrame]:
+    def _load_all_jason_files(
+        self, 
+        gate_bounds: Dict[str, float],
+        progress_callback: Optional[Callable[[int, int], None]] = None
+    ) -> Optional[pd.DataFrame]:
         """
         Load and merge all Jason-1/2/3 files within gate bounds.
         
+        Parameters
+        ----------
+        gate_bounds : dict
+            Geographic bounds (lon_min, lon_max, lat_min, lat_max)
+        progress_callback : callable, optional
+            Function(processed: int, total: int) called during processing
+            
         File structure expected:
             base_dir/J1_netcdf/YYYY/MM/*.nc
             base_dir/J2_netcdf/YYYY/MM/*.nc
@@ -424,7 +440,8 @@ class CMEMSService:
             logger.error("No NetCDF files found")
             return None
         
-        logger.info(f"Processing {len(all_files)} total files (this may take a while)...")
+        total_files = len(all_files)
+        logger.info(f"Processing {total_files} total files (this may take a while)...")
         
         # Process files with progress
         data_chunks = []
@@ -435,8 +452,15 @@ class CMEMSService:
         for jason, nc_file in all_files:
             processed += 1
             
+            # Call progress callback if provided
+            if progress_callback is not None and processed % 100 == 0:
+                try:
+                    progress_callback(processed, total_files)
+                except Exception:
+                    pass  # Don't fail if callback fails
+            
             if processed % 500 == 0:
-                logger.info(f"Progress: {processed}/{len(all_files)} files, {with_data} with data in gate")
+                logger.info(f"Progress: {processed}/{total_files} files, {with_data} with data in gate")
             
             try:
                 chunk = self._process_single_file(jason, nc_file, gate_bounds)
@@ -447,6 +471,13 @@ class CMEMSService:
                 skipped += 1
                 if skipped % 50 == 0:
                     logger.debug(f"Skipped {skipped} files (last error: {e})")
+        
+        # Final callback
+        if progress_callback is not None:
+            try:
+                progress_callback(total_files, total_files)
+            except Exception:
+                pass
         
         logger.info(f"Processed: {processed}, Skipped: {skipped}, With data: {with_data}")
         
