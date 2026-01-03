@@ -359,6 +359,110 @@ class CMEMSService:
         
         return sorted(tracks)
     
+    def find_closest_tracks(
+        self, 
+        gate_path: str, 
+        n_tracks: int = 5
+    ) -> List[Tuple[int, float]]:
+        """
+        Find the N tracks closest to the gate centroid.
+        
+        Returns tracks sorted by distance (closest first).
+        
+        Args:
+            gate_path: Path to gate shapefile
+            n_tracks: Number of closest tracks to return (default 5)
+            
+        Returns:
+            List of (track_number, distance_km) tuples, sorted by distance
+        """
+        from scipy.spatial import cKDTree
+        
+        gate_gdf = _load_gate_gdf(gate_path)
+        bounds = gate_gdf.total_bounds
+        
+        # Gate centroid
+        centroid = gate_gdf.geometry.unary_union.centroid
+        gate_lon, gate_lat = centroid.x, centroid.y
+        
+        gate_bounds = {
+            "lon_min": bounds[0] - self.config.buffer_deg * 2,  # Wider search for closest
+            "lon_max": bounds[2] + self.config.buffer_deg * 2,
+            "lat_min": max(bounds[1] - self.config.buffer_deg * 2, -self.config.max_latitude),
+            "lat_max": min(bounds[3] + self.config.buffer_deg * 2, self.config.max_latitude),
+        }
+        
+        # Collect track positions (track_num -> list of (lon, lat))
+        track_positions = {}
+        base_dir = Path(self.config.base_dir)
+        
+        for sat in self.config.satellites:
+            folder = base_dir / f"{sat}_netcdf"
+            if not folder.exists():
+                continue
+            
+            nc_files = list(folder.rglob("*.nc"))[:100]  # Sample more files for better coverage
+            
+            for nc_file in nc_files:
+                try:
+                    ds = xr.open_dataset(nc_file)
+                    if 'track' not in ds.variables:
+                        ds.close()
+                        continue
+                    
+                    lats = ds['latitude'].values
+                    lons = ds['longitude'].values
+                    track_vals = ds['track'].values
+                    
+                    # Geographic filter
+                    mask = (
+                        (lons >= gate_bounds['lon_min']) & (lons <= gate_bounds['lon_max']) &
+                        (lats >= gate_bounds['lat_min']) & (lats <= gate_bounds['lat_max'])
+                    )
+                    
+                    if np.any(mask):
+                        for lon, lat, track in zip(lons[mask], lats[mask], track_vals[mask]):
+                            track_int = int(track)
+                            if track_int not in track_positions:
+                                track_positions[track_int] = []
+                            track_positions[track_int].append((lon, lat))
+                    
+                    ds.close()
+                except Exception:
+                    continue
+        
+        if not track_positions:
+            logger.warning("No tracks found in the search area")
+            return []
+        
+        # Compute mean position for each track and distance to gate centroid
+        track_distances = []
+        R_earth = 6371.0  # km
+        
+        for track_num, positions in track_positions.items():
+            positions = np.array(positions)
+            mean_lon = np.mean(positions[:, 0])
+            mean_lat = np.mean(positions[:, 1])
+            
+            # Haversine distance to gate centroid
+            lat1_rad = np.deg2rad(gate_lat)
+            lat2_rad = np.deg2rad(mean_lat)
+            dlat = lat2_rad - lat1_rad
+            dlon = np.deg2rad(mean_lon - gate_lon)
+            
+            a = np.sin(dlat/2)**2 + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon/2)**2
+            c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1-a))
+            dist_km = R_earth * c
+            
+            track_distances.append((track_num, dist_km))
+        
+        # Sort by distance and return top N
+        track_distances.sort(key=lambda x: x[1])
+        
+        logger.info(f"Found {len(track_distances)} tracks, returning {min(n_tracks, len(track_distances))} closest")
+        
+        return track_distances[:n_tracks]
+
     @log_call(logger)
     def load_pass_data(
         self, 

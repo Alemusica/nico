@@ -1,6 +1,6 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-03 (Session - CMEMS Performance + Dynamic Variables)
+> Last Updated: 2026-01-03 (Session - DTUSpace BUG FIXES)
 > Agent: Use this file to track progress. Update after each task.
 
 ---
@@ -12,6 +12,124 @@
 - [ ] Letto `docs/UNIFIED_DATA_PIPELINE.md`? ← NEW!
 - [ ] Verificato codice esistente?
 - [ ] Usando `.venv/bin/python`?
+
+---
+
+## 🐛 DTUSpace BUG FIXES (2026-01-03 - LATEST)
+
+### Bug: DTUSpace Tabs Not Rendering After Load
+
+**Problem**: Clicking "Load DTUSpace Data" loaded data successfully (logs showed 57600 observations) but tabs never appeared.
+
+**Root Cause**: `app/main.py` line 64-67 only checked `slcci_pass_data` and `datasets`, NOT `dataset_dtu`:
+```python
+# OLD (broken):
+if not slcci_data and not datasets:
+    render_catalog_only_view()
+    return
+```
+
+**Fix**: Added check for all dataset types:
+```python
+# NEW (fixed):
+slcci_data = st.session_state.get("slcci_pass_data") or st.session_state.get("dataset_slcci")
+cmems_data = st.session_state.get("dataset_cmems")
+dtu_data = st.session_state.get("dataset_dtu")
+datasets = st.session_state.get("datasets")
+
+has_data = any([slcci_data, cmems_data, dtu_data, datasets])
+
+if not has_data:
+    render_catalog_only_view()
+    return
+```
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `app/main.py` | Check all data types (SLCCI, CMEMS, DTU, generic) |
+| `app/components/sidebar.py` | `gate_path = None` initialization (UnboundLocalError fix) |
+
+---
+
+## 🟢 DTUSpace v4 INTEGRATION (2026-01-03)
+
+### Summary
+Added DTUSpace v4 as third dataset (ISOLATED from SLCCI/CMEMS).
+
+### Key Differences
+| Aspect | SLCCI/CMEMS | DTUSpace |
+|--------|-------------|----------|
+| Type | Along-track | **Gridded** (lat × lon × time) |
+| Pass/Track | Real satellite passes | **Synthetic** (from gate) |
+| API | CEDA/Copernicus | **None** (local only) |
+| Spatial | Scatter points | **Heatmap** grid |
+| Color | 🟠/🔵 | 🟢 Green |
+
+### Files Created/Modified
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/services/dtu_service.py` | **NEW** | DTUService, DTUConfig, DTUPassData |
+| `app/state.py` | Modified | Added `dataset_dtu`, DTU functions |
+| `app/components/sidebar.py` | Modified | DTUSpace option + config |
+| `app/components/tabs.py` | Modified | 5 DTU tabs (ISOLATED) |
+| `src/services/__init__.py` | Modified | Export DTU classes |
+
+### DTUSpace Tabs
+| Tab | Content |
+|-----|---------|
+| 🟢 Slope Timeline | Monthly slope time series |
+| 🟢 DOT Profile | Mean DOT across gate with WEST/EAST |
+| 🟢 Spatial Map | Heatmap of mean DOT grid |
+| 🟢 Geostrophic Velocity | v_geo time series + climatology |
+| 📥 Export | CSV export of synthetic data |
+
+### Test Instructions
+```bash
+cd /Users/nicolocaron/Documents/GitHub/nico
+source .venv/bin/activate
+streamlit run streamlit_app.py
+
+# In sidebar:
+# 1. Select gate
+# 2. Choose "DTUSpace" dataset
+# 3. Set NetCDF path
+# 4. Click "Load DTUSpace Data"
+```
+
+---
+
+## 📋 FULL AUDIT SESSION (2026-01-03)
+
+### Summary
+Full code review and audit of all tabs for SLCCI and CMEMS datasets.
+
+### Changes Made
+
+| Task | Status | Files |
+|------|--------|-------|
+| Export Tab for CMEMS | ✅ DONE | `tabs.py` - 5 tabs now (was 4) |
+| Audit test scripts | ✅ DONE | `scripts/quick_test.py`, `tab_audit.py`, `test_full_audit.py` |
+| Audit report | ✅ DONE | `docs/AUDIT_REPORT_2026-01-03.md` |
+| Start script | ✅ DONE | `start_streamlit.sh` |
+
+### Tab Configuration by Dataset
+
+| Dataset | Tabs |
+|---------|------|
+| **SLCCI** | 6: Slope, DOT, Spatial, Monthly, Geostrophic, Export |
+| **CMEMS** | 5: Slope, DOT, Spatial, Geostrophic, Export |
+| **DTUSpace** | 5: 🟢Slope, 🟢DOT, 🟢Spatial(grid), 🟢Geostrophic, Export |
+| **Comparison** | 7: Slope, DOT, Spatial, Geostrophic, Correlation, Difference, Export |
+
+### Test Instructions
+```bash
+cd /Users/nicolocaron/Documents/GitHub/nico
+./start_streamlit.sh
+# Open http://localhost:8501
+```
 
 ---
 

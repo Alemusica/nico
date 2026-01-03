@@ -249,7 +249,70 @@ All functionality consolidated in `app/components/tabs.py`
 
 ---
 
-## 🔀 Comparison Mode (NEW!)
+## � DTUSpace v4 Service (NEW!)
+
+### DTUService (`src/services/dtu_service.py`)
+**Status**: ✅ Implemented | **Date**: 2026-01-03 | **Branch**: `feature/gates-streamlit`
+
+Service for loading and processing DTUSpace v4 **gridded** DOT products.
+
+**ISOLATED** from SLCCI/CMEMS - completely separate data handling.
+
+```python
+from src.services import DTUService, DTUConfig, DTUPassData
+
+service = DTUService()
+pass_data = service.load_gate_data(
+    nc_path="/path/to/arctic_ocean_prod_DTUSpace_v4.0.nc",
+    gate_path="/path/to/gate.shp",
+    start_year=2006,
+    end_year=2017,
+    n_gate_pts=400
+)
+```
+
+**Key Differences from SLCCI/CMEMS:**
+
+| Aspect | SLCCI/CMEMS | DTUSpace |
+|--------|-------------|----------|
+| Data Type | Along-track | **Gridded** (lat × lon × time) |
+| Pass/Track | Real satellite passes | **Synthetic** (from gate geometry) |
+| API Access | CEDA/Copernicus | **None** (local files only) |
+| Spatial Plot | Scatter points | **Heatmap** (pcolormesh style) |
+| Color | 🟠 Orange / 🔵 Blue | 🟢 Green |
+
+**DTUPassData Attributes:**
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `strait_name` | str | Gate name (from filename) |
+| `dataset_name` | str | "arctic ocean prod DTUSpace v4.0" |
+| `slope_series` | np.ndarray | Monthly slopes (m/100km) |
+| `time_array` | np.ndarray | Monthly dates |
+| `profile_mean` | np.ndarray | Mean DOT along gate |
+| `x_km` | np.ndarray | Distance along gate (km) |
+| `dot_matrix` | np.ndarray | DOT [n_gate_pts × n_time] |
+| `v_geostrophic_series` | np.ndarray | Pre-computed velocities |
+| `dot_mean_grid` | xr.DataArray | Mean DOT grid for spatial map |
+| `df` | DataFrame | Synthetic "observations" |
+
+**Processing Flow:**
+1. Load NetCDF → `xr.open_dataset()`
+2. Load gate → shapefile to GeoDataFrame
+3. Interpolate 400 points along gate line
+4. KD-tree match → each gate point to nearest grid cell
+5. Extract DOT along gate for all times
+6. Compute slope series + geostrophic velocity
+7. Build synthetic DataFrame for compatibility
+
+**Files:**
+- `src/services/dtu_service.py` (400+ lines)
+- `app/state.py` - `store_dtu_data()`, `get_dtu_data()`
+- `app/components/sidebar.py` - DTUSpace section
+- `app/components/tabs.py` - `_render_dtu_*()` functions
+
+---
+
+## �🔀 Comparison Mode (NEW!)
 
 ### SLCCI vs CMEMS Overlay
 **Status**: ✅ Implemented | **Date**: 2026-01-02 | **Branch**: `feature/gates-streamlit`

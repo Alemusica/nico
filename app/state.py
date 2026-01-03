@@ -58,6 +58,12 @@ class AppConfig:
     # CMEMS Performance options
     cmems_use_parallel: bool = True  # Use parallel file loading
     cmems_use_cache: bool = True     # Cache processed DataFrames
+    
+    # === DTUSpace SETTINGS (ISOLATED - gridded product) ===
+    dtu_nc_path: str = ""  # Path to DTUSpace NetCDF file
+    dtu_start_year: int = 2006
+    dtu_end_year: int = 2017
+    dtu_n_gate_pts: int = 400  # Points to interpolate along gate
 
 
 def init_session_state():
@@ -73,6 +79,9 @@ def init_session_state():
         
         # CMEMS-specific (separate key for comparison)
         "dataset_cmems": None,
+        
+        # DTUSpace-specific (ISOLATED - gridded product)
+        "dataset_dtu": None,
         
         # Comparison mode
         "comparison_mode": False,
@@ -168,3 +177,22 @@ def clear_cmems_data():
     st.session_state.dataset_cmems = None
     if not st.session_state.get("dataset_slcci"):
         st.session_state.slcci_pass_data = None
+
+
+# ==============================================================================
+# DTUSpace Functions (ISOLATED - does not affect SLCCI/CMEMS)
+# ==============================================================================
+
+def store_dtu_data(pass_data):
+    """Store DTUSpace data with dedicated key."""
+    st.session_state["dataset_dtu"] = pass_data
+
+
+def get_dtu_data():
+    """Get DTUSpace data from session state."""
+    return st.session_state.get("dataset_dtu")
+
+
+def clear_dtu_data():
+    """Clear only DTUSpace data."""
+    st.session_state["dataset_dtu"] = None

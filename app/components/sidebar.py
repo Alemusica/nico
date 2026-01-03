@@ -15,12 +15,84 @@ Comparison Mode:
 """
 
 import os
+import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple, List
 
 import streamlit as st
 
-from ..state import AppConfig, store_slcci_data, store_cmems_data, is_comparison_mode, set_comparison_mode
+from ..state import (
+    AppConfig, 
+    store_slcci_data, 
+    store_cmems_data, 
+    is_comparison_mode, 
+    set_comparison_mode,
+    store_dtu_data,
+    get_dtu_data
+)
+
+
+# ============================================================
+# PASS/TRACK EXTRACTION HELPERS
+# ============================================================
+
+def _extract_pass_from_gate_name(gate_name: str) -> Optional[int]:
+    """
+    Extract pass/track number from gate shapefile name.
+    
+    Patterns supported:
+    - *_TPJ_pass_XXX  (J1/J2/J3 = TOPEX/Poseidon-Jason)
+    - *_S3_pass_XXX   (Sentinel-3)
+    - Trailing _XXX   (generic fallback)
+    
+    Args:
+        gate_name: Gate name or shapefile path
+        
+    Returns:
+        Pass number as int, or None if not found
+    """
+    if not gate_name:
+        return None
+    
+    # Get just the filename stem
+    name = Path(gate_name).stem if "/" in gate_name or "\\" in gate_name else gate_name
+    
+    # Pattern 1: _TPJ_pass_XXX (J1/J2/J3)
+    match = re.search(r"_TPJ_pass_(\d+)", name, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    
+    # Pattern 2: _S3_pass_XXX (Sentinel-3)
+    match = re.search(r"_S3_pass_(\d+)", name, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    
+    # Pattern 3: Generic trailing _XXX (3+ digits at end)
+    match = re.search(r"_(\d{3,})$", name)
+    if match:
+        return int(match.group(1))
+    
+    return None
+
+
+def _extract_satellite_from_gate_name(gate_name: str) -> Optional[str]:
+    """
+    Extract satellite type from gate name.
+    
+    Returns:
+        'J2' for TPJ (Jason-2), 'S3' for Sentinel-3, or None
+    """
+    if not gate_name:
+        return None
+    
+    name = Path(gate_name).stem if "/" in gate_name or "\\" in gate_name else gate_name
+    
+    if "_TPJ_" in name.upper():
+        return "J2"  # TOPEX/Poseidon-Jason series
+    elif "_S3_" in name.upper():
+        return "S3"  # Sentinel-3
+    
+    return None
 
 
 # Initialize GateService
@@ -111,6 +183,26 @@ def render_sidebar() -> AppConfig:
         if st.sidebar.button("Load CMEMS Data", type="primary", use_container_width=True):
             _load_cmems_data(config)
     
+    elif config.selected_dataset_type == "DTUSpace":
+        # === DTUSpace-SPECIFIC OPTIONS (ISOLATED - GRIDDED PRODUCT) ===
+        st.sidebar.divider()
+        
+        # === 3. DATA PATH ===
+        st.sidebar.subheader("3. DTUSpace Data Path")
+        config = _render_dtu_paths(config)
+        
+        st.sidebar.divider()
+        
+        # === 4. TIME RANGE ===
+        st.sidebar.subheader("4. Time Range")
+        config = _render_dtu_time_range(config)
+        
+        st.sidebar.divider()
+        
+        # === LOAD BUTTON ===
+        if st.sidebar.button("🟢 Load DTUSpace Data", type="primary", use_container_width=True):
+            _load_dtu_data(config)
+    
     else:
         # Non-SLCCI/CMEMS data sources (ERA5, etc.)
         st.sidebar.divider()
@@ -175,10 +267,10 @@ def _render_data_source(config: AppConfig) -> AppConfig:
     # Main dataset selector
     config.selected_dataset_type = st.sidebar.radio(
         "Dataset",
-        ["SLCCI", "CMEMS", "ERA5"],
+        ["SLCCI", "CMEMS", "DTUSpace", "ERA5"],
         horizontal=True,
         key="sidebar_datasource",
-        help="SLCCI=Sea Level CCI (J2), CMEMS=Copernicus L3 1Hz (J1/J2/J3)"
+        help="SLCCI=Sea Level CCI (J2), CMEMS=Copernicus L3 1Hz, DTUSpace=Gridded DOT"
     )
     
     # Store in session state for tabs
@@ -261,23 +353,88 @@ def _render_data_paths(config: AppConfig) -> AppConfig:
 
 
 def _render_pass_selection(config: AppConfig) -> AppConfig:
-    """Render pass selection mode and number."""
+    """Render pass selection mode and number with suggested pass from gate."""
+    
+    # Try to extract suggested pass from gate shapefile name
+    suggested_pass = None
+    suggested_satellite = None
+    gate_path = None  # Initialize here for use later
+    
+    if config.selected_gate:
+        gate_path = _get_gate_shapefile(config.selected_gate)
+        if gate_path:
+            suggested_pass = _extract_pass_from_gate_name(gate_path)
+            suggested_satellite = _extract_satellite_from_gate_name(gate_path)
+    
+    # Show suggested pass if found
+    if suggested_pass:
+        sat_label = f" ({suggested_satellite})" if suggested_satellite else ""
+        st.sidebar.success(f"🎯 **Suggested Pass: {suggested_pass}**{sat_label}")
+        st.sidebar.caption("Extracted from gate shapefile name")
+    
+    # Build mode options based on what's available
+    mode_options = ["suggested", "closest", "manual"] if suggested_pass else ["closest", "manual"]
     
     config.pass_mode = st.sidebar.radio(
         "Mode",
-        ["manual", "auto"],
-        format_func=lambda x: "Manual" if x == "manual" else "Auto-detect",
+        mode_options,
+        format_func=lambda x: {
+            "suggested": f"🎯 Suggested ({suggested_pass})" if suggested_pass else "Suggested",
+            "closest": "🔍 5 Closest",
+            "manual": "✏️ Manual"
+        }.get(x, x),
         horizontal=True,
         key="sidebar_pass_mode",
-        help="Auto finds closest pass to gate"
+        help="Suggested=from gate name, Closest=5 nearest passes, Manual=enter number"
     )
     
-    if config.pass_mode == "manual":
+    if config.pass_mode == "suggested" and suggested_pass:
+        config.pass_number = suggested_pass
+        st.sidebar.info(f"Using pass **{suggested_pass}** from gate definition")
+        
+    elif config.pass_mode == "closest" and gate_path:
+        # Find and show 5 closest passes
+        try:
+            from src.services.slcci_service import SLCCIService, SLCCIConfig
+            temp_config = SLCCIConfig(base_dir=config.data_dir)
+            temp_service = SLCCIService(temp_config)
+            
+            # Cache closest passes in session state
+            cache_key = f"slcci_closest_{config.selected_gate}"
+            if cache_key not in st.session_state:
+                with st.spinner("Finding closest passes..."):
+                    st.session_state[cache_key] = temp_service.find_closest_pass(gate_path, n_passes=5)
+            
+            closest_passes = st.session_state[cache_key]
+            
+            if closest_passes and closest_passes[0][1] != float('inf'):
+                # Build options: list of (pass_num, distance_km)
+                pass_options = [p[0] for p in closest_passes]
+                pass_labels = [f"Pass {p[0]} ({p[1]:.1f} km)" for p in closest_passes]
+                
+                selected_idx = st.sidebar.selectbox(
+                    "Select Pass",
+                    range(len(pass_options)),
+                    format_func=lambda i: pass_labels[i],
+                    key="sidebar_slcci_closest_pass",
+                    help="Passes sorted by distance to gate centroid"
+                )
+                
+                config.pass_number = pass_options[selected_idx]
+                st.sidebar.success(f"🎯 Pass {config.pass_number} selected")
+            else:
+                st.sidebar.warning("No passes found near this gate")
+                config.pass_number = 248  # Default fallback
+        except Exception as e:
+            st.sidebar.error(f"Error finding passes: {e}")
+            config.pass_number = 248
+            
+    elif config.pass_mode == "manual":
         config.pass_number = st.sidebar.number_input(
             "Pass Number",
             min_value=1,
             max_value=500,
-            value=248,
+            value=suggested_pass if suggested_pass else 248,
             key="sidebar_pass_num",
             help="J2 satellite pass number (e.g., 248 for Davis)"
         )
@@ -438,16 +595,41 @@ def _render_cmems_params(config: AppConfig) -> AppConfig:
     # Get gate path for track discovery
     gate_path = _get_gate_shapefile(config.selected_gate)
     
-    # Option to filter by track or use all tracks
-    use_track_filter = st.sidebar.checkbox(
-        "Filter by specific track",
-        value=config.cmems_track_number is not None,
-        key="sidebar_cmems_use_track",
-        help="Filter data to a single satellite track (like SLCCI pass)"
+    # Try to extract suggested track from gate name
+    suggested_track = None
+    if config.selected_gate:
+        suggested_track = _extract_pass_from_gate_name(config.selected_gate)
+    
+    # Show suggested track if found
+    if suggested_track:
+        st.sidebar.success(f"🎯 **Suggested Track: {suggested_track}**")
+        st.sidebar.caption("Extracted from gate shapefile name")
+    
+    # Track selection mode
+    track_mode = st.sidebar.radio(
+        "Track Mode",
+        ["all", "suggested", "closest", "manual"] if suggested_track else ["all", "closest", "manual"],
+        format_func=lambda x: {
+            "all": "📊 All Tracks",
+            "suggested": f"🎯 Suggested ({suggested_track})" if suggested_track else "Suggested",
+            "closest": "🔍 5 Closest",
+            "manual": "✏️ Manual"
+        }.get(x, x),
+        horizontal=True,
+        key="sidebar_cmems_track_mode",
+        help="all=merge all tracks, suggested=from gate name, closest=5 nearest to gate, manual=enter number"
     )
     
-    if use_track_filter and gate_path:
-        # Get available tracks for this gate
+    if track_mode == "all":
+        config.cmems_track_number = None
+        st.sidebar.info("Using ALL tracks (merged)")
+        
+    elif track_mode == "suggested" and suggested_track:
+        config.cmems_track_number = suggested_track
+        st.sidebar.info(f"Using track **{suggested_track}** from gate definition")
+        
+    elif track_mode == "closest" and gate_path:
+        # Find and show 5 closest tracks
         try:
             from src.services.cmems_service import CMEMSService, CMEMSConfig
             temp_config = CMEMSConfig(
@@ -456,41 +638,46 @@ def _render_cmems_params(config: AppConfig) -> AppConfig:
             )
             temp_service = CMEMSService(temp_config)
             
-            # Cache available tracks in session state
-            cache_key = f"cmems_tracks_{config.selected_gate}"
+            # Cache closest tracks in session state
+            cache_key = f"cmems_closest_{config.selected_gate}"
             if cache_key not in st.session_state:
-                with st.spinner("Scanning for available tracks..."):
-                    st.session_state[cache_key] = temp_service.get_available_tracks(gate_path)
+                with st.spinner("Finding closest tracks..."):
+                    st.session_state[cache_key] = temp_service.find_closest_tracks(gate_path, n_tracks=5)
             
-            available_tracks = st.session_state[cache_key]
+            closest_tracks = st.session_state[cache_key]
             
-            if available_tracks:
-                # Show track selector
-                track_options = [None] + available_tracks
-                track_labels = ["All tracks"] + [str(t) for t in available_tracks]
+            if closest_tracks:
+                # Build options: list of (track_num, distance_km)
+                track_options = [t[0] for t in closest_tracks]
+                track_labels = [f"Track {t[0]} ({t[1]:.1f} km)" for t in closest_tracks]
                 
                 selected_idx = st.sidebar.selectbox(
-                    "Track Number",
+                    "Select Track",
                     range(len(track_options)),
                     format_func=lambda i: track_labels[i],
-                    key="sidebar_cmems_track",
-                    help=f"Found {len(available_tracks)} tracks crossing this gate"
+                    key="sidebar_cmems_closest_track",
+                    help="Tracks sorted by distance to gate centroid"
                 )
                 
                 config.cmems_track_number = track_options[selected_idx]
-                
-                if config.cmems_track_number:
-                    st.sidebar.success(f"🎯 Filtering to track {config.cmems_track_number}")
+                st.sidebar.success(f"🎯 Track {config.cmems_track_number} selected")
             else:
-                st.sidebar.warning("No tracks found for this gate")
+                st.sidebar.warning("No tracks found near this gate")
                 config.cmems_track_number = None
         except Exception as e:
-            st.sidebar.error(f"Error loading tracks: {e}")
+            st.sidebar.error(f"Error finding tracks: {e}")
             config.cmems_track_number = None
-    else:
-        config.cmems_track_number = None
-        if use_track_filter and not gate_path:
-            st.sidebar.warning("Select a gate first to see available tracks")
+            
+    elif track_mode == "manual":
+        config.cmems_track_number = st.sidebar.number_input(
+            "Track Number",
+            min_value=1,
+            max_value=500,
+            value=suggested_track if suggested_track else 100,
+            key="sidebar_cmems_manual_track",
+            help="Enter a specific track number"
+        )
+        st.sidebar.info(f"Using manual track **{config.cmems_track_number}**")
     
     # Performance options (collapsible)
     with st.expander("⚡ Performance", expanded=False):
@@ -843,3 +1030,167 @@ def _get_gate_shapefile(gate_id: Optional[str]) -> Optional[str]:
             return str(matches[0])
     
     return None
+
+
+# ==============================================================================
+# DTUSpace-SPECIFIC FUNCTIONS (ISOLATED - does not affect SLCCI/CMEMS)
+# ==============================================================================
+
+def _render_dtu_paths(config: AppConfig) -> AppConfig:
+    """Render DTUSpace NetCDF file path input."""
+    
+    st.sidebar.info("🟢 **DTUSpace v4** is a gridded DOT product (not along-track)")
+    
+    config.dtu_nc_path = st.sidebar.text_input(
+        "NetCDF File Path",
+        value="/Users/nicolocaron/Desktop/ARCFRESH/arctic_ocean_prod_DTUSpace_v4.0.nc/arctic_ocean_prod_DTUSpace_v4.0.nc",
+        key="sidebar_dtu_nc_path",
+        help="Full path to DTUSpace NetCDF file (arctic_ocean_prod_DTUSpace_v4.0.nc)"
+    )
+    
+    # Validate path
+    if config.dtu_nc_path:
+        nc_path = Path(config.dtu_nc_path)
+        if nc_path.exists():
+            st.sidebar.success(f"✅ File found: {nc_path.name}")
+        else:
+            st.sidebar.warning("⚠️ File not found at specified path")
+    
+    # Info about DTUSpace
+    with st.sidebar.expander("ℹ️ About DTUSpace", expanded=False):
+        st.markdown("""
+        **DTUSpace v4** is a gridded Dynamic Ocean Topography (DOT) product.
+        
+        **Key differences from SLCCI/CMEMS:**
+        - 📊 **Gridded** (lat × lon × time), not along-track
+        - 🚫 **No satellite passes** - gate defines the "synthetic pass"
+        - 📁 **Local only** - no API access
+        - 🗓️ **Monthly** resolution
+        
+        **Variables:**
+        - `dot`: Dynamic Ocean Topography (m)
+        - `lat`, `lon`, `date`: coordinates
+        """)
+    
+    return config
+
+
+def _render_dtu_time_range(config: AppConfig) -> AppConfig:
+    """Render DTUSpace time range selector."""
+    
+    col1, col2 = st.sidebar.columns(2)
+    
+    with col1:
+        config.dtu_start_year = st.number_input(
+            "Start Year",
+            min_value=1993,
+            max_value=2020,
+            value=2006,
+            key="sidebar_dtu_start_year"
+        )
+    
+    with col2:
+        config.dtu_end_year = st.number_input(
+            "End Year",
+            min_value=1993,
+            max_value=2020,
+            value=2017,
+            key="sidebar_dtu_end_year"
+        )
+    
+    # Show time range
+    years = config.dtu_end_year - config.dtu_start_year + 1
+    st.sidebar.caption(f"📅 Period: {config.dtu_start_year}–{config.dtu_end_year} ({years} years, ~{years*12} monthly steps)")
+    
+    # Processing options
+    with st.sidebar.expander("⚙️ Processing Options", expanded=False):
+        config.dtu_n_gate_pts = st.slider(
+            "Gate interpolation points",
+            min_value=100,
+            max_value=800,
+            value=400,
+            step=50,
+            key="sidebar_dtu_n_gate_pts",
+            help="Number of points to interpolate along the gate line"
+        )
+    
+    return config
+
+
+def _load_dtu_data(config: AppConfig):
+    """Load DTUSpace data for the selected gate."""
+    
+    # Validate
+    if not config.dtu_nc_path or not Path(config.dtu_nc_path).exists():
+        st.sidebar.error("❌ DTUSpace NetCDF file not found. Check the path.")
+        return
+    
+    gate_path = _get_gate_shapefile(config.selected_gate)
+    if not gate_path:
+        st.sidebar.error("❌ No gate selected. Select a gate first.")
+        return
+    
+    try:
+        from src.services.dtu_service import DTUService
+        
+        service = DTUService()
+        
+        with st.sidebar.status("🟢 Loading DTUSpace data...", expanded=True) as status:
+            st.write(f"📁 File: {Path(config.dtu_nc_path).name}")
+            st.write(f"🚪 Gate: {config.selected_gate}")
+            st.write(f"📅 Period: {config.dtu_start_year}–{config.dtu_end_year}")
+            
+            pass_data = service.load_gate_data(
+                nc_path=config.dtu_nc_path,
+                gate_path=gate_path,
+                start_year=config.dtu_start_year,
+                end_year=config.dtu_end_year,
+                n_gate_pts=config.dtu_n_gate_pts
+            )
+            
+            status.update(label="✅ DTUSpace loaded!", state="complete", expanded=False)
+        
+        if pass_data is None:
+            st.sidebar.error("❌ No data found for this gate/period")
+            return
+        
+        # Store in session state using dedicated DTU function
+        store_dtu_data(pass_data)
+        st.session_state["dtu_service"] = service
+        st.session_state["dtu_config"] = config
+        
+        # Verify storage
+        stored = get_dtu_data()
+        if stored is None:
+            st.sidebar.error("❌ Failed to store DTU data in session state!")
+            return
+        
+        # Success message
+        n_time = pass_data.n_time
+        n_valid_slopes = sum(~np.isnan(pass_data.slope_series))
+        gate_length = pass_data.x_km[-1] if len(pass_data.x_km) > 0 else 0
+        
+        st.sidebar.success(f"""
+        ✅ DTUSpace Data Loaded!
+        - Gate: {pass_data.strait_name}
+        - Dataset: {pass_data.dataset_name}
+        - Period: {config.dtu_start_year}–{config.dtu_end_year}
+        - Time steps: {n_time} monthly
+        - Valid slopes: {n_valid_slopes}/{n_time}
+        - Gate length: {gate_length:.1f} km
+        """)
+        
+        # Rerun to display DTU tabs (data verified above)
+        st.rerun()
+            
+    except ImportError as e:
+        st.sidebar.error(f"❌ DTUService not available: {e}")
+    except Exception as e:
+        st.sidebar.error(f"❌ Error loading DTUSpace: {e}")
+        import traceback
+        with st.sidebar.expander("Traceback"):
+            st.code(traceback.format_exc())
+
+
+# Import numpy for DTU functions
+import numpy as np
