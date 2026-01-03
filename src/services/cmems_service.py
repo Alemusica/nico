@@ -72,6 +72,9 @@ class CMEMSConfig:
     # Data source mode: "local" or "api"
     source_mode: str = "local"
     
+    # Track filtering (equivalent to SLCCI pass)
+    track_number: Optional[int] = None  # Filter by specific track number (None = all tracks)
+    
     # Performance options
     use_parallel: bool = True  # Use parallel file processing
     use_cache: bool = True  # Cache processed DataFrames
@@ -296,6 +299,66 @@ class CMEMSService:
             "years": sorted_years
         }
     
+    def get_available_tracks(self, gate_path: str) -> List[int]:
+        """
+        Get list of unique track numbers available for a gate.
+        
+        This scans a sample of files to find all tracks that pass through the gate.
+        Useful for populating track selection dropdowns in the UI.
+        
+        Args:
+            gate_path: Path to gate shapefile
+            
+        Returns:
+            Sorted list of unique track numbers
+        """
+        gate_gdf = _load_gate_gdf(gate_path)
+        bounds = gate_gdf.total_bounds
+        
+        gate_bounds = {
+            "lon_min": bounds[0] - self.config.buffer_deg,
+            "lon_max": bounds[2] + self.config.buffer_deg,
+            "lat_min": max(bounds[1] - self.config.buffer_deg, -self.config.max_latitude),
+            "lat_max": min(bounds[3] + self.config.buffer_deg, self.config.max_latitude),
+        }
+        
+        tracks = set()
+        base_dir = Path(self.config.base_dir)
+        
+        # Sample files from each satellite (max 50 per satellite for speed)
+        for sat in self.config.satellites:
+            folder = base_dir / f"{sat}_netcdf"
+            if not folder.exists():
+                continue
+                
+            nc_files = list(folder.rglob("*.nc"))[:50]  # Sample first 50 files
+            
+            for nc_file in nc_files:
+                try:
+                    ds = xr.open_dataset(nc_file)
+                    if 'track' not in ds.variables:
+                        ds.close()
+                        continue
+                    
+                    lats = ds['latitude'].values
+                    lons = ds['longitude'].values
+                    track_vals = ds['track'].values
+                    
+                    # Geographic filter
+                    mask = (
+                        (lons >= gate_bounds['lon_min']) & (lons <= gate_bounds['lon_max']) &
+                        (lats >= gate_bounds['lat_min']) & (lats <= gate_bounds['lat_max'])
+                    )
+                    
+                    if np.any(mask):
+                        tracks.update(track_vals[mask].astype(int).tolist())
+                    
+                    ds.close()
+                except Exception:
+                    continue
+        
+        return sorted(tracks)
+    
     @log_call(logger)
     def load_pass_data(
         self, 
@@ -349,6 +412,18 @@ class CMEMSService:
             return None
         
         logger.info(f"Loaded {len(df):,} observations from {df['time'].min()} to {df['time'].max()}")
+        
+        # Filter by track number if specified (equivalent to SLCCI pass filtering)
+        if self.config.track_number is not None and 'track' in df.columns:
+            track_val = self.config.track_number
+            df_filtered = df[df['track'] == track_val]
+            if df_filtered.empty:
+                # Try with nearest track
+                available_tracks = df['track'].unique()
+                logger.warning(f"Track {track_val} not found. Available tracks: {sorted(available_tracks)[:20]}...")
+                return None
+            logger.info(f"Filtered to track {track_val}: {len(df_filtered):,} observations (was {len(df):,})")
+            df = df_filtered
         
         # Add month column
         df['month'] = df['time'].dt.month

@@ -432,6 +432,66 @@ def _render_cmems_date_range(config: AppConfig) -> AppConfig:
 def _render_cmems_params(config: AppConfig) -> AppConfig:
     """Render CMEMS-specific processing parameters."""
     
+    # Track selection (equivalent to SLCCI pass)
+    st.sidebar.markdown("### 🛤️ Track Selection")
+    
+    # Get gate path for track discovery
+    gate_path = _get_gate_shapefile(config.selected_gate)
+    
+    # Option to filter by track or use all tracks
+    use_track_filter = st.sidebar.checkbox(
+        "Filter by specific track",
+        value=config.cmems_track_number is not None,
+        key="sidebar_cmems_use_track",
+        help="Filter data to a single satellite track (like SLCCI pass)"
+    )
+    
+    if use_track_filter and gate_path:
+        # Get available tracks for this gate
+        try:
+            from src.services.cmems_service import CMEMSService, CMEMSConfig
+            temp_config = CMEMSConfig(
+                base_dir=config.cmems_base_dir,
+                source_mode=config.cmems_source_mode
+            )
+            temp_service = CMEMSService(temp_config)
+            
+            # Cache available tracks in session state
+            cache_key = f"cmems_tracks_{config.selected_gate}"
+            if cache_key not in st.session_state:
+                with st.spinner("Scanning for available tracks..."):
+                    st.session_state[cache_key] = temp_service.get_available_tracks(gate_path)
+            
+            available_tracks = st.session_state[cache_key]
+            
+            if available_tracks:
+                # Show track selector
+                track_options = [None] + available_tracks
+                track_labels = ["All tracks"] + [str(t) for t in available_tracks]
+                
+                selected_idx = st.sidebar.selectbox(
+                    "Track Number",
+                    range(len(track_options)),
+                    format_func=lambda i: track_labels[i],
+                    key="sidebar_cmems_track",
+                    help=f"Found {len(available_tracks)} tracks crossing this gate"
+                )
+                
+                config.cmems_track_number = track_options[selected_idx]
+                
+                if config.cmems_track_number:
+                    st.sidebar.success(f"🎯 Filtering to track {config.cmems_track_number}")
+            else:
+                st.sidebar.warning("No tracks found for this gate")
+                config.cmems_track_number = None
+        except Exception as e:
+            st.sidebar.error(f"Error loading tracks: {e}")
+            config.cmems_track_number = None
+    else:
+        config.cmems_track_number = None
+        if use_track_filter and not gate_path:
+            st.sidebar.warning("Select a gate first to see available tracks")
+    
     # Performance options (collapsible)
     with st.expander("⚡ Performance", expanded=False):
         # Parallel processing toggle
@@ -655,6 +715,8 @@ def _load_cmems_data(config: AppConfig):
             source_mode=getattr(config, 'cmems_source_mode', 'local'),
             lon_bin_size=getattr(config, 'cmems_lon_bin_size', 0.1),
             buffer_deg=getattr(config, 'cmems_buffer_deg', 5.0),
+            # Track filtering (like SLCCI pass)
+            track_number=getattr(config, 'cmems_track_number', None),
             # Performance options
             use_parallel=getattr(config, 'cmems_use_parallel', True),
             use_cache=getattr(config, 'cmems_use_cache', True),
@@ -676,6 +738,8 @@ def _load_cmems_data(config: AppConfig):
                 perf_info.append("📦 Cache ON")
             if cmems_config.use_parallel:
                 perf_info.append("🚀 Parallel ON")
+            if cmems_config.track_number:
+                perf_info.append(f"🛤️ Track {cmems_config.track_number}")
             perf_str = " | ".join(perf_info) if perf_info else ""
             
             st.sidebar.info(f"📁 Found {total_files:,} files to process... {perf_str}")

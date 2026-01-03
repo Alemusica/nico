@@ -53,6 +53,7 @@ class AppConfig:
     cmems_end_date: Any = None      # datetime.date
     cmems_lon_bin_size: float = 0.10  # Coarser than SLCCI (0.05-0.50)
     cmems_buffer_deg: float = 5.0   # Buffer around gate (from Copernicus notebook)
+    cmems_track_number: Optional[int] = None  # Filter by track (like SLCCI pass)
     
     # CMEMS Performance options
     cmems_use_parallel: bool = True  # Use parallel file loading
