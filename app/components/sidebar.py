@@ -355,44 +355,51 @@ def _render_cmems_paths(config: AppConfig) -> AppConfig:
         format_func=lambda x: "📁 LOCAL Files" if x == "local" else "🌐 CMEMS API",
         horizontal=True,
         key="sidebar_cmems_source_mode",
-        help="LOCAL=NetCDF files on disk, API=Copernicus Marine Service"
+        help="LOCAL=NetCDF files on disk, API=Copernicus Marine Service (requires login)"
     )
     
     if config.cmems_source_mode == "api":
-        st.sidebar.info("🚧 API mode coming soon. Using local files for now.")
-        config.cmems_source_mode = "local"
+        st.sidebar.info(
+            "🌐 API mode downloads directly from Copernicus Marine. "
+            "Set CMEMS_USERNAME and CMEMS_PASSWORD environment variables."
+        )
     
-    config.cmems_base_dir = st.sidebar.text_input(
-        "CMEMS Data Directory",
-        value="/Users/nicolocaron/Desktop/ARCFRESH/COPERNICUS DATA",
-        key="sidebar_cmems_dir",
-        help="Folder containing J1_netcdf/, J2_netcdf/, J3_netcdf/ subfolders"
-    )
-    
-    # Show available files info using CMEMSService
-    from pathlib import Path
-    try:
-        from src.services.cmems_service import CMEMSService, CMEMSConfig
-        temp_config = CMEMSConfig(base_dir=config.cmems_base_dir)
-        temp_service = CMEMSService(temp_config)
-        file_counts = temp_service.count_files()
-        date_info = temp_service.get_date_range()
+    # Only show path input for local mode
+    if config.cmems_source_mode == "local":
+        config.cmems_base_dir = st.sidebar.text_input(
+            "CMEMS Data Directory",
+            value="/Users/nicolocaron/Desktop/ARCFRESH/COPERNICUS DATA",
+            key="sidebar_cmems_dir",
+            help="Folder containing J1_netcdf/, J2_netcdf/, J3_netcdf/ subfolders"
+        )
         
-        if file_counts["total"] > 0:
-            st.sidebar.caption(f"📁 {file_counts['total']:,} NetCDF files found")
-            # Show per-satellite breakdown
-            sat_info = " | ".join([f"{k}: {v}" for k, v in file_counts.items() if k != "total"])
-            st.sidebar.caption(f"   {sat_info}")
-            if date_info["years"]:
-                st.sidebar.caption(f"📅 Years: {date_info['years'][0]} - {date_info['years'][-1]}")
-        else:
-            st.sidebar.warning("⚠️ 0 NetCDF files found")
-    except Exception as e:
-        cmems_path = Path(config.cmems_base_dir)
-        if not cmems_path.exists():
-            st.sidebar.warning("⚠️ Directory not found")
-        else:
-            st.sidebar.warning(f"⚠️ Error checking files: {e}")
+        # Show available files info using CMEMSService
+        from pathlib import Path
+        try:
+            from src.services.cmems_service import CMEMSService, CMEMSConfig
+            temp_config = CMEMSConfig(base_dir=config.cmems_base_dir)
+            temp_service = CMEMSService(temp_config)
+            file_counts = temp_service.count_files()
+            date_info = temp_service.get_date_range()
+            
+            if file_counts["total"] > 0:
+                st.sidebar.caption(f"📁 {file_counts['total']:,} NetCDF files found")
+                # Show per-satellite breakdown
+                sat_info = " | ".join([f"{k}: {v}" for k, v in file_counts.items() if k != "total"])
+                st.sidebar.caption(f"   {sat_info}")
+                if date_info["years"]:
+                    st.sidebar.caption(f"📅 Years: {date_info['years'][0]} - {date_info['years'][-1]}")
+            else:
+                st.sidebar.warning("⚠️ 0 NetCDF files found")
+        except Exception as e:
+            cmems_path = Path(config.cmems_base_dir)
+            if not cmems_path.exists():
+                st.sidebar.warning("⚠️ Directory not found")
+            else:
+                st.sidebar.warning(f"⚠️ Error checking files: {e}")
+    else:
+        # API mode: use default path (won't be used anyway)
+        config.cmems_base_dir = "/tmp/cmems_api_cache"
     
     # Show pass number from gate filename (if available)
     gate_path = _get_gate_shapefile(config.selected_gate)
@@ -424,6 +431,36 @@ def _render_cmems_date_range(config: AppConfig) -> AppConfig:
 
 def _render_cmems_params(config: AppConfig) -> AppConfig:
     """Render CMEMS-specific processing parameters."""
+    
+    # Performance options (collapsible)
+    with st.expander("⚡ Performance", expanded=False):
+        # Parallel processing toggle
+        config.cmems_use_parallel = st.checkbox(
+            "Use Parallel Loading",
+            value=True,
+            key="sidebar_cmems_parallel",
+            help="Load files in parallel (faster for large datasets)"
+        )
+        
+        # Cache toggle
+        config.cmems_use_cache = st.checkbox(
+            "Use Cache",
+            value=True,
+            key="sidebar_cmems_cache",
+            help="Cache processed data (instant reload on second run)"
+        )
+        
+        # Clear cache button
+        if st.button("🗑️ Clear Cache", key="sidebar_clear_cmems_cache"):
+            try:
+                from src.services.cmems_service import CACHE_DIR
+                import shutil
+                if CACHE_DIR.exists():
+                    shutil.rmtree(CACHE_DIR)
+                    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                    st.success("Cache cleared!")
+            except Exception as e:
+                st.error(f"Failed to clear cache: {e}")
     
     # Longitude binning size - SLIDER da 0.05 a 0.50 (lower res than SLCCI)
     config.cmems_lon_bin_size = st.slider(
@@ -594,11 +631,15 @@ def _load_cmems_data(config: AppConfig):
     """Load CMEMS L3 1Hz data using CMEMSService."""
     from pathlib import Path
     
-    # Validate CMEMS path
-    cmems_path = Path(config.cmems_base_dir)
-    if not cmems_path.exists():
-        st.sidebar.error(f"❌ Path not found: {config.cmems_base_dir}")
-        return
+    # For API mode, no path validation needed
+    if getattr(config, 'cmems_source_mode', 'local') == 'local':
+        # Validate CMEMS path
+        cmems_path = Path(config.cmems_base_dir)
+        if not cmems_path.exists():
+            st.sidebar.error(f"❌ Path not found: {config.cmems_base_dir}")
+            return
+    else:
+        cmems_path = Path(config.cmems_base_dir)
     
     # Get gate shapefile
     gate_path = _get_gate_shapefile(config.selected_gate)
@@ -613,15 +654,31 @@ def _load_cmems_data(config: AppConfig):
             base_dir=str(cmems_path),
             source_mode=getattr(config, 'cmems_source_mode', 'local'),
             lon_bin_size=getattr(config, 'cmems_lon_bin_size', 0.1),
-            buffer_deg=getattr(config, 'cmems_buffer_deg', 0.5),
+            buffer_deg=getattr(config, 'cmems_buffer_deg', 5.0),
+            # Performance options
+            use_parallel=getattr(config, 'cmems_use_parallel', True),
+            use_cache=getattr(config, 'cmems_use_cache', True),
         )
         
         service = CMEMSService(cmems_config)
         
-        # Show file count
-        file_counts = service.count_files()
-        total_files = file_counts['total']
-        st.sidebar.info(f"📁 Found {total_files:,} files to process...")
+        # Show info based on source mode
+        if cmems_config.source_mode == "api":
+            st.sidebar.info("🌐 Connecting to CMEMS API...")
+        else:
+            # Show file count
+            file_counts = service.count_files()
+            total_files = file_counts['total']
+            
+            # Show performance info
+            perf_info = []
+            if cmems_config.use_cache:
+                perf_info.append("📦 Cache ON")
+            if cmems_config.use_parallel:
+                perf_info.append("🚀 Parallel ON")
+            perf_str = " | ".join(perf_info) if perf_info else ""
+            
+            st.sidebar.info(f"📁 Found {total_files:,} files to process... {perf_str}")
         
         # Create progress bar
         progress_bar = st.sidebar.progress(0, text="Preparing...")

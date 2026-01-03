@@ -1,6 +1,6 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-02 (Session - Comparison Mode + Export)
+> Last Updated: 2026-01-03 (Session - CMEMS Performance + Dynamic Variables)
 > Agent: Use this file to track progress. Update after each task.
 
 ---
@@ -12,6 +12,36 @@
 - [ ] Letto `docs/UNIFIED_DATA_PIPELINE.md`? ← NEW!
 - [ ] Verificato codice esistente?
 - [ ] Usando `.venv/bin/python`?
+
+---
+
+## 🚀 CMEMS PERFORMANCE OPTIMIZATIONS (2026-01-03)
+
+### New Features Implemented
+
+| Task | Status | Files |
+|------|--------|-------|
+| Parallel file loading | ✅ DONE | `cmems_service.py` - `_load_parallel()` |
+| Caching with pickle | ✅ DONE | `cmems_service.py` - `CACHE_DIR` |
+| CMEMS API support | ✅ DONE | `cmems_service.py` - `_load_from_api()` |
+| Dynamic variables in Spatial Map | ✅ DONE | `tabs.py` - SLCCI vs CMEMS variables |
+| Performance UI options | ✅ DONE | `sidebar.py` - Cache/Parallel toggles |
+| README updated | ✅ DONE | Streamlit section added |
+
+### CMEMS Variables vs SLCCI
+| SLCCI | CMEMS |
+|-------|-------|
+| `corssh` | `sla_filtered` |
+| `geoid` | `mdt` |
+| `dot` | `dot` |
+| `cycle` | `cycle` |
+| `pass` | `track` |
+| - | `satellite` |
+
+### Performance Options (sidebar.py)
+- ⚡ **Parallel Loading**: ThreadPoolExecutor (8 workers)
+- 📦 **Cache**: Pickle files in `data/cache/cmems_processed/`
+- 🗑️ **Clear Cache**: Button to reset
 
 ---
 

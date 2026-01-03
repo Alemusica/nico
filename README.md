@@ -149,6 +149,41 @@ nico/
 
 ---
 
+## 🌊 Streamlit Dashboard: SLCCI vs CMEMS
+
+### Start the Dashboard
+
+```bash
+source .venv/bin/activate
+streamlit run streamlit_app.py --server.port 8501
+```
+
+### Features
+
+| Feature | SLCCI | CMEMS | Comparison Mode |
+|---------|-------|-------|-----------------|
+| **Pass Selection** | Manual/Auto | Automatic from track | N/A |
+| **DOT Calculation** | `corssh - geoid` | `sla_filtered + mdt` | Overlay |
+| **Slope Timeline** | ✅ | ✅ | ✅ Overlay |
+| **DOT Profile** | ✅ | ✅ | ✅ Overlay |
+| **Spatial Map** | ✅ | ✅ | Side-by-side |
+| **Geostrophic Velocity** | ✅ | ✅ | ✅ |
+| **Correlation Plot** | - | - | ✅ |
+| **Difference Plot** | - | - | ✅ |
+| **Export CSV/PNG** | ✅ | ✅ | ✅ |
+
+### CMEMS Performance Optimizations
+
+- **Parallel Processing**: Load 7000+ files with multi-threading
+- **Caching**: Processed data cached as pickle (~instant reload)
+- **Progress Bar**: Visual feedback during loading
+
+### Comparison Mode Colors
+- 🟠 **SLCCI**: `darkorange` 
+- 🔵 **CMEMS**: `steelblue`
+
+---
+
 ## 🔬 API Endpoints
 
 ### Core Endpoints

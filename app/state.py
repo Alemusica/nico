@@ -53,6 +53,10 @@ class AppConfig:
     cmems_end_date: Any = None      # datetime.date
     cmems_lon_bin_size: float = 0.10  # Coarser than SLCCI (0.05-0.50)
     cmems_buffer_deg: float = 5.0   # Buffer around gate (from Copernicus notebook)
+    
+    # CMEMS Performance options
+    cmems_use_parallel: bool = True  # Use parallel file loading
+    cmems_use_cache: bool = True     # Cache processed DataFrames
 
 
 def init_session_state():
