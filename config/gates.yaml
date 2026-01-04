@@ -36,15 +36,37 @@ gates:
     default_buffer_km: 50.0
     
   davis_strait:
-    name: "❄️ Davis Strait"
+    name: "❄️ Davis Strait (Full)"
     file: "davis_strait.shp"
-    description: "Baffin Bay - Labrador Sea"
+    description: "Baffin Bay - Labrador Sea (full width)"
     region: "Atlantic Sector"
     closest_passes: []
-    latitude_range: [66.0, 68.0]
-    longitude_range: [-58.0, -52.0]
+    latitude_range: [67.6, 68.2]
+    longitude_range: [-64.5, -53.0]
     datasets: ["SLCCI", "ERA5"]
     default_buffer_km: 75.0
+    
+  davis_strait_east:
+    name: "❄️ Davis Strait EAST"
+    file: "davis_strait_east.shp"
+    description: "Davis Strait - Eastern section (Greenland side, lon > -57°)"
+    region: "Atlantic Sector"
+    closest_passes: []
+    latitude_range: [68.13, 68.17]
+    longitude_range: [-57.0, -53.0]
+    datasets: ["SLCCI", "ERA5", "CMEMS L3", "CMEMS L4", "DTUSpace"]
+    default_buffer_km: 50.0
+    
+  davis_strait_west:
+    name: "❄️ Davis Strait WEST"
+    file: "davis_strait_west.shp"
+    description: "Davis Strait - Western section (Baffin Island side, lon < -57°)"
+    region: "Atlantic Sector"
+    closest_passes: []
+    latitude_range: [67.68, 68.13]
+    longitude_range: [-64.5, -57.0]
+    datasets: ["SLCCI", "ERA5", "CMEMS L3", "CMEMS L4", "DTUSpace"]
+    default_buffer_km: 50.0
     
   barents_opening:
     name: "🌡️ Barents Opening"
@@ -107,7 +129,7 @@ gates:
 regions:
   atlantic_sector:
     name: "Atlantic Sector"
-    gates: ["fram_strait", "denmark_strait", "davis_strait", "barents_opening", "norwegian_boundary"]
+    gates: ["fram_strait", "denmark_strait", "davis_strait", "davis_strait_east", "davis_strait_west", "barents_opening", "norwegian_boundary"]
     
   pacific_sector:
     name: "Pacific Sector"

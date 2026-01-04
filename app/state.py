@@ -64,6 +64,12 @@ class AppConfig:
     dtu_start_year: int = 2006
     dtu_end_year: int = 2017
     dtu_n_gate_pts: int = 400  # Points to interpolate along gate
+    
+    # === CMEMS L4 SETTINGS (GRIDDED via API) ===
+    cmems_l4_variables: List[str] = field(default_factory=lambda: ["adt", "sla"])
+    cmems_l4_buffer: float = 2.0  # Buffer around gate (degrees)
+    cmems_l4_start: Any = None  # datetime.date
+    cmems_l4_end: Any = None  # datetime.date
 
 
 def init_session_state():
@@ -79,6 +85,9 @@ def init_session_state():
         
         # CMEMS-specific (separate key for comparison)
         "dataset_cmems": None,
+        
+        # CMEMS L4 Gridded (API) - similar to DTUSpace
+        "dataset_cmems_l4": None,
         
         # DTUSpace-specific (ISOLATED - gridded product)
         "dataset_dtu": None,
@@ -196,3 +205,22 @@ def get_dtu_data():
 def clear_dtu_data():
     """Clear only DTUSpace data."""
     st.session_state["dataset_dtu"] = None
+
+
+# ==============================================================================
+# CMEMS L4 Functions (GRIDDED via API - similar to DTU)
+# ==============================================================================
+
+def store_cmems_l4_data(pass_data):
+    """Store CMEMS L4 gridded data with dedicated key."""
+    st.session_state["dataset_cmems_l4"] = pass_data
+
+
+def get_cmems_l4_data():
+    """Get CMEMS L4 data from session state."""
+    return st.session_state.get("dataset_cmems_l4")
+
+
+def clear_cmems_l4_data():
+    """Clear only CMEMS L4 data."""
+    st.session_state["dataset_cmems_l4"] = None

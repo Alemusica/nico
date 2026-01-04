@@ -1,23 +1,39 @@
 """
-CMEMS Service
-=============
-Service for loading and processing Copernicus Marine (CMEMS) L3 1Hz data.
+CMEMS L3 Service
+================
+Service for loading and processing Copernicus Marine (CMEMS) **L3 1Hz Along-Track** data.
+
+Dataset Info:
+    - Product: SEALEVEL_GLO_PHY_L3_MY_008_062
+    - Name: Global Ocean Along-track L3 Sea Surface Heights
+    - DOI: https://doi.org/10.48670/moi-00149
+    - Web: https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L3_MY_008_062/description
+    - Type: ALONG-TRACK (like SLCCI)
+    - Variable for filtering: `track` (equivalent to SLCCI `pass`)
 
 This service processes Jason-1/2/3 along-track altimetry data from CMEMS
 and produces PassData objects compatible with the NICO visualization tabs.
 
 Data Flow:
     UI → CMEMSService → load_all_jason_files → NetCDF files (local J1/J2/J3)
-                      → filter_by_gate → DataFrame
+                      → filter_by_track → DataFrame
                       → compute_monthly_slopes → slope_series, v_geostrophic
                       → build_pass_data → PassData object
                       
 Key Differences from SLCCI:
     - DOT = sla_filtered + mdt (MDT included, no external geoid)
     - Merges J1, J2, J3 satellites automatically
-    - No pass selection (uses gate as "synthetic pass")
+    - Track selection (equivalent to SLCCI pass)
     - Lower resolution binning (0.1° default vs 0.01° for SLCCI)
     - Jason coverage limited to ±66° latitude
+
+Comparison with other datasets:
+    | Dataset      | Type        | Filter Variable | Source    |
+    |--------------|-------------|-----------------|-----------|
+    | SLCCI        | Along-track | pass            | Local     |
+    | CMEMS L3     | Along-track | track           | Local     |
+    | CMEMS L4     | Gridded     | (none)          | API       |
+    | DTUSpace     | Gridded     | (none)          | Local     |
 
 Performance Optimizations (v2):
     - Parallel file processing with concurrent.futures
@@ -365,9 +381,9 @@ class CMEMSService:
         n_tracks: int = 5
     ) -> List[Tuple[int, float]]:
         """
-        Find the N tracks closest to the gate centroid.
+        Find the N tracks closest to the gate LINE (not centroid).
         
-        Returns tracks sorted by distance (closest first).
+        Uses distance from track points to the gate geometry for better accuracy.
         
         Args:
             gate_path: Path to gate shapefile
@@ -376,13 +392,14 @@ class CMEMSService:
         Returns:
             List of (track_number, distance_km) tuples, sorted by distance
         """
-        from scipy.spatial import cKDTree
+        from shapely.geometry import Point
         
         gate_gdf = _load_gate_gdf(gate_path)
         bounds = gate_gdf.total_bounds
+        gate_line = gate_gdf.geometry.unary_union  # The gate as a line/multiline
         
-        # Gate centroid
-        centroid = gate_gdf.geometry.unary_union.centroid
+        # Gate centroid for coordinate conversion
+        centroid = gate_line.centroid
         gate_lon, gate_lat = centroid.x, centroid.y
         
         gate_bounds = {
@@ -435,25 +452,20 @@ class CMEMSService:
             logger.warning("No tracks found in the search area")
             return []
         
-        # Compute mean position for each track and distance to gate centroid
+        # Compute minimum distance from each track to the gate LINE
         track_distances = []
-        R_earth = 6371.0  # km
         
         for track_num, positions in track_positions.items():
-            positions = np.array(positions)
-            mean_lon = np.mean(positions[:, 0])
-            mean_lat = np.mean(positions[:, 1])
+            # Find minimum distance from any track point to the gate line
+            min_dist_deg = float('inf')
+            for lon, lat in positions:
+                pt = Point(lon, lat)
+                dist_deg = gate_line.distance(pt)  # Distance in degrees
+                if dist_deg < min_dist_deg:
+                    min_dist_deg = dist_deg
             
-            # Haversine distance to gate centroid
-            lat1_rad = np.deg2rad(gate_lat)
-            lat2_rad = np.deg2rad(mean_lat)
-            dlat = lat2_rad - lat1_rad
-            dlon = np.deg2rad(mean_lon - gate_lon)
-            
-            a = np.sin(dlat/2)**2 + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon/2)**2
-            c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1-a))
-            dist_km = R_earth * c
-            
+            # Convert degrees to km (approximate at gate latitude)
+            dist_km = min_dist_deg * 111.0 * np.cos(np.radians(gate_lat))
             track_distances.append((track_num, dist_km))
         
         # Sort by distance and return top N

@@ -108,53 +108,107 @@ def render_globe_landing(on_gate_select: Optional[callable] = None):
 
 
 def _get_all_gates_positions() -> List[Dict[str, Any]]:
-    """Get all gates with their centroid positions."""
-    if not GATE_SERVICE_AVAILABLE:
+    """
+    Get all gates with their centroid positions by scanning the gates/ folder.
+    
+    This function directly reads shapefiles from the gates/ directory,
+    independent of GateService configuration.
+    """
+    import geopandas as gpd
+    import os
+    from pathlib import Path
+    
+    # Suppress shapefile warnings
+    os.environ['SHAPE_RESTORE_SHX'] = 'YES'
+    
+    # Find gates folder
+    gates_folder = Path(__file__).parent.parent.parent / "gates"
+    
+    if not gates_folder.exists():
+        st.warning(f"Gates folder not found: {gates_folder}")
+        return []
+    
+    # Find all shapefiles
+    shp_files = list(gates_folder.glob("*.shp"))
+    
+    if not shp_files:
+        st.warning(f"No shapefiles found in {gates_folder}")
         return []
     
     gates = []
-    all_gates = _gate_service.list_gates()
     
-    for gate_name in all_gates:
-        gate_info = _gate_service.get_gate(gate_name)
-        if not gate_info:
-            continue
-        
-        # Try to get centroid from shapefile
+    for shp_path in shp_files:
         try:
-            gate_path = gate_info.get("path") or _gate_service.get_gate_path(gate_name)
-            if gate_path:
-                import geopandas as gpd
-                import os
-                os.environ['SHAPE_RESTORE_SHX'] = 'YES'
-                
-                gdf = gpd.read_file(gate_path)
-                if gdf.crs and not gdf.crs.is_geographic:
-                    gdf = gdf.to_crs("EPSG:4326")
-                
-                centroid = gdf.geometry.unary_union.centroid
-                lon, lat = centroid.x, centroid.y
-                
-                # Get region
-                region = gate_info.get("region", "Unknown")
-                
-                gates.append({
-                    "name": gate_name,
-                    "lon": lon,
-                    "lat": lat,
-                    "region": region,
-                    "path": gate_path
-                })
+            # Read shapefile
+            gdf = gpd.read_file(shp_path)
+            
+            # Convert to WGS84 if needed
+            if gdf.crs is None:
+                gdf = gdf.set_crs("EPSG:3413")  # Assume polar stereographic
+            
+            if not gdf.crs.is_geographic:
+                gdf = gdf.to_crs("EPSG:4326")
+            
+            # Get centroid
+            centroid = gdf.geometry.unary_union.centroid
+            lon, lat = centroid.x, centroid.y
+            
+            # Extract name from filename
+            gate_name = shp_path.stem
+            
+            # Determine region from name
+            region = _infer_region_from_name(gate_name)
+            
+            gates.append({
+                "name": gate_name,
+                "lon": lon,
+                "lat": lat,
+                "region": region,
+                "path": str(shp_path)
+            })
+            
         except Exception as e:
-            # Skip gates with issues
+            # Skip problematic files
             continue
     
     return gates
 
 
+def _infer_region_from_name(gate_name: str) -> str:
+    """Infer the region from gate name."""
+    name_lower = gate_name.lower()
+    
+    if "fram" in name_lower:
+        return "Nordic Seas"
+    elif "bering" in name_lower:
+        return "Pacific-Arctic"
+    elif "davis" in name_lower:
+        return "Labrador Sea"
+    elif "denmark" in name_lower:
+        return "Nordic Seas"
+    elif "barents" in name_lower:
+        return "Barents Sea"
+    elif "kara" in name_lower:
+        return "Kara Sea"
+    elif "laptev" in name_lower:
+        return "Laptev Sea"
+    elif "east_siberian" in name_lower or "siberian" in name_lower:
+        return "East Siberian Sea"
+    elif "beaufort" in name_lower:
+        return "Beaufort Sea"
+    elif "canadian" in name_lower or "nares" in name_lower or "lancaster" in name_lower or "jones" in name_lower:
+        return "Canadian Arctic"
+    elif "norwegian" in name_lower:
+        return "Norwegian Sea"
+    elif "central_arctic" in name_lower:
+        return "Central Arctic"
+    else:
+        return "Arctic Ocean"
+
+
 def _get_demo_gates() -> List[Dict[str, Any]]:
     """
-    Return demo gates for display when GateService is not available.
+    Return demo gates for display when shapefiles not available.
     These are the main Arctic straits used in NICO analysis.
     """
     return [
@@ -241,23 +295,19 @@ def _create_globe_figure(
         # Focus on Arctic
         projection_rotation=dict(lon=0, lat=70, roll=0),
         
-        # Lat/lon lines
-        showlataxis=True,
+        # Lat/lon grid lines
         lataxis=dict(
             showgrid=True,
             gridcolor="rgba(255,255,255,0.2)",
-            dtick=10
+            dtick=10,
+            range=[50, 90]
         ),
-        showlonaxis=True,
         lonaxis=dict(
             showgrid=True,
             gridcolor="rgba(255,255,255,0.2)",
-            dtick=30
+            dtick=30,
+            range=[-180, 180]
         ),
-        
-        # Bounds (focus on Arctic)
-        lataxis_range=[50, 90],
-        lonaxis_range=[-180, 180],
     )
     
     # Layout

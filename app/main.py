@@ -58,13 +58,14 @@ def run_app():
     # Store config for tabs
     st.session_state.app_config = config
     
-    # Check if any data is loaded (SLCCI, CMEMS, DTU, or generic)
+    # Check if any data is loaded (SLCCI, CMEMS L3, CMEMS L4, DTU, or generic)
     slcci_data = st.session_state.get("slcci_pass_data") or st.session_state.get("dataset_slcci")
-    cmems_data = st.session_state.get("dataset_cmems")
+    cmems_data = st.session_state.get("dataset_cmems")  # CMEMS L3 (along-track)
+    cmems_l4_data = st.session_state.get("dataset_cmems_l4")  # CMEMS L4 (gridded)
     dtu_data = st.session_state.get("dataset_dtu")
     datasets = st.session_state.get("datasets")
     
-    has_data = any([slcci_data, cmems_data, dtu_data, datasets])
+    has_data = any([slcci_data, cmems_data, cmems_l4_data, dtu_data, datasets])
     
     if not has_data:
         # Show catalog-only view when no data loaded
@@ -143,16 +144,13 @@ def _handle_data_load(selection):
 
 
 def render_catalog_only_view():
-    """Show catalog and welcome when no local data is loaded."""
-    from app.components.catalog_tab import render_catalog_tab
+    """Show Globe, catalog and welcome when no local data is loaded."""
+    from app.components.tabs import _render_empty_tabs
+    from app.state import AppConfig
     
-    tab1, tab2 = st.tabs(["🗃️ Dataset Catalog", "👋 Welcome"])
-    
-    with tab1:
-        render_catalog_tab()
-    
-    with tab2:
-        render_welcome_message()
+    # Use the empty tabs from tabs.py which includes the Globe
+    config = st.session_state.get("app_config", AppConfig())
+    _render_empty_tabs(config)
 
 
 def render_welcome_message():

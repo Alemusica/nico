@@ -1,6 +1,6 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-03 (Session - DTUSpace BUG FIXES)
+> Last Updated: 2026-01-04 (Session - 4 DATASET ARCHITECTURE)
 > Agent: Use this file to track progress. Update after each task.
 
 ---
@@ -15,7 +15,79 @@
 
 ---
 
-## 🐛 DTUSpace BUG FIXES (2026-01-03 - LATEST)
+## 🆕 4 DATASET ARCHITECTURE (2026-01-04 - LATEST)
+
+### Dataset Comparison Table
+
+| # | Dataset | Type | Filter Variable | Source | DOI/Link |
+|---|---------|------|-----------------|--------|----------|
+| 1 | **SLCCI** | Along-track (L2) | `pass` | Local | ESA CCI |
+| 2 | **CMEMS L3** | Along-track (1Hz) | `track` | Local | [10.48670/moi-00149](https://doi.org/10.48670/moi-00149) |
+| 3 | **CMEMS L4** | Gridded | ❌ none | **API** | [10.48670/moi-00148](https://doi.org/10.48670/moi-00148) |
+| 4 | **DTUSpace** | Gridded | ❌ none | Local | DTU Space |
+
+### Workflow per Tipo
+
+**Along-Track (SLCCI, CMEMS L3):**
+```
+Gate → Find closest pass/track → Filter by pass/track → Scatter plot
+```
+- UI: Pass/Track selection (5 closest, manual, from filename)
+- Spatial: Scatter points lungo la traccia satellite
+- Slope: Calcolata su punti reali
+
+**Gridded (CMEMS L4, DTUSpace):**
+```
+Gate → Sample gate geometry (N points) → KD-tree nearest grid → Extract DOT
+```
+- UI: Solo time range (NO pass selection)
+- Spatial: Interpolazione sulla griglia → punti lungo il gate
+- Slope: Calcolata su punti interpolati (synthetic pass)
+
+### Files Created/Modified (2026-01-04)
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/services/cmems_l4_service.py` | **NEW** | CMEMS L4 via API (`copernicusmarine`) |
+| `src/services/cmems_service.py` | Updated | Docstring con DOI link L3 |
+| `src/services/dtu_service.py` | Updated | Docstring con comparison table |
+| `src/services/__init__.py` | Updated | Export CMEMSL4Service |
+
+### CMEMS L3 Dataset Info
+- **Product**: SEALEVEL_GLO_PHY_L3_MY_008_062
+- **Name**: Global Ocean Along-track L3 Sea Surface Heights
+- **DOI**: https://doi.org/10.48670/moi-00149
+- **URL**: https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L3_MY_008_062/description
+- **Type**: ALONG-TRACK (like SLCCI)
+- **Filter**: `track` variable
+
+### CMEMS L4 Dataset Info
+- **Product**: SEALEVEL_GLO_PHY_L4_MY_008_047
+- **Name**: Global Ocean Gridded L4 Sea Surface Heights
+- **DOI**: https://doi.org/10.48670/moi-00148
+- **URL**: https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_MY_008_047/description
+- **Type**: GRIDDED (0.125° daily)
+- **API**: `copernicusmarine.open_dataset()`
+
+### API Usage (CMEMS L4)
+```python
+import copernicusmarine
+
+ds = copernicusmarine.open_dataset(
+    dataset_id="cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D",
+    variables=["adt", "sla"],
+    minimum_longitude=bbox[0],
+    maximum_longitude=bbox[2],
+    minimum_latitude=bbox[1],
+    maximum_latitude=bbox[3],
+    start_datetime="2010-01-01",
+    end_datetime="2020-12-31",
+)
+```
+
+---
+
+## 🐛 DTUSpace BUG FIXES (2026-01-03)
 
 ### Bug: DTUSpace Tabs Not Rendering After Load
 

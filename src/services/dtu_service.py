@@ -3,7 +3,13 @@ DTUSpace Service
 ================
 Service for loading and processing DTUSpace v4 gridded DOT products.
 
-This is a GRIDDED dataset (lat × lon × time), NOT along-track like SLCCI/CMEMS.
+Dataset Info:
+    - Name: DTUSpace Arctic Ocean DOT v4.0
+    - Source: DTU Space (Technical University of Denmark)
+    - Type: GRIDDED (lat × lon × time)
+    - Local file only (no API)
+
+This is a GRIDDED dataset (lat × lon × time), NOT along-track like SLCCI/CMEMS L3.
 There are no real satellite passes - the "pass" is synthetically defined by the gate.
 
 Data Flow:
@@ -11,9 +17,17 @@ Data Flow:
                     → KD-tree gate matching → DOT along gate
                     → slope computation → time series
 
-Key Differences from SLCCI/CMEMS:
+Comparison with other datasets:
+    | Dataset      | Type        | Filter Variable | Source    |
+    |--------------|-------------|-----------------|-----------|
+    | SLCCI        | Along-track | pass            | Local     |
+    | CMEMS L3     | Along-track | track           | Local     |
+    | CMEMS L4     | Gridded     | (none)          | API       |
+    | DTUSpace     | Gridded     | (none)          | Local     |
+
+Key Differences from Along-Track (SLCCI, CMEMS L3):
     - Gridded data (not along-track)
-    - No pass/track numbers
+    - No pass/track numbers - gate defines the "synthetic track"
     - No API access (local files only)
     - Uses pcolormesh for spatial maps (not scatter)
 """

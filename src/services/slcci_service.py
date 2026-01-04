@@ -257,6 +257,9 @@ class SLCCIService:
         """
         Find the N closest satellite passes to a gate.
         
+        Uses distance from pass points to the GATE LINE (not centroid).
+        This gives better results when passes cross or approach the gate.
+        
         Parameters
         ----------
         gate_path : str
@@ -271,13 +274,18 @@ class SLCCIService:
         List[Tuple[int, float]]
             List of (pass_number, distance_km) sorted by distance
         """
+        from shapely.geometry import Point
+        
         cycles = cycles or list(range(1, 100))  # Use subset for speed
         
         gate_gdf = _load_gate_gdf(gate_path)
-        gate_centroid = gate_gdf.geometry.centroid.iloc[0]
+        gate_line = gate_gdf.geometry.unary_union  # The gate as a line/multiline
+        
+        # Get gate centroid for bounds calculation
+        gate_centroid = gate_line.centroid
         gate_lon, gate_lat = gate_centroid.x, gate_centroid.y
         
-        logger.info(f"Finding closest passes to gate centroid: ({gate_lat:.4f}, {gate_lon:.4f})")
+        logger.info(f"Finding closest passes to gate line (centroid: {gate_lat:.4f}, {gate_lon:.4f})")
         
         # Load data with expanded bounds
         ds = self._load_filtered_cycles(
@@ -299,8 +307,9 @@ class SLCCIService:
         
         all_passes = set(int(p) for p in np.unique(ds["pass"].values) if not np.isnan(p))
         
-        # Calculate min distance for each pass
+        # Calculate min distance for each pass to the gate LINE
         pass_distances = {}
+        R_earth = 6371.0  # km
         
         for pass_num in all_passes:
             mask = ds["pass"].values == pass_num
@@ -310,15 +319,22 @@ class SLCCIService:
             if len(lons) == 0:
                 continue
             
-            # Calculate distances using Haversine-like approximation
-            dlat = (lats - gate_lat) * 111.0  # km per degree
-            dlon = (lons - gate_lon) * 111.0 * np.cos(np.radians(gate_lat))
-            distances = np.sqrt(dlat**2 + dlon**2)
+            # Find minimum distance from any pass point to the gate line
+            min_dist_deg = float('inf')
+            for lon, lat in zip(lons, lats):
+                pt = Point(lon, lat)
+                dist_deg = gate_line.distance(pt)  # Distance in degrees
+                if dist_deg < min_dist_deg:
+                    min_dist_deg = dist_deg
             
-            pass_distances[pass_num] = np.min(distances)
+            # Convert degrees to km (approximate at gate latitude)
+            dist_km = min_dist_deg * 111.0 * np.cos(np.radians(gate_lat))
+            pass_distances[pass_num] = dist_km
         
         # Sort by distance
         sorted_passes = sorted(pass_distances.items(), key=lambda x: x[1])
+        
+        logger.info(f"Found {len(sorted_passes)} passes, closest: {sorted_passes[:3] if sorted_passes else 'none'}")
         
         return sorted_passes[:n_passes]
     

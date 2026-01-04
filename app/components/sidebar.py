@@ -95,7 +95,187 @@ def _extract_satellite_from_gate_name(gate_name: str) -> Optional[str]:
     return None
 
 
-# Initialize GateService
+# ============================================================
+# PRE-COMPUTED PASSES CACHE
+# ============================================================
+
+_GATE_PASSES_CACHE = None
+
+def _load_gate_passes_config() -> dict:
+    """Load pre-computed gate passes from config/gate_passes.yaml."""
+    global _GATE_PASSES_CACHE
+    
+    if _GATE_PASSES_CACHE is not None:
+        return _GATE_PASSES_CACHE
+    
+    import yaml
+    config_path = Path(__file__).parent.parent.parent / "config" / "gate_passes.yaml"
+    
+    if config_path.exists():
+        with open(config_path, "r") as f:
+            _GATE_PASSES_CACHE = yaml.safe_load(f)
+        return _GATE_PASSES_CACHE
+    
+    return {"gates": {}}
+
+
+def _get_precomputed_passes(gate_name: str, dataset_type: str = "slcci") -> List[int]:
+    """
+    Get pre-computed closest passes for a gate.
+    
+    Args:
+        gate_name: Gate name (e.g., "davis_strait" or "fram_strait_S3_pass_481")
+        dataset_type: "slcci" or "cmems"
+        
+    Returns:
+        List of pass/track numbers (up to 5), or empty list if not found
+    """
+    config = _load_gate_passes_config()
+    gates = config.get("gates", {})
+    
+    # Try exact match first
+    if gate_name in gates:
+        gate_config = gates[gate_name]
+        key = "slcci_passes" if dataset_type == "slcci" else "cmems_tracks"
+        return gate_config.get(key, [])
+    
+    # Try without extension
+    gate_stem = Path(gate_name).stem if "/" in gate_name else gate_name
+    if gate_stem in gates:
+        gate_config = gates[gate_stem]
+        key = "slcci_passes" if dataset_type == "slcci" else "cmems_tracks"
+        return gate_config.get(key, [])
+    
+    return []
+
+
+# ============================================================
+# UNIFIED PASS/TRACK SELECTION (used by both SLCCI and CMEMS)
+# ============================================================
+
+def _render_unified_pass_selection(config: AppConfig, dataset_type: str) -> AppConfig:
+    """
+    Unified pass/track selection for SLCCI and CMEMS.
+    
+    Pass (SLCCI) and Track (CMEMS) are the same concept - satellite ground track number.
+    This function handles both with appropriate naming.
+    
+    Args:
+        config: AppConfig to update
+        dataset_type: "slcci" or "cmems"
+        
+    Returns:
+        Updated config with pass_number (SLCCI) or cmems_track_number (CMEMS)
+    """
+    # Terminology
+    term = "Pass" if dataset_type == "slcci" else "Track"
+    term_lower = term.lower()
+    
+    # Get gate path
+    gate_path = _get_gate_shapefile(config.selected_gate)
+    
+    # Try to extract suggested pass/track from gate name
+    suggested_num = None
+    suggested_satellite = None
+    if config.selected_gate:
+        suggested_num = _extract_pass_from_gate_name(config.selected_gate)
+        suggested_satellite = _extract_satellite_from_gate_name(config.selected_gate)
+    
+    # Show suggested if found
+    if suggested_num:
+        sat_label = f" ({suggested_satellite})" if suggested_satellite else ""
+        st.sidebar.success(f"🎯 **Suggested {term}: {suggested_num}**{sat_label}")
+        st.sidebar.caption("Extracted from gate shapefile name")
+    
+    # Build mode options
+    if dataset_type == "cmems":
+        # CMEMS has "all tracks" option
+        mode_options = ["all", "suggested", "closest", "manual"] if suggested_num else ["all", "closest", "manual"]
+        mode_labels = {
+            "all": "📊 All",
+            "suggested": f"🎯 Suggested ({suggested_num})" if suggested_num else "Suggested",
+            "closest": "🔍 5 Closest",
+            "manual": "✏️ Manual"
+        }
+    else:
+        # SLCCI doesn't have "all" option
+        mode_options = ["suggested", "closest", "manual"] if suggested_num else ["closest", "manual"]
+        mode_labels = {
+            "suggested": f"🎯 Suggested ({suggested_num})" if suggested_num else "Suggested",
+            "closest": "🔍 5 Closest",
+            "manual": "✏️ Manual"
+        }
+    
+    selected_mode = st.sidebar.radio(
+        f"{term} Mode",
+        mode_options,
+        format_func=lambda x: mode_labels.get(x, x),
+        horizontal=True,
+        key=f"sidebar_{dataset_type}_{term_lower}_mode",
+        help=f"Select how to choose the satellite {term_lower}"
+    )
+    
+    selected_number = None
+    
+    if selected_mode == "all":
+        # CMEMS only - use all tracks
+        selected_number = None
+        st.sidebar.info(f"Using ALL {term_lower}s (merged)")
+        
+    elif selected_mode == "suggested" and suggested_num:
+        selected_number = suggested_num
+        st.sidebar.info(f"Using {term_lower} **{suggested_num}** from gate definition")
+        
+    elif selected_mode == "closest" and gate_path:
+        # Use pre-computed closest passes/tracks
+        try:
+            closest_list = _get_precomputed_passes(config.selected_gate, dataset_type)
+            
+            if closest_list:
+                labels = [f"{term} {p}" for p in closest_list]
+                
+                selected_idx = st.sidebar.selectbox(
+                    f"Select {term}",
+                    range(len(closest_list)),
+                    format_func=lambda i: labels[i],
+                    key=f"sidebar_{dataset_type}_closest_{term_lower}",
+                    help=f"Pre-computed closest {term_lower}s to gate"
+                )
+                
+                selected_number = closest_list[selected_idx]
+                st.sidebar.success(f"🎯 {term} {selected_number} selected")
+            else:
+                st.sidebar.warning(f"No pre-computed {term_lower}s found")
+                selected_number = 248 if dataset_type == "slcci" else None
+                
+        except Exception as e:
+            st.sidebar.error(f"Error: {e}")
+            selected_number = 248 if dataset_type == "slcci" else None
+            
+    elif selected_mode == "manual":
+        selected_number = st.sidebar.number_input(
+            f"{term} Number",
+            min_value=1,
+            max_value=500,
+            value=suggested_num if suggested_num else (248 if dataset_type == "slcci" else 100),
+            key=f"sidebar_{dataset_type}_manual_{term_lower}",
+            help=f"Enter a specific {term_lower} number"
+        )
+    
+    # Store in config
+    if dataset_type == "slcci":
+        config.pass_number = selected_number or 248
+        config.pass_mode = selected_mode
+    else:
+        config.cmems_track_number = selected_number
+    
+    return config
+
+
+# ============================================================
+# GATE SERVICE INITIALIZATION
+# ============================================================
+
 try:
     from src.services import GateService
     _gate_service = GateService()
@@ -137,7 +317,7 @@ def render_sidebar() -> AppConfig:
         
         # === 4. PASS SELECTION ===
         st.sidebar.subheader("4. Pass Selection")
-        config = _render_pass_selection(config)
+        config = _render_unified_pass_selection(config, "slcci")
         
         st.sidebar.divider()
         
@@ -160,19 +340,25 @@ def render_sidebar() -> AppConfig:
         if st.sidebar.button("Load SLCCI Data", type="primary", use_container_width=True):
             _load_slcci_data(config)
     
-    elif config.selected_dataset_type == "CMEMS":
-        # === CMEMS-SPECIFIC OPTIONS ===
+    elif config.selected_dataset_type == "CMEMS L3":
+        # === CMEMS L3 (ALONG-TRACK) OPTIONS ===
         st.sidebar.divider()
         
         # === 3. DATA PATHS (includes source mode) ===
-        st.sidebar.subheader("3. CMEMS Data Paths")
+        st.sidebar.subheader("3. CMEMS L3 Data Paths")
         config = _render_cmems_paths(config)
         
         st.sidebar.divider()
         
-        # === 4. PROCESSING PARAMETERS ===
-        with st.sidebar.expander("4. Processing Parameters", expanded=False):
-            config = _render_cmems_params(config)
+        # === 4. TRACK SELECTION (same as Pass for SLCCI) ===
+        st.sidebar.subheader("4. Track Selection")
+        config = _render_unified_pass_selection(config, "cmems")
+        
+        st.sidebar.divider()
+        
+        # === 5. PROCESSING PARAMETERS ===
+        with st.sidebar.expander("5. Processing Parameters", expanded=False):
+            config = _render_cmems_processing_params(config)
         
         # === 66°N WARNING ===
         _render_latitude_warning(config)
@@ -182,6 +368,26 @@ def render_sidebar() -> AppConfig:
         # === LOAD BUTTON ===
         if st.sidebar.button("Load CMEMS Data", type="primary", use_container_width=True):
             _load_cmems_data(config)
+    
+    elif config.selected_dataset_type == "CMEMS L4":
+        # === CMEMS L4 (GRIDDED VIA API) OPTIONS ===
+        st.sidebar.divider()
+        
+        # === 3. API CONFIGURATION ===
+        st.sidebar.subheader("3. CMEMS L4 API Config")
+        config = _render_cmems_l4_config(config)
+        
+        st.sidebar.divider()
+        
+        # === 4. TIME RANGE ===
+        st.sidebar.subheader("4. Time Range")
+        config = _render_cmems_l4_time_range(config)
+        
+        st.sidebar.divider()
+        
+        # === LOAD BUTTON ===
+        if st.sidebar.button("🌐 Load CMEMS L4 Data (API)", type="primary", use_container_width=True):
+            _load_cmems_l4_data(config)
     
     elif config.selected_dataset_type == "DTUSpace":
         # === DTUSpace-SPECIFIC OPTIONS (ISOLATED - GRIDDED PRODUCT) ===
@@ -204,7 +410,7 @@ def render_sidebar() -> AppConfig:
             _load_dtu_data(config)
     
     else:
-        # Non-SLCCI/CMEMS data sources (ERA5, etc.)
+        # Fallback for unknown types
         st.sidebar.divider()
         if st.sidebar.button("Load Data", type="primary", use_container_width=True):
             _load_generic_data(config)
@@ -264,17 +470,30 @@ def _render_gate_selection(config: AppConfig) -> AppConfig:
 def _render_data_source(config: AppConfig) -> AppConfig:
     """Render data source selector with comparison mode option."""
     
-    # Main dataset selector
+    # Main dataset selector - 4 datasets
+    # Along-track: SLCCI, CMEMS L3 (both have pass/track selection)
+    # Gridded: CMEMS L4 (API), DTUSpace (local)
     config.selected_dataset_type = st.sidebar.radio(
         "Dataset",
-        ["SLCCI", "CMEMS", "DTUSpace", "ERA5"],
+        ["SLCCI", "CMEMS L3", "CMEMS L4", "DTUSpace"],
         horizontal=True,
         key="sidebar_datasource",
-        help="SLCCI=Sea Level CCI (J2), CMEMS=Copernicus L3 1Hz, DTUSpace=Gridded DOT"
+        help=(
+            "SLCCI = ESA Sea Level CCI (along-track, pass selection)\n"
+            "CMEMS L3 = Copernicus L3 1Hz (along-track, track selection)\n"
+            "CMEMS L4 = Copernicus L4 Gridded (API download)\n"
+            "DTUSpace = DTUSpace v4 Gridded (local file)"
+        )
     )
     
     # Store in session state for tabs
     st.session_state["selected_dataset_type"] = config.selected_dataset_type
+    
+    # Show dataset type info
+    if config.selected_dataset_type in ["SLCCI", "CMEMS L3"]:
+        st.sidebar.caption("📡 **Along-track** - Pass/Track selection available")
+    else:
+        st.sidebar.caption("🗺️ **Gridded** - No pass selection (synthetic gate sampling)")
     
     # === COMPARISON MODE ===
     st.sidebar.divider()
@@ -296,7 +515,7 @@ def _render_data_source(config: AppConfig) -> AppConfig:
             if cmems_loaded:
                 cmems_data = st.session_state.get("dataset_cmems")
                 pass_num = getattr(cmems_data, 'pass_number', None)
-                pass_str = f"Pass {pass_num}" if pass_num else "Synthetic"
+                pass_str = f"Track {pass_num}" if pass_num else "Synthetic"
                 st.success(f"✅ CMEMS\n{pass_str}")
             else:
                 st.info("⬜ CMEMS")
@@ -329,6 +548,21 @@ def _render_data_source(config: AppConfig) -> AppConfig:
         if config.data_source_mode == "api":
             st.sidebar.caption("⚡ Faster downloads with bbox filtering")
     
+    # For CMEMS L3, show info
+    elif config.selected_dataset_type == "CMEMS L3":
+        st.sidebar.info(
+            "📡 **CMEMS L3 Along-Track**\n"
+            "[Dataset Info](https://doi.org/10.48670/moi-00149)"
+        )
+    
+    # For CMEMS L4, show API info
+    elif config.selected_dataset_type == "CMEMS L4":
+        st.sidebar.info(
+            "🌐 **CMEMS L4 Gridded** (via API)\n"
+            "[Dataset Info](https://doi.org/10.48670/moi-00148)\n"
+            "Requires `copernicusmarine` credentials"
+        )
+    
     return config
 
 
@@ -348,96 +582,6 @@ def _render_data_paths(config: AppConfig) -> AppConfig:
         key="sidebar_geoid",
         help="TUM_ogmoc.nc for DOT calculation"
     )
-    
-    return config
-
-
-def _render_pass_selection(config: AppConfig) -> AppConfig:
-    """Render pass selection mode and number with suggested pass from gate."""
-    
-    # Try to extract suggested pass from gate shapefile name
-    suggested_pass = None
-    suggested_satellite = None
-    gate_path = None  # Initialize here for use later
-    
-    if config.selected_gate:
-        gate_path = _get_gate_shapefile(config.selected_gate)
-        if gate_path:
-            suggested_pass = _extract_pass_from_gate_name(gate_path)
-            suggested_satellite = _extract_satellite_from_gate_name(gate_path)
-    
-    # Show suggested pass if found
-    if suggested_pass:
-        sat_label = f" ({suggested_satellite})" if suggested_satellite else ""
-        st.sidebar.success(f"🎯 **Suggested Pass: {suggested_pass}**{sat_label}")
-        st.sidebar.caption("Extracted from gate shapefile name")
-    
-    # Build mode options based on what's available
-    mode_options = ["suggested", "closest", "manual"] if suggested_pass else ["closest", "manual"]
-    
-    config.pass_mode = st.sidebar.radio(
-        "Mode",
-        mode_options,
-        format_func=lambda x: {
-            "suggested": f"🎯 Suggested ({suggested_pass})" if suggested_pass else "Suggested",
-            "closest": "🔍 5 Closest",
-            "manual": "✏️ Manual"
-        }.get(x, x),
-        horizontal=True,
-        key="sidebar_pass_mode",
-        help="Suggested=from gate name, Closest=5 nearest passes, Manual=enter number"
-    )
-    
-    if config.pass_mode == "suggested" and suggested_pass:
-        config.pass_number = suggested_pass
-        st.sidebar.info(f"Using pass **{suggested_pass}** from gate definition")
-        
-    elif config.pass_mode == "closest" and gate_path:
-        # Find and show 5 closest passes
-        try:
-            from src.services.slcci_service import SLCCIService, SLCCIConfig
-            temp_config = SLCCIConfig(base_dir=config.data_dir)
-            temp_service = SLCCIService(temp_config)
-            
-            # Cache closest passes in session state
-            cache_key = f"slcci_closest_{config.selected_gate}"
-            if cache_key not in st.session_state:
-                with st.spinner("Finding closest passes..."):
-                    st.session_state[cache_key] = temp_service.find_closest_pass(gate_path, n_passes=5)
-            
-            closest_passes = st.session_state[cache_key]
-            
-            if closest_passes and closest_passes[0][1] != float('inf'):
-                # Build options: list of (pass_num, distance_km)
-                pass_options = [p[0] for p in closest_passes]
-                pass_labels = [f"Pass {p[0]} ({p[1]:.1f} km)" for p in closest_passes]
-                
-                selected_idx = st.sidebar.selectbox(
-                    "Select Pass",
-                    range(len(pass_options)),
-                    format_func=lambda i: pass_labels[i],
-                    key="sidebar_slcci_closest_pass",
-                    help="Passes sorted by distance to gate centroid"
-                )
-                
-                config.pass_number = pass_options[selected_idx]
-                st.sidebar.success(f"🎯 Pass {config.pass_number} selected")
-            else:
-                st.sidebar.warning("No passes found near this gate")
-                config.pass_number = 248  # Default fallback
-        except Exception as e:
-            st.sidebar.error(f"Error finding passes: {e}")
-            config.pass_number = 248
-            
-    elif config.pass_mode == "manual":
-        config.pass_number = st.sidebar.number_input(
-            "Pass Number",
-            min_value=1,
-            max_value=500,
-            value=suggested_pass if suggested_pass else 248,
-            key="sidebar_pass_num",
-            help="J2 satellite pass number (e.g., 248 for Davis)"
-        )
     
     return config
 
@@ -629,41 +773,55 @@ def _render_cmems_params(config: AppConfig) -> AppConfig:
         st.sidebar.info(f"Using track **{suggested_track}** from gate definition")
         
     elif track_mode == "closest" and gate_path:
-        # Find and show 5 closest tracks
+        # Use pre-computed closest tracks from config/gate_passes.yaml
         try:
-            from src.services.cmems_service import CMEMSService, CMEMSConfig
-            temp_config = CMEMSConfig(
-                base_dir=config.cmems_base_dir,
-                source_mode=config.cmems_source_mode
-            )
-            temp_service = CMEMSService(temp_config)
-            
-            # Cache closest tracks in session state
-            cache_key = f"cmems_closest_{config.selected_gate}"
-            if cache_key not in st.session_state:
-                with st.spinner("Finding closest tracks..."):
-                    st.session_state[cache_key] = temp_service.find_closest_tracks(gate_path, n_tracks=5)
-            
-            closest_tracks = st.session_state[cache_key]
+            closest_tracks = _get_precomputed_passes(config.selected_gate, "cmems")
             
             if closest_tracks:
-                # Build options: list of (track_num, distance_km)
-                track_options = [t[0] for t in closest_tracks]
-                track_labels = [f"Track {t[0]} ({t[1]:.1f} km)" for t in closest_tracks]
+                track_options = closest_tracks
+                track_labels = [f"Track {t}" for t in closest_tracks]
                 
                 selected_idx = st.sidebar.selectbox(
                     "Select Track",
                     range(len(track_options)),
                     format_func=lambda i: track_labels[i],
                     key="sidebar_cmems_closest_track",
-                    help="Tracks sorted by distance to gate centroid"
+                    help="Pre-computed closest tracks to gate"
                 )
                 
                 config.cmems_track_number = track_options[selected_idx]
                 st.sidebar.success(f"🎯 Track {config.cmems_track_number} selected")
             else:
-                st.sidebar.warning("No tracks found near this gate")
-                config.cmems_track_number = None
+                # Fallback: compute on-the-fly (slower)
+                st.sidebar.warning("No pre-computed tracks, computing...")
+                from src.services.cmems_service import CMEMSService, CMEMSConfig
+                temp_config = CMEMSConfig(
+                    base_dir=config.cmems_base_dir,
+                    source_mode=config.cmems_source_mode
+                )
+                temp_service = CMEMSService(temp_config)
+                
+                cache_key = f"cmems_closest_{config.selected_gate}"
+                if cache_key not in st.session_state:
+                    with st.spinner("Finding closest tracks..."):
+                        st.session_state[cache_key] = temp_service.find_closest_tracks(gate_path, n_tracks=5)
+                
+                computed_tracks = st.session_state[cache_key]
+                if computed_tracks:
+                    track_options = [t[0] for t in computed_tracks]
+                    track_labels = [f"Track {t[0]} ({t[1]:.1f} km)" for t in computed_tracks]
+                    
+                    selected_idx = st.sidebar.selectbox(
+                        "Select Track",
+                        range(len(track_options)),
+                        format_func=lambda i: track_labels[i],
+                        key="sidebar_cmems_closest_track_computed",
+                        help="Computed closest tracks to gate line"
+                    )
+                    config.cmems_track_number = track_options[selected_idx]
+                else:
+                    st.sidebar.warning("No tracks found")
+                    config.cmems_track_number = None
         except Exception as e:
             st.sidebar.error(f"Error finding tracks: {e}")
             config.cmems_track_number = None
@@ -730,6 +888,69 @@ def _render_cmems_params(config: AppConfig) -> AppConfig:
         step=0.5,
         format="%.1f",
         key="sidebar_cmems_buffer",
+        help="Buffer around gate for data extraction (default 5.0° from notebook)"
+    )
+    
+    return config
+
+
+def _render_cmems_processing_params(config: AppConfig) -> AppConfig:
+    """
+    Render CMEMS processing parameters (without Track Selection which is now separate).
+    
+    This is a slimmed down version of _render_cmems_params for the refactored sidebar.
+    """
+    # Performance options (collapsible)
+    with st.expander("⚡ Performance", expanded=False):
+        # Parallel processing toggle
+        config.cmems_use_parallel = st.checkbox(
+            "Use Parallel Loading",
+            value=True,
+            key="sidebar_cmems_parallel_new",
+            help="Load files in parallel (faster for large datasets)"
+        )
+        
+        # Cache toggle
+        config.cmems_use_cache = st.checkbox(
+            "Use Cache",
+            value=True,
+            key="sidebar_cmems_cache_new",
+            help="Cache processed data (instant reload on second run)"
+        )
+        
+        # Clear cache button
+        if st.button("🗑️ Clear Cache", key="sidebar_clear_cmems_cache_new"):
+            try:
+                from src.services.cmems_service import CACHE_DIR
+                import shutil
+                if CACHE_DIR.exists():
+                    shutil.rmtree(CACHE_DIR)
+                    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                    st.success("Cache cleared!")
+            except Exception as e:
+                st.error(f"Failed to clear cache: {e}")
+    
+    # Longitude binning size - SLIDER da 0.05 a 0.50 (lower res than SLCCI)
+    config.cmems_lon_bin_size = st.slider(
+        "Lon Bin Size (°)",
+        min_value=0.05,
+        max_value=0.50,
+        value=0.10,
+        step=0.05,
+        format="%.2f",
+        key="sidebar_cmems_lon_bin_new",
+        help="Binning resolution for CMEMS (0.05° - 0.50°, coarser than SLCCI)"
+    )
+    
+    # Buffer around gate - default 5.0° (from Copernicus notebook)
+    config.cmems_buffer_deg = st.slider(
+        "Gate Buffer (°)",
+        min_value=1.0,
+        max_value=10.0,
+        value=5.0,
+        step=0.5,
+        format="%.1f",
+        key="sidebar_cmems_buffer_new",
         help="Buffer around gate for data extraction (default 5.0° from notebook)"
     )
     
@@ -993,6 +1214,207 @@ def _load_cmems_data(config: AppConfig):
         st.sidebar.error(f"❌ CMEMSService not available: {e}")
     except Exception as e:
         st.sidebar.error(f"❌ Error loading CMEMS: {e}")
+        import traceback
+        with st.sidebar.expander("Traceback"):
+            st.code(traceback.format_exc())
+
+
+def _render_cmems_l4_config(config: AppConfig) -> AppConfig:
+    """Render CMEMS L4 API configuration."""
+    
+    st.sidebar.info(
+        "🌐 **CMEMS L4 Gridded**\n"
+        "Data downloaded via Copernicus Marine API"
+    )
+    
+    # Check if copernicusmarine is available
+    try:
+        import copernicusmarine
+        st.sidebar.success("✅ copernicusmarine installed")
+        api_available = True
+    except ImportError:
+        st.sidebar.error(
+            "❌ `copernicusmarine` not installed.\n"
+            "Run: `pip install copernicusmarine`"
+        )
+        api_available = False
+    
+    # API credentials check
+    if api_available:
+        with st.sidebar.expander("🔐 API Credentials", expanded=False):
+            st.markdown("""
+            **First time setup:**
+            1. Create free account at [marine.copernicus.eu](https://marine.copernicus.eu)
+            2. Run in terminal: `copernicusmarine login`
+            3. Enter your credentials
+            
+            Credentials are stored in `~/.copernicusmarine/`
+            """)
+    
+    # Variables to download
+    config.cmems_l4_variables = st.sidebar.multiselect(
+        "Variables",
+        ["adt", "sla", "ugos", "vgos", "ugosa", "vgosa"],
+        default=["adt", "sla"],
+        key="sidebar_cmems_l4_vars",
+        help="ADT=Absolute Dynamic Topography, SLA=Sea Level Anomaly, ugos/vgos=geostrophic velocities"
+    )
+    
+    # Buffer around gate
+    config.cmems_l4_buffer = st.sidebar.slider(
+        "Spatial Buffer (deg)",
+        min_value=0.5,
+        max_value=10.0,
+        value=2.0,
+        step=0.5,
+        key="sidebar_cmems_l4_buffer",
+        help="Buffer around gate for data download"
+    )
+    
+    # Dataset info
+    with st.sidebar.expander("ℹ️ About CMEMS L4", expanded=False):
+        st.markdown("""
+        **CMEMS L4 Gridded SSH**
+        - Product: SEALEVEL_GLO_PHY_L4_MY_008_047
+        - Resolution: 0.125° (~14km) daily
+        - [DOI: 10.48670/moi-00148](https://doi.org/10.48670/moi-00148)
+        
+        **Description:**
+        Gridded Sea Level Anomalies (SLA) computed with Optimal Interpolation,
+        merging L3 along-track measurements from multiple altimeter missions.
+        Processed by DUACS multimission system.
+        
+        **Variables:**
+        - `adt`: Absolute Dynamic Topography (m)
+        - `sla`: Sea Level Anomaly (m)
+        - `ugos/vgos`: Geostrophic velocities (m/s)
+        """)
+    
+    return config
+
+
+def _render_cmems_l4_time_range(config: AppConfig) -> AppConfig:
+    """Render CMEMS L4 time range selector."""
+    from datetime import date
+    
+    col1, col2 = st.sidebar.columns(2)
+    
+    with col1:
+        config.cmems_l4_start = st.date_input(
+            "Start Date",
+            value=date(2010, 1, 1),
+            min_value=date(1993, 1, 1),
+            max_value=date(2024, 12, 31),
+            key="sidebar_cmems_l4_start"
+        )
+    
+    with col2:
+        config.cmems_l4_end = st.date_input(
+            "End Date",
+            value=date(2020, 12, 31),
+            min_value=date(1993, 1, 1),
+            max_value=date(2024, 12, 31),
+            key="sidebar_cmems_l4_end"
+        )
+    
+    # Validate
+    if config.cmems_l4_start >= config.cmems_l4_end:
+        st.sidebar.error("❌ Start date must be before end date")
+    else:
+        days = (config.cmems_l4_end - config.cmems_l4_start).days
+        st.sidebar.caption(f"📅 Period: {config.cmems_l4_start} to {config.cmems_l4_end} ({days} days)")
+    
+    # Warn about large downloads
+    if days > 3650:  # ~10 years
+        st.sidebar.warning("⚠️ Large time range - download may take several minutes")
+    
+    return config
+
+
+def _load_cmems_l4_data(config: AppConfig):
+    """Load CMEMS L4 data via API for the selected gate."""
+    
+    # Check copernicusmarine
+    try:
+        import copernicusmarine
+    except ImportError:
+        st.sidebar.error("❌ `copernicusmarine` not installed. Run: `pip install copernicusmarine`")
+        return
+    
+    # Get gate path
+    gate_path = _get_gate_shapefile(config.selected_gate)
+    if not gate_path:
+        st.sidebar.error("❌ No gate selected. Select a gate first.")
+        return
+    
+    # Validate time range
+    if config.cmems_l4_start >= config.cmems_l4_end:
+        st.sidebar.error("❌ Invalid time range")
+        return
+    
+    try:
+        from src.services.cmems_l4_service import CMEMSL4Service, CMEMSL4Config
+        
+        service = CMEMSL4Service()
+        
+        # Create config
+        l4_config = CMEMSL4Config(
+            gate_path=gate_path,
+            time_start=str(config.cmems_l4_start),
+            time_end=str(config.cmems_l4_end),
+            buffer_deg=config.cmems_l4_buffer,
+            variables=config.cmems_l4_variables,
+        )
+        
+        with st.sidebar.status("🌐 Downloading CMEMS L4 data...", expanded=True) as status:
+            progress_text = st.empty()
+            
+            def progress_callback(progress: float, message: str):
+                progress_text.write(f"{message} ({progress*100:.0f}%)")
+            
+            st.write(f"🚪 Gate: {config.selected_gate}")
+            st.write(f"📅 Period: {config.cmems_l4_start} to {config.cmems_l4_end}")
+            st.write(f"📊 Variables: {', '.join(config.cmems_l4_variables)}")
+            
+            pass_data = service.load_gate_data(
+                config=l4_config,
+                progress_callback=progress_callback
+            )
+            
+            status.update(label="✅ CMEMS L4 downloaded!", state="complete", expanded=False)
+        
+        if pass_data is None:
+            st.sidebar.error("❌ No data returned from API")
+            return
+        
+        # Store in session state (use cmems key for compatibility)
+        st.session_state["dataset_cmems_l4"] = pass_data
+        st.session_state["cmems_l4_service"] = service
+        st.session_state["cmems_l4_config"] = config
+        
+        # Success message
+        n_time = len(pass_data.time_array)
+        n_valid_slopes = sum(~np.isnan(pass_data.slope_series))
+        gate_length = pass_data.x_km[-1] if len(pass_data.x_km) > 0 else 0
+        
+        st.sidebar.success(f"""
+        ✅ CMEMS L4 Data Loaded!
+        - Gate: {pass_data.strait_name}
+        - Source: {pass_data.data_source}
+        - Period: {pass_data.time_range[0][:10]} to {pass_data.time_range[1][:10]}
+        - Time steps: {n_time} daily
+        - Valid slopes: {n_valid_slopes}/{n_time}
+        - Gate length: {gate_length:.1f} km
+        - Observations: {pass_data.n_observations:,}
+        """)
+        
+        # Rerun to display tabs
+        st.rerun()
+        
+    except ImportError as e:
+        st.sidebar.error(f"❌ CMEMSL4Service not available: {e}")
+    except Exception as e:
+        st.sidebar.error(f"❌ Error loading CMEMS L4: {e}")
         import traceback
         with st.sidebar.expander("Traceback"):
             st.code(traceback.format_exc())
