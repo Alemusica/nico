@@ -171,15 +171,17 @@ def _render_unified_pass_selection(config: AppConfig, dataset_type: str) -> AppC
     term = "Pass" if dataset_type == "slcci" else "Track"
     term_lower = term.lower()
     
-    # Get gate path
+    # Get gate path (filename contains pass number, e.g., "denmark_strait_TPJ_pass_246.shp")
     gate_path = _get_gate_shapefile(config.selected_gate)
     
-    # Try to extract suggested pass/track from gate name
+    # Try to extract suggested pass/track from gate FILENAME (not gate_id)
+    # The filename has the pass number, e.g., "denmark_strait_TPJ_pass_246.shp"
     suggested_num = None
     suggested_satellite = None
-    if config.selected_gate:
-        suggested_num = _extract_pass_from_gate_name(config.selected_gate)
-        suggested_satellite = _extract_satellite_from_gate_name(config.selected_gate)
+    if gate_path:
+        # Extract from filename which has the pass number
+        suggested_num = _extract_pass_from_gate_name(gate_path)
+        suggested_satellite = _extract_satellite_from_gate_name(gate_path)
     
     # Show suggested if found
     if suggested_num:
@@ -772,13 +774,13 @@ def _render_cmems_params(config: AppConfig) -> AppConfig:
     # Track selection (equivalent to SLCCI pass)
     st.sidebar.markdown("### 🛤️ Track Selection")
     
-    # Get gate path for track discovery
+    # Get gate path for track discovery (filename has track number)
     gate_path = _get_gate_shapefile(config.selected_gate)
     
-    # Try to extract suggested track from gate name
+    # Try to extract suggested track from gate FILENAME (not gate_id)
     suggested_track = None
-    if config.selected_gate:
-        suggested_track = _extract_pass_from_gate_name(config.selected_gate)
+    if gate_path:
+        suggested_track = _extract_pass_from_gate_name(gate_path)
     
     # Show suggested track if found
     if suggested_track:

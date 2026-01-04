@@ -1,7 +1,50 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-04 (Session - STREAMLIT FIX)
+> Last Updated: 2026-01-04 (Session - PASS EXTRACTION FIX)
 > Agent: Use this file to track progress. Update after each task.
+
+---
+
+## 🐛 BUG FIX: Pass Extraction from Gate Filename (2026-01-04)
+
+### Problema
+Il pass suggerito non veniva estratto dal nome del gate shapefile.
+- SLCCI: Nessun pass suggerito mostrato nella sidebar
+- CMEMS: Nessun track suggerito mostrato
+
+### Causa Root
+**Il codice usava `config.selected_gate` (= gate_id) invece di `gate_path` (= filename)!**
+
+```yaml
+# config/gates.yaml
+- id: denmark_strait          # ← config.selected_gate = questo
+  file: denmark_strait_TPJ_pass_246.shp  # ← gate_path = questo (ha il pass!)
+```
+
+La funzione `_extract_pass_from_gate_name()` cercava pattern come `pass_XXX` nel nome,
+ma riceveva solo `denmark_strait` invece di `denmark_strait_TPJ_pass_246.shp`.
+
+### Soluzione
+Modificato `app/components/sidebar.py`:
+
+**Prima:**
+```python
+suggested_pass = _extract_pass_from_gate_name(config.selected_gate)  # ❌ gate_id
+```
+
+**Dopo:**
+```python
+gate_path = _get_gate_shapefile(config.selected_gate)
+suggested_pass = _extract_pass_from_gate_name(gate_path)  # ✅ filename
+```
+
+Fix applicato in:
+1. `_render_unified_pass_selection()` (linea ~180)
+2. `_render_cmems_params()` (linea ~782)
+
+### Lezione Appresa
+- `gate_id` (es. "denmark_strait") ≠ `gate_file` (es. "denmark_strait_TPJ_pass_246.shp")
+- Sempre verificare quale variabile contiene l'informazione necessaria
 
 ---
 
