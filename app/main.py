@@ -176,3 +176,7 @@ def render_welcome_message():
     </div>
     """, unsafe_allow_html=True)
 
+
+# === MAIN ENTRY POINT ===
+# This is called when running: streamlit run app/main.py
+run_app()

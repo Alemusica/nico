@@ -1,7 +1,43 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-04 (Session - 4 DATASET ARCHITECTURE)
+> Last Updated: 2026-01-04 (Session - STREAMLIT FIX)
 > Agent: Use this file to track progress. Update after each task.
+
+---
+
+## 🐛 BUG FIX: Streamlit Black Screen (2026-01-04)
+
+### Problema
+L'app Streamlit mostrava **schermo completamente nero** in tutti i browser (Chrome, Safari).
+- HTML caricato ma `<body>` vuoto
+- Nessun errore nei log Python
+- WebSocket connesso ma niente renderizzato
+
+### Causa Root
+**Mancava la chiamata `run_app()` alla fine di `app/main.py`!**
+
+Il file definiva la funzione `run_app()` ma non la chiamava mai.
+Streamlit caricava il modulo, eseguiva gli import, ma non eseguiva alcuna UI.
+
+### Soluzione
+Aggiunto alla fine di `app/main.py`:
+```python
+# === MAIN ENTRY POINT ===
+# This is called when running: streamlit run app/main.py
+run_app()
+```
+
+### Debugging Process
+1. Test minimal app → ✅ funzionava
+2. Test import singoli → ✅ tutti OK
+3. Test esecuzione funzioni → ✅ tutti OK
+4. Analisi `main.py` → ❌ `run_app()` mai chiamato
+
+### Lezione Appresa
+Quando Streamlit mostra nero ma nessun errore:
+1. Verificare che ci sia codice **eseguito** (non solo definito)
+2. Streamlit esegue il file top-to-bottom
+3. Funzioni definite ma non chiamate = niente UI
 
 ---
 
