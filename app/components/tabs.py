@@ -370,25 +370,28 @@ def _render_slope_timeline(slcci_data, config: AppConfig):
     # Zero line
     fig.add_hline(y=0, line_dash="solid", line_color="black", line_width=0.8)
     
-    # Trend line
+    # Trend line with R² calculation
     if show_trend and len(valid_y) > 2:
+        from scipy import stats as scipy_stats
         x_numeric = np.arange(len(valid_y))
-        z = np.polyfit(x_numeric, valid_y, 1)
-        p = np.poly1d(z)
+        slope, intercept, r_value, p_value, std_err = scipy_stats.linregress(x_numeric, valid_y)
+        p = np.poly1d([slope, intercept])
+        r_squared = r_value ** 2
         fig.add_trace(go.Scatter(
             x=valid_x,
             y=p(x_numeric),
             mode="lines",
-            name=f"Trend ({z[0]:.4f}/period)",
-            line=dict(dash="dash", color="red")
+            name=f"Trend (slope={slope:.4f}, R²={r_squared:.3f})",
+            line=dict(dash="dash", color="red", width=2)
         ))
     
     fig.update_layout(
         title=f"{strait_name} - Pass {pass_number} - Monthly DOT Slope",
         xaxis_title=x_label,
         yaxis_title=y_label,
-        height=500,
-        template="plotly_white"
+        height=700,
+        template="plotly_white",
+        legend=dict(x=0.02, y=0.98, bgcolor='rgba(255,255,255,0.8)')
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -532,8 +535,9 @@ def _render_dot_profile(slcci_data, config: AppConfig):
         title=f"{strait_name} - Pass {pass_number} - DOT Profile",
         xaxis_title="Distance along longitude (km)",
         yaxis_title="DOT (m)",
-        height=500,
-        template="plotly_white"
+        height=700,
+        template="plotly_white",
+        legend=dict(x=0.02, y=0.98, bgcolor='rgba(255,255,255,0.8)')
     )
     
     st.plotly_chart(fig, use_container_width=True)

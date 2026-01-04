@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional, Tuple, List
 
 import streamlit as st
+import yaml
 
 from ..state import (
     AppConfig, 
@@ -108,7 +109,6 @@ def _load_gate_passes_config() -> dict:
     if _GATE_PASSES_CACHE is not None:
         return _GATE_PASSES_CACHE
     
-    import yaml
     config_path = Path(__file__).parent.parent.parent / "config" / "gate_passes.yaml"
     
     if config_path.exists():
@@ -130,21 +130,32 @@ def _get_precomputed_passes(gate_name: str, dataset_type: str = "slcci") -> List
     Returns:
         List of pass/track numbers (up to 5), or empty list if not found
     """
+    if not gate_name:
+        return []
+        
     config = _load_gate_passes_config()
     gates = config.get("gates", {})
+    key = "slcci_passes" if dataset_type == "slcci" else "cmems_tracks"
     
     # Try exact match first
     if gate_name in gates:
-        gate_config = gates[gate_name]
-        key = "slcci_passes" if dataset_type == "slcci" else "cmems_tracks"
-        return gate_config.get(key, [])
+        return gates[gate_name].get(key, [])
     
-    # Try without extension
-    gate_stem = Path(gate_name).stem if "/" in gate_name else gate_name
+    # Try without extension (e.g., from filepath)
+    gate_stem = Path(gate_name).stem if "/" in gate_name or "\\" in gate_name else gate_name
     if gate_stem in gates:
-        gate_config = gates[gate_stem]
-        key = "slcci_passes" if dataset_type == "slcci" else "cmems_tracks"
-        return gate_config.get(key, [])
+        return gates[gate_stem].get(key, [])
+    
+    # Try prefix match: gate_id "denmark_strait" should match "denmark_strait_TPJ_pass_246"
+    # This handles cases where YAML key has satellite/pass suffix but gate_id doesn't
+    for yaml_key in gates.keys():
+        if yaml_key.startswith(gate_stem) or gate_stem.startswith(yaml_key.split("_TPJ_")[0].split("_S3_")[0]):
+            return gates[yaml_key].get(key, [])
+    
+    # Try partial match (gate_id is substring of yaml key)
+    for yaml_key in gates.keys():
+        if gate_stem in yaml_key:
+            return gates[yaml_key].get(key, [])
     
     return []
 
