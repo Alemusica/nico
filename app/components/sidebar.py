@@ -705,13 +705,21 @@ def _render_cmems_paths(config: AppConfig) -> AppConfig:
         format_func=lambda x: "📁 LOCAL Files" if x == "local" else "🌐 CMEMS API",
         horizontal=True,
         key="sidebar_cmems_source_mode",
-        help="LOCAL=NetCDF files on disk, API=Copernicus Marine Service (requires login)"
+        help="LOCAL=NetCDF files on disk (requires track selection), API=Copernicus Marine (smart geographic filter)"
     )
     
     if config.cmems_source_mode == "api":
-        st.sidebar.info(
-            "🌐 API mode downloads directly from Copernicus Marine. "
-            "Set CMEMS_USERNAME and CMEMS_PASSWORD environment variables."
+        st.sidebar.success(
+            "🌐 **API Mode** - Uses L4 Gridded!\n"
+            "- 0.125° resolution (all altimeters merged)\n"
+            "- Geographic bounding box filter\n"
+            "- Requires: `copernicusmarine login`"
+        )
+    else:
+        st.sidebar.warning(
+            "📁 **Local Mode** - L3 Along-Track\n"
+            "- Must select a specific track\n"
+            "- Cannot load 'All Tracks' (7000+ files)"
         )
     
     # Only show path input for local mode
@@ -798,26 +806,34 @@ def _render_cmems_params(config: AppConfig) -> AppConfig:
         st.sidebar.success(f"🎯 **Suggested Track: {suggested_track}**")
         st.sidebar.caption("Extracted from gate shapefile name")
     
-    # Track selection mode
+    # Get source mode
+    source_mode = getattr(config, 'cmems_source_mode', 'local')
+    
+    # Track selection mode - depends on source
+    if source_mode == "local":
+        # Local mode (L3): must select a specific track (no "all")
+        track_options = ["suggested", "closest", "manual"] if suggested_track else ["closest", "manual"]
+        st.sidebar.caption("⚠️ Local mode requires track selection (7000+ files)")
+    else:
+        # API mode (L4): only "all" makes sense (L4 is gridded, no tracks)
+        st.sidebar.info("ℹ️ API mode uses L4 gridded data (no track filtering)")
+        config.cmems_track_number = None  # L4 doesn't have tracks
+        return config  # Skip track selection UI
+    
     track_mode = st.sidebar.radio(
         "Track Mode",
-        ["all", "suggested", "closest", "manual"] if suggested_track else ["all", "closest", "manual"],
+        track_options,
         format_func=lambda x: {
-            "all": "📊 All Tracks",
             "suggested": f"🎯 Suggested ({suggested_track})" if suggested_track else "Suggested",
             "closest": "🔍 5 Closest",
             "manual": "✏️ Manual"
         }.get(x, x),
         horizontal=True,
         key="sidebar_cmems_track_mode",
-        help="all=merge all tracks, suggested=from gate name, closest=5 nearest to gate, manual=enter number"
+        help="suggested=from gate name, closest=5 nearest to gate, manual=enter number"
     )
     
-    if track_mode == "all":
-        config.cmems_track_number = None
-        st.sidebar.info("Using ALL tracks (merged)")
-        
-    elif track_mode == "suggested" and suggested_track:
+    if track_mode == "suggested" and suggested_track:
         config.cmems_track_number = suggested_track
         st.sidebar.info(f"Using track **{suggested_track}** from gate definition")
         

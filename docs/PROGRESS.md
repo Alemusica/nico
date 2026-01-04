@@ -1,7 +1,55 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-04 (Session - PASS EXTRACTION FIX)
+> Last Updated: 2026-01-04 (Session - CMEMS L3 API + NO ALL TRACKS)
 > Agent: Use this file to track progress. Update after each task.
+
+---
+
+## 🚀 FEATURE: CMEMS L3/L4 Smart Loading Strategy (2026-01-04)
+
+### Problema
+Streamlit crashava con **Segmentation Fault** quando si selezionava "All Tracks" per CMEMS L3 locale:
+- 7093 file NetCDF da caricare in parallelo
+- Memory exhaustion → crash del processo
+
+### Soluzione: Strategia Dual-Mode
+
+#### LOCAL Mode → L3 Along-Track (Track Selection Required)
+- Usa i file NetCDF locali (J1, J2, J3)
+- **DEVE** selezionare un track specifico
+- No "All Tracks" (causerebbe crash)
+- Track options: suggested, closest, manual
+
+#### API Mode → L4 Gridded (No Track Selection)  
+- Usa l'API Copernicus Marine
+- Dataset L4: `cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D`
+- Risoluzione: 0.125° (~14km) daily
+- **NO track selection** (L4 è gridded, non along-track)
+- Filtra per bounding box geografico
+- Tutti gli altimetri merged
+
+### Perché L4 per API?
+- L3 along-track datasets **non supportano** `open_dataset()` con filtro geografico
+- Errore: `'Command' object is not subscriptable`
+- L4 è già interpolato e funziona perfettamente con l'API
+
+### Modifiche ai File
+
+1. **`app/components/sidebar.py`** (`_render_cmems_params`):
+   - LOCAL: track selection obbligatoria (no "all")
+   - API: skip track selection UI (L4 non ha tracks)
+   - Messaggi chiari per LOCAL vs API
+
+2. **`src/services/cmems_service.py`** (`_load_from_api`):
+   - Usa dataset L4 gridded
+   - Conversione xarray → DataFrame
+   - Supporta bounding box geografico
+
+### Requisiti API
+```bash
+pip install copernicusmarine
+copernicusmarine login  # Una volta per salvare credenziali
+```
 
 ---
 

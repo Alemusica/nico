@@ -1092,7 +1092,7 @@ class CMEMSService:
         return lons, lats
 
     # ==========================================================================
-    # API MODE - CMEMS DIRECT DOWNLOAD (L4 Dataset)
+    # API MODE - CMEMS L4 GRIDDED DOWNLOAD (More reliable than L3 via API)
     # ==========================================================================
     
     def _load_from_api(
@@ -1102,19 +1102,24 @@ class CMEMSService:
         progress_callback: Optional[Callable[[int, int], None]] = None
     ) -> Optional[pd.DataFrame]:
         """
-        Load CMEMS data directly from Copernicus Marine API using copernicusmarine.subset().
+        Load CMEMS data from Copernicus Marine API using L4 gridded dataset.
         
-        Uses L4 gridded dataset: cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D
-        Full time range: 1993-01-01 to present
+        NOTE: We use L4 gridded data for API mode because:
+        - L3 along-track datasets don't support open_dataset() with geographic filter
+        - L4 provides excellent coverage with 0.125° resolution
+        - L4 includes all altimeters merged (not just Jason)
         
-        This is an alternative to loading local files, useful when:
-        - Local data is not available
-        - User wants the latest NRT data
-        - User wants a specific time range
+        Dataset: cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D
+        - Type: GRIDDED (lat × lon × time)
+        - Resolution: 0.125° (~14km) daily  
+        - Variables: adt, sla, ugos, vgos
+        - Time range: 1993-01-01 to present (~1 week delay)
+        
+        For along-track L3 data, use LOCAL mode with track selection.
         
         Requires:
             pip install copernicusmarine
-            Environment variables: CMEMS_USERNAME, CMEMS_PASSWORD
+            copernicusmarine login (for credentials)
         """
         try:
             import copernicusmarine
@@ -1122,61 +1127,57 @@ class CMEMSService:
             logger.error("copernicusmarine not installed. Run: pip install copernicusmarine")
             return None
         
-        logger.info(f"🌐 Loading CMEMS L4 data from API for {strait_name}")
+        logger.info(f"🌐 Loading CMEMS L4 gridded data from API for {strait_name}")
+        logger.info("   ℹ️ API mode uses L4 gridded (all altimeters merged, 0.125° resolution)")
         
-        # Dataset configuration for L4 multi-year reprocessed data
+        # L4 Gridded dataset
         DATASET_ID = "cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D"
-        DATASET_VERSION = "202411"
         
         # Variables to download
-        # Full list: adt, err_sla, err_ugosa, err_vgosa, flag_ice, sla, tpa_correction, ugos, ugosa, vgos, vgosa
-        variables = ["adt", "sla", "ugos", "vgos"]  # Core variables for sea level analysis
+        variables = ["adt", "sla", "ugos", "vgos"]
         
-        # Define time range - full dataset range
-        from datetime import datetime, timedelta
-        end_date = datetime.now() - timedelta(days=7)  # Usually ~1 week delay for L4
-        start_date = datetime(1993, 1, 1)  # Dataset starts from 1993
+        # Geographic bounds with buffer
+        lon_min = gate_bounds['lon_min']
+        lon_max = gate_bounds['lon_max']
+        lat_min = gate_bounds['lat_min']
+        lat_max = gate_bounds['lat_max']
         
-        # Limit to gate bounds
-        lon_min = max(-179.9375, gate_bounds['lon_min'])
-        lon_max = min(179.9375, gate_bounds['lon_max'])
-        lat_min = max(-89.9375, gate_bounds['lat_min'])
-        lat_max = min(89.9375, gate_bounds['lat_max'])
+        # Clamp to dataset bounds
+        lat_min = max(lat_min, -89.875)
+        lat_max = min(lat_max, 89.875)
+        lon_min = max(lon_min, -179.875)
+        lon_max = min(lon_max, 179.875)
         
-        logger.info(f"   Dataset: {DATASET_ID} (v{DATASET_VERSION})")
-        logger.info(f"   Time: {start_date.date()} to {end_date.date()}")
         logger.info(f"   Bounds: lon=[{lon_min:.2f}, {lon_max:.2f}], lat=[{lat_min:.2f}, {lat_max:.2f}]")
         
         if progress_callback:
-            progress_callback(10, 100)  # 10% - starting download
+            progress_callback(10, 100)
         
-        # Download data using copernicusmarine.subset()
         try:
+            # Use copernicusmarine.open_dataset with geographic filter
             ds = copernicusmarine.open_dataset(
                 dataset_id=DATASET_ID,
-                dataset_version=DATASET_VERSION,
                 variables=variables,
                 minimum_longitude=lon_min,
                 maximum_longitude=lon_max,
                 minimum_latitude=lat_min,
                 maximum_latitude=lat_max,
-                start_datetime=start_date.strftime("%Y-%m-%dT00:00:00"),
-                end_datetime=end_date.strftime("%Y-%m-%dT00:00:00"),
             )
+            
+            if ds is None:
+                logger.error("CMEMS API returned no data")
+                return None
+                
         except Exception as e:
             logger.error(f"CMEMS API download failed: {e}")
-            logger.info("💡 Tip: Set CMEMS_USERNAME and CMEMS_PASSWORD environment variables")
-            return None
-        
-        if ds is None:
-            logger.error("CMEMS API returned no data")
+            logger.info("💡 Tip: Run 'copernicusmarine login' to configure credentials")
             return None
         
         if progress_callback:
-            progress_callback(50, 100)  # 50% - download complete
+            progress_callback(50, 100)
         
         # Convert xarray Dataset to DataFrame
-        logger.info("Converting xarray to DataFrame...")
+        logger.info("   Converting xarray to DataFrame...")
         
         try:
             df_list = []
@@ -1228,7 +1229,7 @@ class CMEMSService:
                     'ugos': ugos,
                     'vgos': vgos,
                     'satellite': 'CMEMS_L4',
-                    'cycle': t_idx,  # Use time index as cycle
+                    'cycle': t_idx,
                     'track': -1,  # No track info for L4 gridded data
                 })
                 df_list.append(df_chunk)
@@ -1253,7 +1254,7 @@ class CMEMSService:
             ds.close()
         
         if progress_callback:
-            progress_callback(100, 100)  # 100% - done
+            progress_callback(100, 100)
         
         logger.info(f"✅ Loaded {len(df):,} points from CMEMS L4 API ({df['time'].min()} to {df['time'].max()})")
         
