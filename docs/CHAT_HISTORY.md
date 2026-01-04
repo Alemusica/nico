@@ -1,6 +1,196 @@
 # 📜 Chat History & Session Context
 
 > **Purpose**: Preserve context between AI agent sessions to prevent duplication and confusion.
+> **Last Updated**: 2026-01-04 22:15
+
+---
+
+## 🔥 SESSIONE CORRENTE: 2026-01-04 (CMEMS L3/L4 Strategy)
+
+### ✅ Ultimo Commit
+```
+f9be240 - 🔧 Fix CMEMS crash: Remove All Tracks for local, use L4 for API
+```
+
+### 🟢 App Funzionante
+- **URL**: http://localhost:8504
+- **Stato**: Running senza crash
+- **Dataset testati**: DTUSpace ✅, SLCCI ✅, CMEMS L3 local (con track) ✅
+
+---
+
+## 🐛 PROBLEMI NOTI / DA RISOLVERE
+
+### 1. ⚠️ CMEMS L3 API Non Funziona (Priority: MEDIUM)
+**Problema**: Il dataset L3 along-track di CMEMS **non supporta** `copernicusmarine.open_dataset()` con filtro geografico.
+
+**Errore**: `'Command' object is not subscriptable`
+
+**Workaround Attuale**: API mode usa **L4 gridded** invece di L3.
+- L4 funziona perfettamente con l'API
+- L4 ha risoluzione 0.125° (tutti gli altimetri merged)
+- Ma L4 è GRIDDED, non along-track!
+
+**Possibili Soluzioni Future**:
+1. Usare `copernicusmarine.subset()` per L3 (scarica file, poi li apre) - testato, funziona ma lento
+2. Mantenere L4 per API (attuale) - OK per analisi generale
+3. Implementare download batch L3 con caching - complesso
+
+**File Coinvolti**:
+- `src/services/cmems_service.py` (`_load_from_api`)
+- `app/components/sidebar.py` (`_render_cmems_params`)
+
+### 2. ⚠️ Deprecation Warning Streamlit (Priority: LOW)
+```
+Please replace `use_container_width` with `width`.
+For `use_container_width=True`, use `width='stretch'`.
+```
+
+### 3. ⚠️ Warning CMEMS Base Directory (Priority: LOW)
+```
+WARNING cmems_service: CMEMS base directory not found: /tmp/cmems_api_cache
+```
+
+---
+
+## 📊 STRATEGIA DUAL-MODE CMEMS (IMPLEMENTATA)
+
+| Mode | Dataset | Track Selection | Funziona? |
+|------|---------|-----------------|-----------|
+| **LOCAL** | L3 Along-Track | ✅ Obbligatoria | ✅ SI |
+| **API** | L4 Gridded | ❌ Non disponibile | ✅ SI |
+
+### Perché questa scelta?
+1. **LOCAL L3**: 7093 file NetCDF - se carichi "All Tracks" → **CRASH** (segfault)
+2. **API L3**: `open_dataset()` con bbox **non funziona** per dataset along-track
+3. **API L4**: Funziona perfettamente, ma è gridded (non along-track)
+
+---
+
+## 📁 FILE CHIAVE MODIFICATI (2026-01-04)
+
+### `app/components/sidebar.py`
+- `_render_cmems_params()`: UI diversa per LOCAL vs API
+- LOCAL: track selection obbligatoria
+- API: skip track selection (L4 non ha tracks)
+
+### `src/services/cmems_service.py`
+- `_load_from_api()`: Ora usa L4 gridded invece di L3 along-track
+- Dataset ID: `cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D`
+
+---
+
+## 🎯 TODO - PRIORITÀ ALTA
+
+### 1. Testare CMEMS L3 LOCAL con Track Specifico
+```bash
+# Seleziona un gate con track nel nome (es. bering_strait_pass_76)
+# Seleziona CMEMS L3 → LOCAL
+# Seleziona track suggerito (76)
+# Verifica che carichi senza crash
+```
+
+### 2. Testare CMEMS API (L4)
+```bash
+# Seleziona un gate qualsiasi
+# Seleziona CMEMS L3 → API
+# Clicca Load
+# Verifica che carichi dati L4 gridded
+```
+
+### 3. Verificare Comparison Mode
+- [ ] SLCCI + CMEMS L3 local
+- [ ] SLCCI + CMEMS L4 API
+- [ ] DTUSpace + CMEMS
+
+---
+
+## 🎯 TODO - PRIORITÀ MEDIA
+
+### 4. Fix Deprecation Warnings
+Sostituire `use_container_width=True` con `width='stretch'`
+
+### 5. Migliorare UX API Mode
+- Aggiungere info box che spiega: "API mode usa L4 gridded (0.125°), non L3 along-track"
+- Mostrare progress bar durante download API
+
+### 6. Cache per API Mode
+Implementare cache locale per download API.
+
+---
+
+## 🎯 TODO - PRIORITÀ BASSA
+
+### 7. Implementare L3 API con subset()
+Se serve davvero L3 via API, usare `copernicusmarine.subset()` invece di `open_dataset()`.
+
+### 8. Cleanup Code
+- Rimuovere codice morto
+- Aggiungere type hints
+- Documentare funzioni
+
+---
+
+## 🔧 COMANDI UTILI
+
+### Avviare Streamlit
+```bash
+cd /Users/nicolocaron/Documents/GitHub/nico
+source .venv/bin/activate
+streamlit run app/main.py --server.port 8504
+```
+
+### Testare CMEMS API
+```python
+import copernicusmarine
+
+# L4 (FUNZIONA)
+ds = copernicusmarine.open_dataset(
+    dataset_id="cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D",
+    minimum_longitude=-175,
+    maximum_longitude=-162,
+    minimum_latitude=60,
+    maximum_latitude=66,
+)
+
+# L3 (NON FUNZIONA con open_dataset - usare subset())
+```
+
+---
+
+## 🔑 CREDENZIALI E PATH
+
+### CMEMS API
+```bash
+copernicusmarine login  # Una volta per salvare credenziali
+```
+
+### Path Dati Locali
+```python
+SLCCI_BASE_DIR = "/Users/nicolocaron/Desktop/ARCFRESH/J2"
+CMEMS_BASE_DIR = "/Users/nicolocaron/Desktop/ARCFRESH/COPERNICUS DATA"
+DTU_PATH = "/Users/nicolocaron/Desktop/ARCFRESH/arctic_ocean_prod_DTUSpace_v4.0.nc/..."
+```
+
+---
+
+## 📝 NOTE PER IL PROSSIMO AGENTE
+
+1. **SEMPRE fare `git pull` prima di iniziare!**
+2. **Leggere `docs/PROGRESS.md` per lo stato attuale**
+3. **L'app gira su porta 8504**, non 8501
+4. **CMEMS L3 API non funziona** - usa L4 oppure local con track selection
+5. **Il crash "All Tracks" è risolto** - rimossa l'opzione per LOCAL mode
+
+---
+
+## 🧪 ULTIMO TEST RIUSCITO (DTUSpace)
+
+```
+[18:05:05] INFO  dtu_service: Loading DTUSpace data...
+[18:05:05] INFO  dtu_service: DOT shape: (93, 720, 144), 144 time steps
+[18:05:06] INFO  dtu_service: DTUSpace data loaded successfully: 57600 synthetic observations
+```
 
 ---
 
@@ -8,7 +198,7 @@
 
 **BEFORE writing ANY code, READ:**
 1. `docs/ARCHITECTURE.md` - The NICO Unified Architecture diagram
-2. `config/datasets.yaml` - Provider configuration
+2. `docs/PROGRESS.md` - Current progress and bugs
 3. This file - Previous session context
 
 **The data flow MUST be:**
