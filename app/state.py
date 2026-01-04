@@ -224,3 +224,44 @@ def get_cmems_l4_data():
 def clear_cmems_l4_data():
     """Clear only CMEMS L4 data."""
     st.session_state["dataset_cmems_l4"] = None
+
+
+# ==============================================================================
+# MULTI-DATASET UTILITIES
+# ==============================================================================
+
+def get_all_loaded_datasets() -> dict:
+    """
+    Get all currently loaded datasets from session state.
+    
+    Returns:
+        Dict with keys: 'slcci', 'cmems', 'cmems_l4', 'dtu'
+        Only includes datasets that are actually loaded.
+    """
+    loaded = {}
+    
+    if st.session_state.get("dataset_slcci") is not None:
+        loaded["slcci"] = st.session_state.get("dataset_slcci")
+    if st.session_state.get("dataset_cmems") is not None:
+        loaded["cmems"] = st.session_state.get("dataset_cmems")
+    if st.session_state.get("dataset_cmems_l4") is not None:
+        loaded["cmems_l4"] = st.session_state.get("dataset_cmems_l4")
+    if st.session_state.get("dataset_dtu") is not None:
+        loaded["dtu"] = st.session_state.get("dataset_dtu")
+    
+    return loaded
+
+
+def count_loaded_datasets() -> int:
+    """Count how many datasets are currently loaded."""
+    return len(get_all_loaded_datasets())
+
+
+def clear_all_datasets():
+    """Clear ALL loaded datasets."""
+    st.session_state["dataset_slcci"] = None
+    st.session_state["dataset_cmems"] = None
+    st.session_state["dataset_cmems_l4"] = None
+    st.session_state["dataset_dtu"] = None
+    st.session_state["slcci_pass_data"] = None
+    st.session_state["comparison_mode"] = False

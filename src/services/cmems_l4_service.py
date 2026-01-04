@@ -85,7 +85,7 @@ except ImportError:
 
 # CMEMS L4 Dataset IDs
 CMEMS_L4_DATASET_ID = "cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D"
-CMEMS_L4_DATASET_VERSION = "202511"
+CMEMS_L4_DATASET_VERSION = ""  # Empty = use latest version (auto-detected by API)
 
 # Default variables to download
 DEFAULT_VARIABLES = ["adt", "sla", "ugos", "vgos"]
@@ -465,18 +465,24 @@ class CMEMSL4Service:
         logger.info(f"  Variables: {variables}")
         
         try:
+            # Build kwargs for open_dataset
+            kwargs = {
+                "dataset_id": dataset_id,
+                "variables": variables,
+                "minimum_longitude": lon_min,
+                "maximum_longitude": lon_max,
+                "minimum_latitude": lat_min,
+                "maximum_latitude": lat_max,
+                "start_datetime": time_start,
+                "end_datetime": time_end,
+            }
+            
+            # Only add version if specified (empty = auto-detect latest)
+            if dataset_version:
+                kwargs["dataset_version"] = dataset_version
+            
             # Download to xarray dataset in memory
-            ds = copernicusmarine.open_dataset(
-                dataset_id=dataset_id,
-                dataset_version=dataset_version,
-                variables=variables,
-                minimum_longitude=lon_min,
-                maximum_longitude=lon_max,
-                minimum_latitude=lat_min,
-                maximum_latitude=lat_max,
-                start_datetime=time_start,
-                end_datetime=time_end,
-            )
+            ds = copernicusmarine.open_dataset(**kwargs)
             
             logger.info(f"Downloaded: {ds.dims}")
             return ds

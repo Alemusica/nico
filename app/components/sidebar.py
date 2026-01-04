@@ -495,44 +495,80 @@ def _render_data_source(config: AppConfig) -> AppConfig:
     else:
         st.sidebar.caption("🗺️ **Gridded** - No pass selection (synthetic gate sampling)")
     
-    # === COMPARISON MODE ===
+    # === LOADED DATASETS PANEL ===
     st.sidebar.divider()
     
-    # Check if both datasets are loaded
+    # Check all 4 datasets
     slcci_loaded = st.session_state.get("dataset_slcci") is not None
     cmems_loaded = st.session_state.get("dataset_cmems") is not None
+    cmems_l4_loaded = st.session_state.get("dataset_cmems_l4") is not None
+    dtu_loaded = st.session_state.get("dataset_dtu") is not None
     
-    if slcci_loaded or cmems_loaded:
-        st.sidebar.markdown("**📊 Loaded Data:**")
-        col1, col2 = st.sidebar.columns(2)
-        with col1:
-            if slcci_loaded:
+    loaded_count = sum([slcci_loaded, cmems_loaded, cmems_l4_loaded, dtu_loaded])
+    
+    if loaded_count > 0:
+        st.sidebar.markdown(f"**📊 Loaded Datasets ({loaded_count}/4):**")
+        
+        # Dataset info with remove buttons
+        # SLCCI
+        if slcci_loaded:
+            col1, col2 = st.sidebar.columns([4, 1])
+            with col1:
                 slcci_data = st.session_state.get("dataset_slcci")
-                st.success(f"✅ SLCCI\nPass {getattr(slcci_data, 'pass_number', '?')}")
-            else:
-                st.info("⬜ SLCCI")
-        with col2:
-            if cmems_loaded:
+                pass_num = getattr(slcci_data, 'pass_number', '?')
+                st.markdown(f"🟠 **SLCCI** Pass {pass_num}")
+            with col2:
+                if st.button("✖", key="remove_slcci", help="Remove SLCCI data"):
+                    st.session_state["dataset_slcci"] = None
+                    st.session_state["slcci_pass_data"] = None
+                    st.rerun()
+        
+        # CMEMS L3
+        if cmems_loaded:
+            col1, col2 = st.sidebar.columns([4, 1])
+            with col1:
                 cmems_data = st.session_state.get("dataset_cmems")
                 pass_num = getattr(cmems_data, 'pass_number', None)
                 pass_str = f"Track {pass_num}" if pass_num else "Synthetic"
-                st.success(f"✅ CMEMS\n{pass_str}")
-            else:
-                st.info("⬜ CMEMS")
+                st.markdown(f"🔵 **CMEMS L3** {pass_str}")
+            with col2:
+                if st.button("✖", key="remove_cmems", help="Remove CMEMS L3 data"):
+                    st.session_state["dataset_cmems"] = None
+                    st.rerun()
         
-        # Comparison toggle (only if both loaded)
-        if slcci_loaded and cmems_loaded:
-            comparison_enabled = st.sidebar.checkbox(
-                "🔀 **Comparison Mode**",
-                value=is_comparison_mode(),
-                key="sidebar_comparison_mode",
-                help="Overlay SLCCI and CMEMS plots for comparison"
-            )
-            set_comparison_mode(comparison_enabled)
-            config.comparison_mode = comparison_enabled
-            
-            if comparison_enabled:
-                st.sidebar.success("✅ Comparison mode: Plots will overlay both datasets")
+        # CMEMS L4
+        if cmems_l4_loaded:
+            col1, col2 = st.sidebar.columns([4, 1])
+            with col1:
+                st.markdown("� **CMEMS L4** Gridded")
+            with col2:
+                if st.button("✖", key="remove_cmems_l4", help="Remove CMEMS L4 data"):
+                    st.session_state["dataset_cmems_l4"] = None
+                    st.rerun()
+        
+        # DTUSpace
+        if dtu_loaded:
+            col1, col2 = st.sidebar.columns([4, 1])
+            with col1:
+                st.markdown("🟢 **DTUSpace** Gridded")
+            with col2:
+                if st.button("✖", key="remove_dtu", help="Remove DTUSpace data"):
+                    st.session_state["dataset_dtu"] = None
+                    st.rerun()
+        
+        # Clear all button
+        if loaded_count > 1:
+            if st.sidebar.button("🗑️ Clear All Data", use_container_width=True, type="secondary"):
+                st.session_state["dataset_slcci"] = None
+                st.session_state["dataset_cmems"] = None
+                st.session_state["dataset_cmems_l4"] = None
+                st.session_state["dataset_dtu"] = None
+                st.session_state["slcci_pass_data"] = None
+                st.rerun()
+        
+        # Comparison mode info
+        if loaded_count >= 2:
+            st.sidebar.success(f"✅ {loaded_count} datasets loaded - Comparison tabs available!")
     
     # For SLCCI, add LOCAL/API selector
     if config.selected_dataset_type == "SLCCI":

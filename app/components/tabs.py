@@ -19,39 +19,76 @@ from ..state import get_slcci_data, get_cmems_data, is_comparison_mode, get_dtu_
 # Comparison mode colors (from COMPARISON_BATCH notebook)
 COLOR_SLCCI = "darkorange"
 COLOR_CMEMS = "steelblue"
+COLOR_CMEMS_L4 = "mediumpurple"  # CMEMS L4 Gridded color
 COLOR_DTU = "seagreen"  # DTUSpace color (green)
+
+# Dataset display names
+DATASET_NAMES = {
+    "slcci": "SLCCI",
+    "cmems": "CMEMS L3",
+    "cmems_l4": "CMEMS L4",
+    "dtu": "DTUSpace"
+}
+
+DATASET_COLORS = {
+    "slcci": COLOR_SLCCI,
+    "cmems": COLOR_CMEMS,
+    "cmems_l4": COLOR_CMEMS_L4,
+    "dtu": COLOR_DTU
+}
+
+
+def _get_all_loaded_datasets() -> dict:
+    """Get all currently loaded datasets from session state."""
+    loaded = {}
+    
+    if st.session_state.get("dataset_slcci") is not None:
+        loaded["slcci"] = st.session_state.get("dataset_slcci")
+    if st.session_state.get("dataset_cmems") is not None:
+        loaded["cmems"] = st.session_state.get("dataset_cmems")
+    if st.session_state.get("dataset_cmems_l4") is not None:
+        loaded["cmems_l4"] = st.session_state.get("dataset_cmems_l4")
+    if st.session_state.get("dataset_dtu") is not None:
+        loaded["dtu"] = st.session_state.get("dataset_dtu")
+    
+    return loaded
 
 
 def render_tabs(config: AppConfig):
     """Render main content tabs based on loaded data type and comparison mode."""
     slcci_data = get_slcci_data()
     cmems_data = get_cmems_data()
-    dtu_data = get_dtu_data()  # DTUSpace (ISOLATED)
-    comparison_mode = is_comparison_mode()
+    dtu_data = get_dtu_data()
+    cmems_l4_data = st.session_state.get("dataset_cmems_l4")
+    
+    # Get all loaded datasets
+    loaded_datasets = _get_all_loaded_datasets()
+    n_loaded = len(loaded_datasets)
     
     # Legacy support
     legacy_slcci = st.session_state.get("slcci_pass_data")
     datasets = st.session_state.get("datasets", {})
-    # Read from both radio key and explicit state (for persistence after rerun)
     selected_dataset_type = st.session_state.get("sidebar_datasource") or st.session_state.get("selected_dataset_type", "SLCCI")
     
-    # DEBUG: Show what data is available (uncomment to debug)
-    st.caption(f"🔍 Data status: DTU={dtu_data is not None}, SLCCI={slcci_data is not None}, CMEMS={cmems_data is not None}, type={selected_dataset_type}")
+    # Status bar showing loaded datasets
+    if n_loaded > 0:
+        loaded_names = [f"**{DATASET_NAMES.get(k, k)}**" for k in loaded_datasets.keys()]
+        st.caption(f"� Loaded: {', '.join(loaded_names)} ({n_loaded} dataset{'s' if n_loaded > 1 else ''})")
     
-    # DTUSpace mode (ISOLATED - separate tabs) - PRIORITY if DTU data exists
+    # MULTI-DATASET COMPARISON MODE (2+ datasets loaded)
+    if n_loaded >= 2:
+        _render_multi_comparison_tabs(loaded_datasets, config)
+        return
+    
+    # SINGLE DATASET MODE
     if dtu_data is not None:
         _render_dtu_tabs(dtu_data, config)
-        return  # Exit early - DTU is isolated
-    # Comparison mode: overlay SLCCI and CMEMS
-    elif comparison_mode and slcci_data is not None and cmems_data is not None:
-        _render_comparison_tabs(slcci_data, cmems_data, config)
-    # Single SLCCI mode
+    elif cmems_l4_data is not None:
+        _render_cmems_l4_tabs(cmems_l4_data, config)
     elif slcci_data is not None:
         _render_slcci_tabs(slcci_data, config)
-    # Single CMEMS mode  
     elif cmems_data is not None:
         _render_cmems_tabs(cmems_data, config)
-    # Legacy SLCCI support
     elif selected_dataset_type == "SLCCI" and legacy_slcci is not None:
         _render_slcci_tabs(legacy_slcci, config)
     elif datasets:
@@ -2208,6 +2245,579 @@ def _render_difference_plot(slcci_data, cmems_data, config: AppConfig):
         
         **N = {len(diff_clean)}** monthly periods analyzed
         """)
+
+
+# ==============================================================================
+# MULTI-DATASET COMPARISON TABS (Universal)
+# ==============================================================================
+
+def _render_multi_comparison_tabs(loaded_datasets: dict, config: AppConfig):
+    """
+    Render comparison tabs for multiple datasets (2+).
+    
+    Supports any combination of: SLCCI, CMEMS L3, CMEMS L4, DTUSpace
+    """
+    dataset_names = [DATASET_NAMES.get(k, k) for k in loaded_datasets.keys()]
+    
+    st.markdown(f"### 🔀 Multi-Dataset Comparison: {' vs '.join(dataset_names)}")
+    
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "📈 Slope Timeline",
+        "📊 DOT Profile",
+        "🗺️ Spatial Overview",
+        "🌊 Geostrophic Velocity",
+        "📉 Correlation Matrix",
+        "📥 Export"
+    ])
+    
+    with tab1:
+        _render_multi_slope_comparison(loaded_datasets, config)
+    with tab2:
+        _render_multi_dot_comparison(loaded_datasets, config)
+    with tab3:
+        _render_multi_spatial_overview(loaded_datasets, config)
+    with tab4:
+        _render_multi_geostrophic_comparison(loaded_datasets, config)
+    with tab5:
+        _render_multi_correlation(loaded_datasets, config)
+    with tab6:
+        _render_multi_export(loaded_datasets, config)
+
+
+def _render_multi_slope_comparison(loaded_datasets: dict, config: AppConfig):
+    """Render slope timeline comparison for multiple datasets."""
+    st.subheader("SSH Slope Timeline Comparison")
+    
+    # Options
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        show_trend = st.checkbox("Show trend lines", value=True, key="multi_slope_trend")
+    with col2:
+        unit = st.selectbox("Units", ["m/100km", "cm/km"], key="multi_slope_unit")
+    with col3:
+        resample = st.selectbox("Resample", ["Monthly", "Yearly", "None"], key="multi_slope_resample")
+    
+    fig = go.Figure()
+    
+    for dataset_key, data in loaded_datasets.items():
+        color = DATASET_COLORS.get(dataset_key, "gray")
+        name = DATASET_NAMES.get(dataset_key, dataset_key)
+        
+        # Get slope data (handle different data structures)
+        slope = getattr(data, 'slope_series', None)
+        time_arr = getattr(data, 'time_array', None)
+        
+        if slope is None:
+            continue
+        
+        valid_mask = ~np.isnan(slope)
+        if np.sum(valid_mask) == 0:
+            continue
+        
+        y_vals = slope * 100 if unit == "cm/km" else slope
+        x_vals = time_arr if time_arr is not None else np.arange(len(slope))
+        
+        valid_x = [x_vals[i] for i in range(len(x_vals)) if valid_mask[i]]
+        valid_y = [y_vals[i] for i in range(len(y_vals)) if valid_mask[i]]
+        
+        # Resample if requested
+        if resample == "Yearly" and len(valid_x) > 12:
+            df_temp = pd.DataFrame({'time': valid_x, 'slope': valid_y})
+            df_temp['time'] = pd.to_datetime(df_temp['time'])
+            df_temp = df_temp.set_index('time').resample('YE').mean().reset_index()
+            valid_x = df_temp['time'].tolist()
+            valid_y = df_temp['slope'].tolist()
+        
+        # Main trace
+        fig.add_trace(go.Scatter(
+            x=valid_x, y=valid_y,
+            mode="markers+lines",
+            name=name,
+            marker=dict(size=6, color=color),
+            line=dict(width=2, color=color),
+            legendgroup=dataset_key
+        ))
+        
+        # Trend line
+        if show_trend and len(valid_y) > 2:
+            x_numeric = np.arange(len(valid_y))
+            z = np.polyfit(x_numeric, valid_y, 1)
+            p = np.poly1d(z)
+            fig.add_trace(go.Scatter(
+                x=valid_x, y=p(x_numeric),
+                mode="lines",
+                name=f"{name} Trend",
+                line=dict(dash="dash", color=color, width=1),
+                legendgroup=dataset_key,
+                showlegend=False
+            ))
+    
+    unit_label = "cm/km" if unit == "cm/km" else "m/100km"
+    fig.update_layout(
+        title="SSH Slope Timeline - Multi-Dataset Comparison",
+        xaxis_title="Time",
+        yaxis_title=f"Slope ({unit_label})",
+        height=500,
+        template="plotly_white",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Statistics table
+    st.markdown("### 📊 Summary Statistics")
+    stats_data = []
+    for dataset_key, data in loaded_datasets.items():
+        slope = getattr(data, 'slope_series', None)
+        if slope is None:
+            continue
+        valid_slope = slope[~np.isnan(slope)]
+        if len(valid_slope) == 0:
+            continue
+        
+        stats_data.append({
+            "Dataset": DATASET_NAMES.get(dataset_key, dataset_key),
+            "Mean (m/100km)": f"{np.mean(valid_slope):.4f}",
+            "Std (m/100km)": f"{np.std(valid_slope):.4f}",
+            "Min": f"{np.min(valid_slope):.4f}",
+            "Max": f"{np.max(valid_slope):.4f}",
+            "N": len(valid_slope)
+        })
+    
+    if stats_data:
+        st.dataframe(pd.DataFrame(stats_data), use_container_width=True)
+
+
+def _render_multi_dot_comparison(loaded_datasets: dict, config: AppConfig):
+    """Render DOT profile comparison for multiple datasets."""
+    st.subheader("DOT Profile Comparison")
+    
+    fig = go.Figure()
+    
+    for dataset_key, data in loaded_datasets.items():
+        color = DATASET_COLORS.get(dataset_key, "gray")
+        name = DATASET_NAMES.get(dataset_key, dataset_key)
+        
+        profile_mean = getattr(data, 'profile_mean', None)
+        x_km = getattr(data, 'x_km', None)
+        
+        if profile_mean is None or x_km is None:
+            continue
+        
+        valid_mask = ~np.isnan(profile_mean)
+        if np.sum(valid_mask) == 0:
+            continue
+        
+        fig.add_trace(go.Scatter(
+            x=x_km[valid_mask],
+            y=profile_mean[valid_mask],
+            mode="lines+markers",
+            name=name,
+            line=dict(width=2, color=color),
+            marker=dict(size=4, color=color)
+        ))
+    
+    fig.update_layout(
+        title="Mean DOT Profile Along Gate",
+        xaxis_title="Distance along gate (km)",
+        yaxis_title="DOT (m)",
+        height=450,
+        template="plotly_white",
+        hovermode="x unified"
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Profile statistics
+    with st.expander("📈 Profile Statistics"):
+        for dataset_key, data in loaded_datasets.items():
+            profile_mean = getattr(data, 'profile_mean', None)
+            x_km = getattr(data, 'x_km', None)
+            if profile_mean is None:
+                continue
+            valid = profile_mean[~np.isnan(profile_mean)]
+            name = DATASET_NAMES.get(dataset_key, dataset_key)
+            st.markdown(f"**{name}**: Mean={np.mean(valid):.4f}m, Range={np.ptp(valid):.4f}m, Gradient={np.mean(np.diff(valid))*1000:.2f}mm/km")
+
+
+def _render_multi_spatial_overview(loaded_datasets: dict, config: AppConfig):
+    """Render spatial overview for multiple datasets."""
+    st.subheader("Spatial Overview")
+    
+    # Select dataset to show
+    dataset_options = list(loaded_datasets.keys())
+    selected = st.selectbox(
+        "Select dataset for spatial map",
+        dataset_options,
+        format_func=lambda x: DATASET_NAMES.get(x, x),
+        key="multi_spatial_select"
+    )
+    
+    data = loaded_datasets[selected]
+    
+    # Try to get DataFrame
+    df = getattr(data, 'df', None)
+    gate_lon = getattr(data, 'gate_lon_pts', None)
+    gate_lat = getattr(data, 'gate_lat_pts', None)
+    
+    if df is not None and 'lon' in df.columns and 'lat' in df.columns:
+        # Sample for performance
+        if len(df) > 10000:
+            df_plot = df.sample(10000)
+        else:
+            df_plot = df
+        
+        fig = px.scatter_mapbox(
+            df_plot,
+            lat="lat",
+            lon="lon",
+            color="dot" if "dot" in df.columns else None,
+            color_continuous_scale="RdBu_r",
+            zoom=4,
+            height=500,
+            title=f"{DATASET_NAMES.get(selected, selected)} - Observation Locations"
+        )
+        fig.update_layout(mapbox_style="carto-positron")
+        
+        # Add gate line
+        if gate_lon is not None and gate_lat is not None:
+            fig.add_trace(go.Scattermapbox(
+                lon=gate_lon,
+                lat=gate_lat,
+                mode="lines",
+                name="Gate",
+                line=dict(width=3, color="red")
+            ))
+        
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info(f"No spatial data available for {DATASET_NAMES.get(selected, selected)}")
+    
+    # Show gate coordinates for all datasets
+    st.markdown("### Gate Coordinates (all datasets)")
+    for dk, d in loaded_datasets.items():
+        gate_lon = getattr(d, 'gate_lon_pts', None)
+        gate_lat = getattr(d, 'gate_lat_pts', None)
+        if gate_lon is not None:
+            st.caption(f"**{DATASET_NAMES.get(dk, dk)}**: lon=[{gate_lon.min():.2f}, {gate_lon.max():.2f}], lat=[{gate_lat.min():.2f}, {gate_lat.max():.2f}]")
+
+
+def _render_multi_geostrophic_comparison(loaded_datasets: dict, config: AppConfig):
+    """Render geostrophic velocity comparison."""
+    st.subheader("Geostrophic Velocity Comparison")
+    
+    fig = go.Figure()
+    
+    for dataset_key, data in loaded_datasets.items():
+        color = DATASET_COLORS.get(dataset_key, "gray")
+        name = DATASET_NAMES.get(dataset_key, dataset_key)
+        
+        v_geo = getattr(data, 'v_geostrophic_series', None)
+        time_arr = getattr(data, 'time_array', None)
+        
+        if v_geo is None:
+            continue
+        
+        valid_mask = ~np.isnan(v_geo)
+        if np.sum(valid_mask) == 0:
+            continue
+        
+        x_vals = time_arr if time_arr is not None else np.arange(len(v_geo))
+        
+        fig.add_trace(go.Scatter(
+            x=[x_vals[i] for i in range(len(x_vals)) if valid_mask[i]],
+            y=[v_geo[i] for i in range(len(v_geo)) if valid_mask[i]],
+            mode="markers+lines",
+            name=name,
+            marker=dict(size=5, color=color),
+            line=dict(width=2, color=color)
+        ))
+    
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", line_width=1)
+    
+    fig.update_layout(
+        title="Cross-Gate Geostrophic Velocity",
+        xaxis_title="Time",
+        yaxis_title="Velocity (m/s)",
+        height=450,
+        template="plotly_white",
+        hovermode="x unified"
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Convert to Sv
+    st.markdown("### 🌊 Transport Estimation")
+    st.info("For transport (Sv), multiply velocity by cross-section area. Gate depth profile required.")
+
+
+def _render_multi_correlation(loaded_datasets: dict, config: AppConfig):
+    """Render correlation analysis between datasets."""
+    st.subheader("Correlation Analysis")
+    
+    if len(loaded_datasets) < 2:
+        st.warning("Need at least 2 datasets for correlation analysis")
+        return
+    
+    # Build correlation matrix from slope series
+    slope_data = {}
+    for dk, data in loaded_datasets.items():
+        slope = getattr(data, 'slope_series', None)
+        time_arr = getattr(data, 'time_array', None)
+        if slope is not None and time_arr is not None:
+            # Convert to DataFrame with time index
+            df_temp = pd.DataFrame({
+                'time': pd.to_datetime(time_arr),
+                'slope': slope
+            }).set_index('time')
+            slope_data[DATASET_NAMES.get(dk, dk)] = df_temp['slope']
+    
+    if len(slope_data) < 2:
+        st.warning("Not enough datasets with slope data for correlation")
+        return
+    
+    # Combine into single DataFrame (align by time)
+    df_combined = pd.DataFrame(slope_data)
+    
+    # Correlation matrix
+    corr_matrix = df_combined.corr()
+    
+    fig = px.imshow(
+        corr_matrix,
+        labels=dict(color="Correlation"),
+        x=corr_matrix.columns,
+        y=corr_matrix.columns,
+        color_continuous_scale="RdBu_r",
+        zmin=-1, zmax=1,
+        text_auto=".3f"
+    )
+    fig.update_layout(
+        title="Slope Correlation Matrix",
+        height=400
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Pairwise scatter plots
+    st.markdown("### Pairwise Scatter Plots")
+    dataset_names = list(slope_data.keys())
+    
+    if len(dataset_names) >= 2:
+        col1, col2 = st.columns(2)
+        with col1:
+            x_dataset = st.selectbox("X-axis", dataset_names, key="corr_x")
+        with col2:
+            y_dataset = st.selectbox("Y-axis", [d for d in dataset_names if d != x_dataset], key="corr_y")
+        
+        # Get common times
+        x_data = df_combined[x_dataset].dropna()
+        y_data = df_combined[y_dataset].dropna()
+        common_idx = x_data.index.intersection(y_data.index)
+        
+        if len(common_idx) > 2:
+            x_vals = x_data.loc[common_idx].values
+            y_vals = y_data.loc[common_idx].values
+            
+            # Scatter plot with regression
+            fig_scatter = px.scatter(
+                x=x_vals, y=y_vals,
+                labels={'x': f"{x_dataset} (m/100km)", 'y': f"{y_dataset} (m/100km)"},
+                trendline="ols"
+            )
+            fig_scatter.update_layout(
+                title=f"{x_dataset} vs {y_dataset} (N={len(common_idx)})",
+                height=400
+            )
+            st.plotly_chart(fig_scatter, use_container_width=True)
+            
+            # Statistics
+            from scipy import stats as scipy_stats
+            r, p = scipy_stats.pearsonr(x_vals, y_vals)
+            rmse = np.sqrt(np.mean((x_vals - y_vals)**2))
+            bias = np.mean(x_vals - y_vals)
+            
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Pearson R", f"{r:.3f}")
+            col2.metric("P-value", f"{p:.2e}")
+            col3.metric("RMSE", f"{rmse:.4f}")
+            col4.metric("Bias", f"{bias:.4f}")
+        else:
+            st.warning("Not enough overlapping data points")
+
+
+def _render_multi_export(loaded_datasets: dict, config: AppConfig):
+    """Render export options for multiple datasets."""
+    st.subheader("Export Data")
+    
+    # Dataset selector
+    export_datasets = st.multiselect(
+        "Select datasets to export",
+        list(loaded_datasets.keys()),
+        default=list(loaded_datasets.keys()),
+        format_func=lambda x: DATASET_NAMES.get(x, x),
+        key="export_datasets"
+    )
+    
+    if not export_datasets:
+        st.warning("Select at least one dataset")
+        return
+    
+    # Export format
+    export_format = st.radio(
+        "Export format",
+        ["CSV (separate files)", "CSV (merged)", "Excel"],
+        horizontal=True,
+        key="export_format"
+    )
+    
+    if st.button("📥 Generate Export", key="export_btn"):
+        with st.spinner("Preparing export..."):
+            if export_format == "CSV (separate files)":
+                for dk in export_datasets:
+                    data = loaded_datasets[dk]
+                    slope = getattr(data, 'slope_series', None)
+                    time_arr = getattr(data, 'time_array', None)
+                    
+                    if slope is not None:
+                        df_export = pd.DataFrame({
+                            'time': time_arr,
+                            'slope_m_100km': slope,
+                            'v_geostrophic_m_s': getattr(data, 'v_geostrophic_series', np.nan)
+                        })
+                        
+                        csv = df_export.to_csv(index=False)
+                        st.download_button(
+                            f"📥 Download {DATASET_NAMES.get(dk, dk)}",
+                            csv,
+                            f"{dk}_timeseries.csv",
+                            "text/csv",
+                            key=f"dl_{dk}"
+                        )
+            
+            elif export_format == "CSV (merged)":
+                # Merge all datasets by time
+                merged_data = {}
+                for dk in export_datasets:
+                    data = loaded_datasets[dk]
+                    slope = getattr(data, 'slope_series', None)
+                    time_arr = getattr(data, 'time_array', None)
+                    name = DATASET_NAMES.get(dk, dk)
+                    
+                    if slope is not None and time_arr is not None:
+                        for i, t in enumerate(time_arr):
+                            t_str = str(t)[:10] if hasattr(t, '__str__') else str(t)
+                            if t_str not in merged_data:
+                                merged_data[t_str] = {'time': t_str}
+                            merged_data[t_str][f'{name}_slope'] = slope[i] if i < len(slope) else np.nan
+                
+                df_merged = pd.DataFrame(list(merged_data.values()))
+                csv = df_merged.to_csv(index=False)
+                st.download_button(
+                    "📥 Download Merged CSV",
+                    csv,
+                    "comparison_merged.csv",
+                    "text/csv"
+                )
+            
+            elif export_format == "Excel":
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    for dk in export_datasets:
+                        data = loaded_datasets[dk]
+                        slope = getattr(data, 'slope_series', None)
+                        time_arr = getattr(data, 'time_array', None)
+                        
+                        if slope is not None:
+                            df_export = pd.DataFrame({
+                                'time': time_arr,
+                                'slope_m_100km': slope,
+                                'v_geostrophic_m_s': getattr(data, 'v_geostrophic_series', np.nan)
+                            })
+                            sheet_name = DATASET_NAMES.get(dk, dk)[:31]  # Excel limit
+                            df_export.to_excel(writer, sheet_name=sheet_name, index=False)
+                
+                st.download_button(
+                    "📥 Download Excel",
+                    output.getvalue(),
+                    "comparison_data.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+        
+        st.success("✅ Export ready!")
+
+
+# ==============================================================================
+# CMEMS L4 TABS (Gridded via API)
+# ==============================================================================
+
+def _render_cmems_l4_tabs(cmems_l4_data, config: AppConfig):
+    """Render tabs for CMEMS L4 gridded data."""
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📈 Slope Timeline",
+        "📊 DOT Profile",
+        "🗺️ Spatial Map",
+        "🌊 Geostrophic Velocity",
+        "📥 Export"
+    ])
+    
+    with tab1:
+        _render_dtu_slope_timeline(cmems_l4_data, config)  # Same structure as DTU
+    with tab2:
+        _render_dtu_dot_profile(cmems_l4_data, config)
+    with tab3:
+        _render_cmems_l4_spatial(cmems_l4_data, config)
+    with tab4:
+        _render_dtu_geostrophic_velocity(cmems_l4_data, config)
+    with tab5:
+        _render_dtu_export_tab(cmems_l4_data, config)
+
+
+def _render_cmems_l4_spatial(cmems_l4_data, config: AppConfig):
+    """Render spatial map for CMEMS L4 gridded data."""
+    st.subheader("CMEMS L4 Spatial Coverage")
+    
+    strait_name = getattr(cmems_l4_data, 'strait_name', 'Unknown')
+    time_range = getattr(cmems_l4_data, 'time_range', ('', ''))
+    n_obs = getattr(cmems_l4_data, 'n_observations', 0)
+    
+    st.markdown(f"**Gate**: {strait_name}")
+    st.markdown(f"**Period**: {time_range[0][:10] if time_range[0] else '?'} to {time_range[1][:10] if time_range[1] else '?'}")
+    st.markdown(f"**Observations**: {n_obs:,}")
+    
+    # Get gate coordinates
+    gate_lon = getattr(cmems_l4_data, 'gate_lon_pts', None)
+    gate_lat = getattr(cmems_l4_data, 'gate_lat_pts', None)
+    
+    if gate_lon is not None and gate_lat is not None:
+        # Create map centered on gate
+        center_lon = (gate_lon.min() + gate_lon.max()) / 2
+        center_lat = (gate_lat.min() + gate_lat.max()) / 2
+        
+        fig = go.Figure()
+        
+        # Add gate line
+        fig.add_trace(go.Scattermapbox(
+            lon=gate_lon,
+            lat=gate_lat,
+            mode="lines+markers",
+            name="Gate",
+            line=dict(width=4, color="red"),
+            marker=dict(size=6, color="red")
+        ))
+        
+        fig.update_layout(
+            mapbox=dict(
+                style="carto-positron",
+                center=dict(lon=center_lon, lat=center_lat),
+                zoom=5
+            ),
+            height=500,
+            title=f"CMEMS L4 Gate: {strait_name}"
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("No gate coordinates available")
 
 
 # ==============================================================================

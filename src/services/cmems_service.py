@@ -15,6 +15,7 @@ This service processes Jason-1/2/3 along-track altimetry data from CMEMS
 and produces PassData objects compatible with the NICO visualization tabs.
 
 Data Flow:
+
     UI → CMEMSService → load_all_jason_files → NetCDF files (local J1/J2/J3)
                       → filter_by_track → DataFrame
                       → compute_monthly_slopes → slope_series, v_geostrophic
