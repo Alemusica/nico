@@ -1,7 +1,69 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-04 (Session - CMEMS L3 API + NO ALL TRACKS)
+> Last Updated: 2026-01-06 (Session - Recovery + Cache + Bathymetry Integration)
 > Agent: Use this file to track progress. Update after each task.
+
+---
+
+## 🔄 SESSION 2026-01-06: Recovery & Integration
+
+### 🚨 Problema Critico: File Persi
+Durante una sessione precedente, `git checkout HEAD --` ha cancellato modifiche non committate.
+**8 file recuperati dalla VS Code Local History** (~1546 righe).
+
+### Commits della Giornata
+
+| Hash | Descrizione |
+|------|-------------|
+| `0a29229` | Multi-dataset comparison mode + charts refactor |
+| `1497aa3` | Recover lost services from VS Code History |
+| `e2b268d` | Integrate recovered services into exports |
+| `1d95ded` | Integrate Cache and Bathymetry services |
+
+### File Recuperati
+| File | Righe | Funzionalità |
+|------|-------|--------------|
+| `src/services/cache_service.py` | 471 | DataCache con persistenza pickle |
+| `src/services/bathymetry_service.py` | 229 | BathymetryService per GEBCO |
+| `src/services/transport_service.py` | 243 | Calcolo volume transport |
+| `app/components/loaders/base.py` | 220 | `apply_longitude_filter()` |
+| `app/components/loaders/slcci_loader.py` | 140 | Loader SLCCI |
+| `app/components/loaders/dtu_loader.py` | 114 | Loader DTU |
+| `app/components/loaders/cmems_l4_loader.py` | 112 | Loader CMEMS L4 |
+| `app/components/loaders/__init__.py` | 17 | Exports |
+
+### Integrazioni Completate
+
+#### ✅ Cache Service (`sidebar.py`)
+```python
+from src.services.cache_service import DataCache
+_cache = DataCache()
+
+# In _load_slcci_data():
+cached_data = _cache.load("slcci", gate_name, pass_number=pass_number)
+if cached_data is None:
+    pass_data = service.load_pass_data(...)
+    _cache.save("slcci", gate_name, pass_data, pass_number=pass_number)
+```
+
+#### ✅ Bathymetry Service (`volume_transport_chart.py`)
+```python
+from src.services.bathymetry_service import BathymetryService, BathymetryProfile
+
+def _render_computed_volume_transport():
+    profile = _get_bathymetry_profile(pass_data)
+    if profile:
+        gate_depth = profile.mean_depth  # From GEBCO
+```
+
+### ⚠️ Problemi Identificati (vedi AUDIT_REPORT_2026-01-06.md)
+
+| Problema | Severity | Status |
+|----------|----------|--------|
+| lon_filter non integrato in sidebar | 🔴 HIGH | TODO |
+| Loaders module non usato | 🟠 MEDIUM | Decisione |
+| GEBCO file mancante | 🟠 MEDIUM | User action |
+| .pkl files in git | 🟡 LOW | TODO |
 
 ---
 

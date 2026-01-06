@@ -97,6 +97,9 @@ Thumbs.db
 *.cache
 .streamlit/
 
+# Pickle cache files (large processed data)
+data/cache/processed/**/*.pkl
+
 # -----------------------------------------------------------------------------
 # Secrets / Credentials
 # -----------------------------------------------------------------------------

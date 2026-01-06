@@ -1,8 +1,8 @@
 # 🏗️ NICO Unified Architecture
 
-> **Version**: 2.0 - Unified Architecture  
-> **Created**: 2025-12-29  
-> **Status**: ✅ IMPLEMENTED (structure exists, wiring in progress)
+> **Version**: 2.1 - Post-Recovery Architecture  
+> **Updated**: 2026-01-06  
+> **Status**: ✅ IMPLEMENTED + Services Integrated
 
 ---
 
@@ -110,11 +110,18 @@ nico/
 │   │   ├── passes.py               # ✅ Pass filtering
 │   │   └── buffer.py               # ✅ Buffer calculations
 │   │
-│   ├── services/                   # ✅ DOMAIN SERVICES
-│   │   ├── __init__.py             # ✅ Exports GateService, DataService, AnalysisService
+│   ├── services/                   # ✅ DOMAIN SERVICES (Updated 2026-01-06)
+│   │   ├── __init__.py             # ✅ All exports
 │   │   ├── gate_service.py         # ✅ Gate operations
-│   │   ├── data_service.py         # ✅ Data loading (NOT YET WIRED TO UI)
-│   │   └── analysis_service.py     # ✅ Analysis pipelines
+│   │   ├── data_service.py         # ✅ Data loading
+│   │   ├── analysis_service.py     # ✅ Analysis pipelines
+│   │   ├── slcci_service.py        # ✅ ESA SLCCI loading
+│   │   ├── cmems_service.py        # ✅ CMEMS L3 along-track
+│   │   ├── cmems_l4_service.py     # ✅ CMEMS L4 gridded (API)
+│   │   ├── dtu_service.py          # ✅ DTUSpace gridded
+│   │   ├── cache_service.py        # ✅ NEW - Persistent cache
+│   │   ├── bathymetry_service.py   # ✅ NEW - GEBCO extraction
+│   │   └── transport_service.py    # ✅ NEW - Volume transport
 │   │
 │   ├── data/                       # ✅ DATA UTILITIES
 │   │   ├── loaders.py              # ✅ NetCDF loading
@@ -132,13 +139,24 @@ nico/
 │       ├── analysis_router.py      # ✅ /api/v1/analysis
 │       └── knowledge_router.py     # ✅ /api/v1/knowledge
 │
-├── app/                            # ✅ STREAMLIT UI
+├── app/                            # ✅ STREAMLIT UI (Updated 2026-01-06)
 │   ├── main.py                     # ✅ Entry point
-│   ├── state.py                    # ✅ Session state
+│   ├── state.py                    # ✅ Session state + AppConfig
 │   └── components/
-│       ├── sidebar.py              # ✅ Gate selection + file loading
-│       ├── data_selector.py        # ✅ Unified data selector (NOT WIRED)
-│       └── tabs.py                 # ✅ Visualization tabs
+│       ├── sidebar.py              # ✅ Gate/dataset selector + cache
+│       ├── tabs.py                 # ✅ All visualization tabs
+│       ├── data_selector.py        # ✅ Unified data selector
+│       ├── charts/                 # ✅ Chart components
+│       │   ├── slope_chart.py      # ✅ Slope timeline
+│       │   ├── dot_profile_chart.py # ✅ DOT profile
+│       │   ├── spatial_chart.py    # ✅ Spatial map
+│       │   ├── geostrophic_chart.py # ✅ Geostrophic velocity
+│       │   └── volume_transport_chart.py # ✅ +bathymetry
+│       └── loaders/                # ⚠️ NOT YET WIRED
+│           ├── base.py             # ✅ apply_longitude_filter
+│           ├── slcci_loader.py     # ✅ SLCCI loader
+│           ├── dtu_loader.py       # ✅ DTU loader
+│           └── cmems_l4_loader.py  # ✅ CMEMS L4 loader
 │
 ├── frontend/                       # ✅ REACT (master branch)
 │   └── src/                        # ✅ React + Cosmograph

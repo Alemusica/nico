@@ -490,6 +490,173 @@ Pydantic models: `BoundingBox`, `TimeRange`, `GateModel`, `DataRequest`, etc.
 
 ---
 
+## 💾 Cache Service (NEW 2026-01-06)
+
+### DataCache (`src/services/cache_service.py`)
+**Status**: ✅ Recovered & Integrated | **Used in**: Streamlit sidebar
+
+Persistent cache for processed PassData objects using pickle.
+
+```python
+from src.services.cache_service import DataCache
+
+cache = DataCache()
+
+# Save data
+cache.save("slcci", "fram_strait", pass_data, pass_number=248)
+
+# Load data (returns None if not cached)
+pass_data = cache.load("slcci", "fram_strait", pass_number=248)
+
+# Check if cached
+if cache.exists("slcci", "fram_strait", pass_number=248):
+    print("Data is cached!")
+
+# List cached items
+items = cache.list_cached("slcci")
+
+# Clear cache
+cache.clear("slcci", "fram_strait")  # Clear specific
+cache.clear_all()  # Clear everything
+```
+
+**Features**:
+- Pickle-based persistence
+- Automatic index.json tracking
+- Size and metadata tracking
+- Dataset-specific subdirectories
+
+**Cache Structure**:
+```
+data/cache/processed/
+├── index.json
+├── slcci/
+│   └── fram_strait_pass_248.pkl
+├── cmems_l4/
+│   └── fram_strait.pkl
+└── dtuspace/
+    └── fram_strait.pkl
+```
+
+**Files**:
+- `src/services/cache_service.py` (471 lines)
+
+---
+
+## 🌊 Bathymetry Service (NEW 2026-01-06)
+
+### BathymetryService (`src/services/bathymetry_service.py`)
+**Status**: ✅ Recovered & Integrated | **Used in**: Volume Transport Chart
+
+GEBCO bathymetry extraction along gate lines.
+
+```python
+from src.services.bathymetry_service import BathymetryService
+
+service = BathymetryService("data/bathymetry/gebco_2024.nc")
+profile = service.extract_profile(gate_lon, gate_lat, x_km)
+
+# Returns BathymetryProfile dataclass:
+# - depth: np.ndarray (positive = below sea level)
+# - lon, lat: np.ndarray
+# - x_km: np.ndarray (distance along gate)
+# - sill_depth: float (minimum depth)
+# - mean_depth: float
+# - max_depth: float
+# - source: str = "GEBCO"
+```
+
+**Features**:
+- Lazy loading (loads GEBCO on first use)
+- Bounding box subsetting (reduces memory)
+- RegularGridInterpolator for fast lookups
+- Sill depth detection
+
+**Requirements**:
+- GEBCO NetCDF file (~11GB global, or regional subset)
+- Download from: https://www.gebco.net/
+
+**Files**:
+- `src/services/bathymetry_service.py` (229 lines)
+
+---
+
+## 🚢 Transport Service (NEW 2026-01-06)
+
+### VolumeTransport (`src/services/transport_service.py`)
+**Status**: ✅ Recovered | **Used in**: Planned for volume transport tab
+
+Volume transport calculation from geostrophic velocity.
+
+```python
+from src.services.transport_service import (
+    compute_perpendicular_velocity,
+    calculate_volume_transport,
+    VolumeTransportResult
+)
+
+# Compute perpendicular velocity component
+v_perp = compute_perpendicular_velocity(
+    v_geo=geostrophic_velocity,
+    gate_lon=lon_array,
+    gate_lat=lat_array
+)
+
+# Calculate volume transport
+result = calculate_volume_transport(
+    v_perp=v_perp,
+    depth_profile=bathymetry_depth,
+    x_km=distance_km
+)
+# result.transport_sv: float (Sverdrup)
+# result.transport_m3s: float (m³/s)
+```
+
+**Formula**: Q = ∫∫ v⊥ dA
+- v⊥ = velocity perpendicular to gate
+- dA = cross-sectional area element
+- 1 Sv = 10⁶ m³/s
+
+**Files**:
+- `src/services/transport_service.py` (243 lines)
+
+---
+
+## 📥 Loaders Module (NEW 2026-01-06)
+
+### Data Loaders (`app/components/loaders/`)
+**Status**: ⚠️ Recovered but NOT YET USED | **Planned for**: Refactored sidebar
+
+Modular data loading with longitude filtering support.
+
+```python
+from app.components.loaders import (
+    load_slcci_data,
+    load_dtu_data,
+    load_cmems_l4_data,
+    apply_longitude_filter
+)
+
+# Load with longitude filter (for divided gates)
+result = load_slcci_data(
+    gate_id="fram_strait_west",
+    lon_filter_min=None,
+    lon_filter_max=0.0,  # West of 0°
+    cycles=range(1, 282),
+)
+```
+
+**Files**:
+- `app/components/loaders/__init__.py` (17 lines)
+- `app/components/loaders/base.py` (220 lines) - `apply_longitude_filter()`
+- `app/components/loaders/slcci_loader.py` (140 lines)
+- `app/components/loaders/dtu_loader.py` (114 lines)
+- `app/components/loaders/cmems_l4_loader.py` (112 lines)
+
+**Note**: These loaders are implemented but sidebar.py still uses internal functions. Integration pending.
+
+---
+
 ## 🎯 Migration Priority
 
 ### High Priority (Needed for Streamlit)
