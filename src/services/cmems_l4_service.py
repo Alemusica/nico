@@ -184,7 +184,12 @@ def _load_gate_gdf(gate_path: str) -> gpd.GeoDataFrame:
 
 
 def _extract_strait_name(gate_path: str) -> str:
-    """Extract clean strait name from gate filename."""
+    """
+    Extract clean strait name from gate filename.
+    
+    Returns lowercase with underscores for cache key consistency.
+    Example: "fram_strait_S3_pass_481.shp" -> "fram_strait"
+    """
     import re
     filename = Path(gate_path).stem
     
@@ -193,8 +198,8 @@ def _extract_strait_name(gate_path: str) -> str:
     name = re.sub(r'_S\d_pass_\d+', '', name)
     name = re.sub(r'_pass_\d+', '', name)
     
-    # Convert to title case
-    name = name.replace('_', ' ').replace('-', ' - ').title()
+    # Normalize: lowercase, underscores (for cache key consistency)
+    name = name.lower().replace(' ', '_').replace('-', '_')
     
     return name
 

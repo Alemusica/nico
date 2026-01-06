@@ -1554,9 +1554,11 @@ def _load_cmems_l4_data(config: AppConfig):
                 st.write(f"📅 Period: {config.cmems_l4_start} to {config.cmems_l4_end}")
                 st.write(f"📊 Variables: {', '.join(config.cmems_l4_variables)}")
                 
+                # Disable service-level cache - sidebar handles caching
                 pass_data = service.load_gate_data(
                     config=l4_config,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    use_cache=False  # Sidebar manages cache
                 )
                 
                 status.update(label="✅ CMEMS L4 downloaded!", state="complete", expanded=False)
