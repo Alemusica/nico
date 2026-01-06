@@ -11,6 +11,9 @@ This layer provides:
 - CMEMSService: CMEMS L3 along-track data loading (track variable)
 - CMEMSL4Service: CMEMS L4 gridded data loading via API
 - DTUService: DTUSpace v4 gridded DOT data loading and processing
+- DataCache: Persistent cache for processed PassData objects
+- BathymetryService: GEBCO bathymetry extraction along gates
+- VolumeTransport: Volume transport calculations from geostrophic velocity
 
 Dataset Comparison:
     | Dataset      | Type        | Filter Variable | Source    | DOI                                    |
@@ -23,6 +26,7 @@ Dataset Comparison:
 Usage:
     from src.services import GateService, DataService, SLCCIService, DTUService
     from src.services import CMEMSService, CMEMSL4Service
+    from src.services import DataCache, get_cache, BathymetryService
     
     gate_service = GateService()
     bbox = gate_service.get_bbox("fram_strait")
@@ -40,6 +44,11 @@ Usage:
     
     cmems_l4_service = CMEMSL4Service()  # Gridded via API
     l4_data = cmems_l4_service.load_gate_data(config)
+    
+    # Cache and utilities
+    cache = get_cache()
+    if cache.exists("slcci", "fram_strait", pass_number=248):
+        pass_data = cache.load("slcci", "fram_strait", pass_number=248)
 """
 
 from src.services.gate_service import GateService
@@ -50,6 +59,16 @@ from src.services.cmems_service import CMEMSService, CMEMSConfig
 from src.services.cmems_service import PassData as CMEMSPassData
 from src.services.cmems_l4_service import CMEMSL4Service, CMEMSL4Config, CMEMSL4PassData
 from src.services.dtu_service import DTUService, DTUConfig, DTUPassData
+
+# New services (recovered from VS Code History)
+from src.services.cache_service import DataCache, get_cache, cache_pass_data, load_cached_pass_data, is_cached
+from src.services.bathymetry_service import BathymetryService, BathymetryProfile
+from src.services.transport_service import (
+    VolumeTransportResult,
+    compute_perpendicular_velocity,
+    compute_segment_widths,
+    calculate_volume_transport,
+)
 
 __all__ = [
     # Core services
@@ -70,4 +89,18 @@ __all__ = [
     "DTUService",
     "DTUConfig",
     "DTUPassData",
+    # Cache service
+    "DataCache",
+    "get_cache",
+    "cache_pass_data",
+    "load_cached_pass_data",
+    "is_cached",
+    # Bathymetry service
+    "BathymetryService",
+    "BathymetryProfile",
+    # Transport service
+    "VolumeTransportResult",
+    "compute_perpendicular_velocity",
+    "compute_segment_widths",
+    "calculate_volume_transport",
 ]
