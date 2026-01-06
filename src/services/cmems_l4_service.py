@@ -156,8 +156,14 @@ class CMEMSL4PassData:
     ugos_matrix: Optional[np.ndarray] = None  # Shape: (n_gate_pts, n_time) - m/s
     vgos_matrix: Optional[np.ndarray] = None  # Shape: (n_gate_pts, n_time) - m/s
     
+    # Computed geostrophic velocity from slope (for tabs.py compatibility)
+    v_geostrophic_series: np.ndarray = field(default_factory=lambda: np.array([]))  # m/s
+    mean_latitude: float = 70.0  # For Coriolis calculation
+    coriolis_f: float = 1.38e-4  # s⁻¹ at ~70°N
+    
     # Fields with defaults (must come after required fields)
     data_source: str = "CMEMS L4"
+    dataset_name: str = "CMEMS L4"  # For tabs.py compatibility
     
     # Raw data for advanced analysis
     ds: Optional[xr.Dataset] = None  # Original xarray dataset
@@ -257,6 +263,35 @@ def _compute_slope_series(dot_matrix: np.ndarray, x_km: np.ndarray) -> np.ndarra
             continue
     
     return slope_series
+
+
+def _compute_geostrophic_velocity(
+    slope_series: np.ndarray,
+    mean_lat: float
+) -> Tuple[np.ndarray, float]:
+    """
+    Compute geostrophic velocity from slope.
+    
+    v = -g/f * (dη/dx)
+    
+    Args:
+        slope_series: (n_time,) slopes in m/100km
+        mean_lat: mean latitude for Coriolis parameter
+        
+    Returns:
+        v_geo: (n_time,) velocities in m/s
+        coriolis_f: Coriolis parameter used
+    """
+    lat_rad = np.deg2rad(mean_lat)
+    f = 2 * OMEGA * np.sin(lat_rad)
+    
+    # Convert slope from m/100km to m/m
+    slope_m_m = slope_series / 100000.0
+    
+    # Geostrophic velocity
+    v_geo = -G / f * slope_m_m
+    
+    return v_geo, f
 
 
 # ==============================================================================
@@ -473,6 +508,10 @@ class CMEMSL4Service:
         # Compute mean profile
         profile_mean = np.nanmean(dot_matrix, axis=1)
         
+        # Compute geostrophic velocity from slope (same as DTUService)
+        mean_lat = np.mean(gate_lat_pts)
+        v_geo_series, coriolis_f = _compute_geostrophic_velocity(slope_series, mean_lat)
+        
         # Count valid observations
         n_obs = np.sum(np.isfinite(dot_matrix))
         
@@ -493,6 +532,9 @@ class CMEMSL4Service:
             gate_lat_pts=gate_lat_pts,
             ugos_matrix=ugos_matrix,
             vgos_matrix=vgos_matrix,
+            v_geostrophic_series=v_geo_series,
+            mean_latitude=mean_lat,
+            coriolis_f=coriolis_f,
             ds=ds,
             n_observations=int(n_obs),
             time_range=(str(time_vals.min()), str(time_vals.max())),

@@ -1,11 +1,64 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-06 (Session - Recovery + Cache + Bathymetry + lon_filter + Standardization)
+> Last Updated: 2026-01-06 (Session - Unified Tabs + Geostrophic + Export)
 > Agent: Use this file to track progress. Update after each task.
 
 ---
 
-## 🔄 SESSION 2026-01-06: Recovery, Integration & Standardization
+## 🔄 SESSION 2026-01-06 (Evening): Unified Rendering Functions
+
+### 🎯 Obiettivo
+Standardizzare l'output di tutti e 3 i dataset (SLCCI, CMEMS L4, DTUSpace) con **gli stessi tab e plot**.
+
+### ✅ Funzioni Unificate Create (`app/components/tabs.py`)
+
+| # | Funzione | Descrizione |
+|---|----------|-------------|
+| 1 | `_render_unified_dataset_tabs()` | Entry point - crea 6 tab identiche |
+| 2 | `_render_unified_slope_timeline()` | Slope vs tempo + R² + trend line |
+| 3 | `_render_unified_dot_profile()` | DOT vs lon/km + switch unità m/mm |
+| 4 | `_render_unified_spatial_map()` | Mappa con gate line e osservazioni |
+| 5 | `_render_unified_monthly_analysis()` | 12 subplot mensili con R² e slope |
+| 6 | `_render_unified_geostrophic_velocity()` | v_geo time series + climatologia |
+| 7 | `_render_unified_export_tab()` | Export CSV per tutti i dati |
+
+### ✅ Tab Aggiornate per usare funzioni unificate
+- `_render_cmems_tabs()` → Unified
+- `_render_dtu_tabs()` → Unified  
+- `_render_slcci_tabs()` → Unified
+
+### ✅ Opzioni Uniformi per Tutti i Dataset
+- **X-axis toggle**: Distance (km) vs Longitude (°)
+- **Y-axis units**: m, cm, mm
+- **Trend line**: con R² e pendenza
+- **Monthly analysis**: 12 subplot con regressione lineare
+- **Geostrophic velocity**: time series + monthly climatology
+- **Export**: CSV per slope, DOT, v_geo
+
+### ✅ CMEMS L4 Geostrophic Velocity (`src/services/cmems_l4_service.py`)
+```python
+def _compute_geostrophic_velocity(slope_series, mean_lat):
+    """v = -g/f * (dη/dx)"""
+    g = 9.81
+    OMEGA = 7.2921e-5
+    f = 2 * OMEGA * np.sin(np.deg2rad(mean_lat))
+    slope_m_m = slope_series / 100000.0  # m/100km to m/m
+    return -g / f * slope_m_m, f
+```
+
+### ✅ Cache Manager UI (`app/components/sidebar.py`)
+- Nuovo bottone "🗑️ Manage Cache" in sidebar
+- Expander con lista item cached
+- Delete buttons per ogni item
+
+### ⚠️ Problema: tabs.py troppo grande
+- **4719 righe** - contiene codice duplicato
+- Molte funzioni legacy non più usate
+- **Prossimo step**: Shrink e cleanup
+
+---
+
+## 🔄 SESSION 2026-01-06 (Morning): Recovery + Integration
 
 ### 🚨 Problema Critico: File Persi
 Durante una sessione precedente, `git checkout HEAD --` ha cancellato modifiche non committate.

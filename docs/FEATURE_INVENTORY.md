@@ -1,6 +1,33 @@
 # 📚 Feature Inventory - Cross-Branch Documentation
 
 > **Purpose**: Documentare tutte le feature implementate nei vari branch/layer per evitare duplicazioni e perdita di informazioni.
+> **Last Updated**: 2026-01-06
+
+---
+
+## 🆕 Unified Tab System (2026-01-06)
+
+### Location: `app/components/tabs.py`
+
+**Status**: ✅ Implemented | **Used by**: All 3 datasets
+
+All datasets now share identical rendering functions:
+
+| Function | Purpose |
+|----------|---------|
+| `_render_unified_dataset_tabs()` | Main entry point - creates 6 tabs |
+| `_render_unified_slope_timeline()` | Slope vs time + R² + trend |
+| `_render_unified_dot_profile()` | DOT vs lon/km, m/cm/mm toggle |
+| `_render_unified_spatial_map()` | Map with gate line |
+| `_render_unified_monthly_analysis()` | 12 monthly subplots + R²/slope |
+| `_render_unified_geostrophic_velocity()` | v = -g/f * (dη/dx) |
+| `_render_unified_export_tab()` | CSV export |
+
+**Helper Functions**:
+- `_get_unified_dataset_info(data, dataset_type)` → Returns emoji, name, color, type
+- `_render_monthly_from_df(df, strait_name, ds_info)` → For along-track data
+
+---
 
 ## 🗺️ Location & Geo Features
 

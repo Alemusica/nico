@@ -367,6 +367,35 @@ class DataCache:
             'by_dataset': by_dataset,
         }
     
+    def get_all_entries(self) -> List[Dict]:
+        """
+        Get all cache entries with formatted info for UI display.
+        
+        Returns:
+            List of entries with display-friendly fields
+        """
+        entries = []
+        for key, entry in self._index.items():
+            file_path = self.cache_dir / entry['file_path']
+            size_mb = entry.get('size_bytes', 0) / (1024 * 1024)
+            
+            entries.append({
+                'key': key,
+                'dataset': entry['dataset'].upper(),
+                'gate': entry['gate_name'],
+                'pass': entry.get('pass_number'),
+                'track': entry.get('track_number'),
+                'size_mb': size_mb,
+                'date_range': entry.get('date_range', 'unknown'),
+                'created': entry.get('created_at', ''),
+                'n_obs': entry.get('n_observations', 0),
+                'exists': file_path.exists(),
+            })
+        
+        # Sort by dataset, then gate
+        entries.sort(key=lambda x: (x['dataset'], x['gate']))
+        return entries
+    
     # ==========================================================================
     # PRIVATE METHODS
     # ==========================================================================

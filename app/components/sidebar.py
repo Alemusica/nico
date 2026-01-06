@@ -42,6 +42,71 @@ from app.components.loaders.base import apply_longitude_filter
 _cache = DataCache()
 
 
+def _render_cache_viewer():
+    """Render cache viewer UI in sidebar."""
+    import pandas as pd
+    
+    # Get stats
+    stats = _cache.get_stats()
+    entries = _cache.get_all_entries()
+    
+    # Header stats
+    st.markdown(f"**📊 {stats['total_items']} items** | {stats['total_size_mb']:.1f} MB")
+    
+    if stats['total_items'] == 0:
+        st.info("Cache is empty. Load data to populate.")
+        return
+    
+    # Group by dataset
+    st.markdown("---")
+    
+    for ds_name in ["slcci", "cmems_l3", "cmems_l4", "dtuspace"]:
+        ds_entries = [e for e in entries if e['dataset'] == ds_name]
+        if not ds_entries:
+            continue
+        
+        # Dataset emoji
+        emoji = {"slcci": "🟠", "cmems_l3": "🔵", "cmems_l4": "🟣", "dtuspace": "🟢"}.get(ds_name, "📦")
+        ds_display = {"slcci": "SLCCI", "cmems_l3": "CMEMS L3", "cmems_l4": "CMEMS L4", "dtuspace": "DTUSpace"}.get(ds_name, ds_name)
+        
+        st.markdown(f"**{emoji} {ds_display}** ({len(ds_entries)} items)")
+        
+        for entry in ds_entries:
+            # Build label
+            label_parts = [entry['gate'].replace('_', ' ').title()]
+            if entry['pass']:
+                label_parts.append(f"Pass {entry['pass']}")
+            if entry['track']:
+                label_parts.append(f"T{entry['track']}")
+            label = " | ".join(label_parts)
+            
+            # Format date range
+            date_range = entry['date_range'] if entry['date_range'] != "N/A" else ""
+            
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.caption(f"• {label}")
+                if date_range:
+                    st.caption(f"  {date_range} ({entry['n_obs']} obs)")
+            with col2:
+                # Delete button
+                if st.button("🗑️", key=f"del_{entry['key']}", help=f"Delete {entry['key']}"):
+                    _cache.clear(entry['key'])
+                    st.rerun()
+    
+    # Clear all button
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Refresh", use_container_width=True, key="cache_refresh"):
+            st.rerun()
+    with col2:
+        if st.button("🗑️ Clear All", use_container_width=True, type="secondary", key="cache_clear_all"):
+            _cache.clear_all()
+            st.success("Cache cleared!")
+            st.rerun()
+
+
 def _get_lon_filter_for_gate(gate_id: str) -> Tuple[Optional[float], Optional[float]]:
     """
     Get longitude filter values for a gate from GateService.
@@ -652,6 +717,11 @@ def _render_data_source(config: AppConfig) -> AppConfig:
         # Comparison mode info
         if loaded_count >= 2:
             st.sidebar.success(f"✅ {loaded_count} datasets loaded - Comparison tabs available!")
+    
+    # === CACHE VIEWER ===
+    st.sidebar.divider()
+    with st.sidebar.expander("💾 **Cache Manager**", expanded=False):
+        _render_cache_viewer()
     
     # For SLCCI, add LOCAL/API selector
     if config.selected_dataset_type == "SLCCI":

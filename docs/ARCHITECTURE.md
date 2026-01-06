@@ -1,8 +1,23 @@
 # 🏗️ NICO Unified Architecture
 
-> **Version**: 2.1 - Post-Recovery Architecture  
+> **Version**: 2.2 - Unified Rendering Functions  
 > **Updated**: 2026-01-06  
-> **Status**: ✅ IMPLEMENTED + Services Integrated
+> **Status**: ✅ IMPLEMENTED + Unified Tabs
+
+---
+
+## 🆕 Unified Tab System (2026-01-06)
+
+All three datasets (SLCCI, CMEMS L4, DTUSpace) now share **identical tabs**:
+
+| Tab | Function | Features |
+|-----|----------|----------|
+| 📈 Slope Timeline | `_render_unified_slope_timeline()` | R², trend, units toggle |
+| 📊 DOT Profile | `_render_unified_dot_profile()` | km/lon x-axis, m/mm units |
+| 🗺️ Spatial Map | `_render_unified_spatial_map()` | Gate line, observations |
+| 📅 Monthly Analysis | `_render_unified_monthly_analysis()` | 12 subplots + R²/slope |
+| 🌊 Geostrophic | `_render_unified_geostrophic_velocity()` | v=-g/f*(dη/dx), climatology |
+| 📥 Export | `_render_unified_export_tab()` | CSV: slope, DOT, v_geo |
 
 ---
 

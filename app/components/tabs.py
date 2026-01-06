@@ -277,51 +277,117 @@ def _render_help_tab():
 
 def _render_slcci_tabs(slcci_data: Dict[str, Any], config: AppConfig):
     """Render tabs for SLCCI satellite data."""
+    _render_unified_dataset_tabs(slcci_data, config, dataset_type="slcci")
+
+
+def _render_unified_dataset_tabs(data, config: AppConfig, dataset_type: str = "auto"):
+    """
+    Unified tab rendering for ALL datasets (SLCCI, CMEMS L4, DTUSpace).
+    
+    Same 6 tabs with identical structure:
+    1. Slope Timeline
+    2. DOT Profile  
+    3. Spatial Map
+    4. Monthly Analysis
+    5. Geostrophic Velocity
+    6. Export
+    
+    Each function auto-detects dataset type and renders appropriately.
+    """
+    # Auto-detect dataset type if not specified
+    if dataset_type == "auto":
+        data_source = getattr(data, 'data_source', '')
+        if 'cmems' in data_source.lower() or 'CMEMS' in str(type(data)):
+            dataset_type = "cmems_l4"
+        elif 'dtu' in data_source.lower() or 'DTU' in str(type(data)):
+            dataset_type = "dtu"
+        else:
+            dataset_type = "slcci"
+    
+    # Get dataset info for display
+    ds_info = _get_unified_dataset_info(data, dataset_type)
+    
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "Slope Timeline", 
-        "DOT Profile", 
-        "Spatial Map", 
-        "Monthly Analysis",
-        "Geostrophic Velocity",
+        f"{ds_info['emoji']} Slope Timeline",
+        f"{ds_info['emoji']} DOT Profile",
+        f"{ds_info['emoji']} Spatial Map",
+        f"{ds_info['emoji']} Monthly Analysis",
+        f"{ds_info['emoji']} Geostrophic Velocity",
         "📥 Export"
     ])
     
     with tab1:
-        _render_slope_timeline(slcci_data, config)
+        _render_unified_slope_timeline(data, config, ds_info)
     with tab2:
-        _render_dot_profile(slcci_data, config)
+        _render_unified_dot_profile(data, config, ds_info)
     with tab3:
-        _render_spatial_map(slcci_data, config)
+        _render_unified_spatial_map(data, config, ds_info)
     with tab4:
-        _render_slcci_monthly_analysis(slcci_data, config)
+        _render_unified_monthly_analysis(data, config, ds_info)
     with tab5:
-        _render_geostrophic_velocity(slcci_data, config)
+        _render_unified_geostrophic_velocity(data, config, ds_info)
     with tab6:
-        _render_export_tab(slcci_data, None, config)
+        _render_unified_export_tab(data, config, ds_info)
+
+
+def _get_unified_dataset_info(data, dataset_type: str) -> dict:
+    """Get unified display info for any dataset type."""
+    data_source = getattr(data, 'data_source', '')
+    dataset_name = getattr(data, 'dataset_name', '')
+    
+    # Detect from data_source if type is generic
+    if 'cmems' in data_source.lower() or 'cmems' in dataset_name.lower():
+        return {
+            'emoji': '🟣',
+            'name': dataset_name or 'CMEMS L4',
+            'color': '#9B59B6',  # Purple
+            'type': 'cmems_l4'
+        }
+    elif 'dtu' in data_source.lower() or 'dtu' in dataset_name.lower():
+        return {
+            'emoji': '🟢',
+            'name': dataset_name or 'DTUSpace v4',
+            'color': '#2ECC71',  # Green
+            'type': 'dtu'
+        }
+    else:
+        # SLCCI
+        pass_num = getattr(data, 'pass_number', '')
+        name = f"SLCCI Pass {pass_num}" if pass_num else 'SLCCI'
+        return {
+            'emoji': '🟠',
+            'name': name,
+            'color': '#FF7F0E',  # Orange
+            'type': 'slcci'
+        }
 
 
 # ==============================================================================
-# TAB 1: SLOPE TIMELINE (from SLCCI PLOTTER Panel 1)
+# UNIFIED TAB 1: SLOPE TIMELINE
 # ==============================================================================
-def _render_slope_timeline(slcci_data, config: AppConfig):
+def _render_unified_slope_timeline(data, config: AppConfig, ds_info: dict):
     """
-    Render slope timeline using PassData.slope_series and time_array.
-    
-    From SLCCI PLOTTER:
-    - X-axis: time_array (dates)
-    - Y-axis: slope_series (m/100km)
+    Unified slope timeline for ALL datasets.
+    Works with SLCCI, CMEMS L4, and DTUSpace data structures.
     """
-    st.subheader("SSH Slope Timeline")
+    st.subheader(f"{ds_info['emoji']} {ds_info['name']} - Slope Timeline")
     
-    # Get attributes from PassData
-    slope_series = getattr(slcci_data, 'slope_series', None)
-    time_array = getattr(slcci_data, 'time_array', None)
-    time_periods = getattr(slcci_data, 'time_periods', None)
-    strait_name = getattr(slcci_data, 'strait_name', 'Unknown')
-    pass_number = getattr(slcci_data, 'pass_number', 0)
+    # Get attributes (works for all dataset types)
+    slope_series = getattr(data, 'slope_series', None)
+    time_array = getattr(data, 'time_array', None)
+    strait_name = getattr(data, 'strait_name', 'Unknown')
+    
+    # Get time range info
+    time_range = getattr(data, 'time_range', None)
+    start_year = getattr(data, 'start_year', None)
+    end_year = getattr(data, 'end_year', None)
+    
+    if time_range and not start_year:
+        start_year = time_range[0][:4] if time_range[0] else '?'
+        end_year = time_range[1][:4] if time_range[1] else '?'
     
     if slope_series is None:
-        st.error("❌ No slope_series in PassData. Check SLCCIService.")
+        st.error("❌ No slope_series available in data")
         return
     
     # Check for valid data
@@ -329,27 +395,19 @@ def _render_slope_timeline(slcci_data, config: AppConfig):
     n_valid = np.sum(valid_mask)
     
     if n_valid == 0:
-        st.warning("⚠️ All slope values are NaN. The satellite pass may not intersect the gate.")
-        st.info("💡 Try selecting a different pass number closer to the gate.")
+        st.warning("⚠️ All slope values are NaN")
         return
     
-    # Build time axis
-    if time_array is not None and len(time_array) > 0:
-        x_vals = time_array
-        x_label = "Date"
-    elif time_periods is not None:
-        x_vals = np.arange(len(slope_series))
-        x_label = "Time Period Index"
-    else:
-        x_vals = np.arange(len(slope_series))
-        x_label = "Index"
+    # Info bar
+    period_str = f"{start_year}–{end_year}" if start_year else ""
+    st.info(f"📊 **{ds_info['name']}** | {strait_name} | {period_str}")
     
     # Options
     col1, col2 = st.columns([2, 1])
     with col1:
-        show_trend = st.checkbox("Show trend line", value=True, key="slope_trend")
+        show_trend = st.checkbox("Show trend line", value=True, key=f"{ds_info['type']}_slope_trend")
     with col2:
-        unit = st.selectbox("Units", ["m/100km", "cm/km"], key="slope_unit")
+        unit = st.selectbox("Units", ["m/100km", "cm/km"], key=f"{ds_info['type']}_slope_unit")
     
     # Convert units
     if unit == "cm/km":
@@ -359,206 +417,973 @@ def _render_slope_timeline(slcci_data, config: AppConfig):
         y_vals = slope_series
         y_label = "Slope (m/100km)"
     
+    # Build time axis
+    if time_array is not None and len(time_array) > 0:
+        time_pd = pd.to_datetime(time_array)
+    else:
+        time_pd = pd.date_range('2000-01', periods=len(slope_series), freq='MS')
+    
     # Create figure
     fig = go.Figure()
     
-    # Plot only valid values
-    valid_x = [x_vals[i] for i in range(len(x_vals)) if valid_mask[i]]
-    valid_y = [y_vals[i] for i in range(len(y_vals)) if valid_mask[i]]
+    # Plot valid values only
+    valid_x = time_pd[valid_mask]
+    valid_y = y_vals[valid_mask]
     
     fig.add_trace(go.Scatter(
         x=valid_x,
         y=valid_y,
         mode="markers+lines",
-        name="SSH Slope",
-        marker=dict(size=6, color="steelblue"),
-        line=dict(width=1, color="steelblue")
+        name="DOT Slope",
+        marker=dict(size=6, color=ds_info['color']),
+        line=dict(width=2, color=ds_info['color'])
     ))
     
     # Zero line
     fig.add_hline(y=0, line_dash="solid", line_color="black", line_width=0.8)
     
-    # Trend line with R² calculation
+    # Trend line
     if show_trend and len(valid_y) > 2:
-        from scipy import stats as scipy_stats
         x_numeric = np.arange(len(valid_y))
-        slope, intercept, r_value, p_value, std_err = scipy_stats.linregress(x_numeric, valid_y)
-        p = np.poly1d([slope, intercept])
-        r_squared = r_value ** 2
+        z = np.polyfit(x_numeric, valid_y, 1)
+        p = np.poly1d(z)
         fig.add_trace(go.Scatter(
             x=valid_x,
             y=p(x_numeric),
             mode="lines",
-            name=f"Trend (slope={slope:.4f}, R²={r_squared:.3f})",
-            line=dict(dash="dash", color="red", width=2)
+            name=f"Trend ({z[0]:.4f}/step)",
+            line=dict(dash="dash", color="darkred", width=1.5)
         ))
     
     fig.update_layout(
-        title=f"{strait_name} - Pass {pass_number} - Monthly DOT Slope",
-        xaxis_title=x_label,
+        title=f"{ds_info['name']} - {strait_name}<br><sup>DOT Slope Time Series</sup>",
+        xaxis_title="Date",
         yaxis_title=y_label,
-        height=700,
-        template="plotly_white",
-        legend=dict(x=0.02, y=0.98, bgcolor='rgba(255,255,255,0.8)')
+        height=500,
+        template="plotly_white"
     )
     
     st.plotly_chart(fig, use_container_width=True)
     
     # Statistics
-    with st.expander("Statistics"):
+    with st.expander("📊 Statistics"):
         valid_slopes = slope_series[valid_mask]
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Mean", f"{np.mean(valid_slopes):.4f}")
+            st.metric("Mean", f"{np.mean(valid_slopes):.4f} m/100km")
         with col2:
-            st.metric("Std Dev", f"{np.std(valid_slopes):.4f}")
+            st.metric("Std Dev", f"{np.std(valid_slopes):.4f} m/100km")
         with col3:
-            st.metric("Valid Points", f"{n_valid}/{len(slope_series)}")
+            st.metric("Min", f"{np.min(valid_slopes):.4f} m/100km")
         with col4:
-            st.metric("Pass", pass_number)
+            st.metric("Max", f"{np.max(valid_slopes):.4f} m/100km")
+        
+        st.caption(f"Valid time steps: {n_valid}/{len(slope_series)}")
 
 
 # ==============================================================================
-# TAB 2: DOT PROFILE (from SLCCI PLOTTER Panel 2)
+# UNIFIED TAB 2: DOT PROFILE
 # ==============================================================================
-def _render_dot_profile(slcci_data, config: AppConfig):
+def _render_unified_dot_profile(data, config: AppConfig, ds_info: dict):
     """
-    Render DOT profile using PassData.profile_mean and x_km.
-    
-    From SLCCI PLOTTER Panel 2:
-    - X-axis: x_km (Distance along longitude in km)
-    - Y-axis: profile_mean (Mean DOT in m)
+    Unified DOT profile across gate for ALL datasets.
+    X-axis can be distance (km) or longitude.
+    Y-axis can be m, cm, or mm.
     """
-    st.subheader("Mean DOT Profile Across Gate")
+    st.subheader(f"{ds_info['emoji']} {ds_info['name']} - Mean DOT Profile")
     
-    # Get attributes from PassData
-    profile_mean = getattr(slcci_data, 'profile_mean', None)
-    x_km = getattr(slcci_data, 'x_km', None)
-    dot_matrix = getattr(slcci_data, 'dot_matrix', None)
-    time_periods = getattr(slcci_data, 'time_periods', None)
-    strait_name = getattr(slcci_data, 'strait_name', 'Unknown')
-    pass_number = getattr(slcci_data, 'pass_number', 0)
+    # Get data (handle both along-track and gridded)
+    profile_mean = getattr(data, 'profile_mean', None)
+    x_km = getattr(data, 'x_km', None)
+    gate_lon_pts = getattr(data, 'gate_lon_pts', None)
+    dot_matrix = getattr(data, 'dot_matrix', None)
+    df = getattr(data, 'df', None)
+    strait_name = getattr(data, 'strait_name', 'Unknown')
     
-    if profile_mean is None or x_km is None:
-        st.error("❌ No profile_mean or x_km in PassData.")
+    # For SLCCI (along-track), compute profile from df
+    if profile_mean is None and df is not None and 'dot' in df.columns:
+        if 'lon' in df.columns:
+            # Group by longitude bins to create profile
+            df_sorted = df.sort_values('lon')
+            profile_mean = df_sorted.groupby(pd.cut(df_sorted['lon'], bins=100))['dot'].mean().values
+            x_km = np.linspace(0, 100, len(profile_mean))  # Approximate
+            gate_lon_pts = np.linspace(df['lon'].min(), df['lon'].max(), len(profile_mean))
+    
+    if profile_mean is None or len(profile_mean) == 0:
+        st.warning("⚠️ No DOT profile data available")
         return
+    
+    if x_km is None:
+        x_km = np.arange(len(profile_mean))
     
     # Check for valid data
     valid_mask = ~np.isnan(profile_mean)
     if not np.any(valid_mask):
-        st.warning("⚠️ All DOT values are NaN.")
+        st.warning("⚠️ All DOT values are NaN")
         return
     
     # Options
-    col1, col2 = st.columns([2, 1])
+    col1, col2, col3 = st.columns(3)
     with col1:
         view_mode = st.radio(
             "View mode",
-            ["Mean Profile", "Individual Periods"],
+            ["Mean Profile", "Individual Time Steps"],
             horizontal=True,
-            key="dot_view_mode"
+            key=f"{ds_info['type']}_dot_view_mode"
         )
     with col2:
-        show_std = st.checkbox("Show ±1 Std Dev", value=True, key="dot_std")
+        x_axis_mode = st.selectbox("X-axis", ["Distance (km)", "Longitude (°)"], key=f"{ds_info['type']}_dot_xaxis")
+    with col3:
+        y_units = st.selectbox("Y units", ["m", "cm", "mm"], key=f"{ds_info['type']}_dot_yunits")
+    
+    show_std = st.checkbox("Show ±1 Std Dev", value=True, key=f"{ds_info['type']}_dot_std")
+    
+    # Y scaling
+    y_scale = {"m": 1.0, "cm": 100.0, "mm": 1000.0}[y_units]
+    
+    # X values
+    if x_axis_mode == "Distance (km)":
+        x_vals = x_km
+        x_label = "Distance along gate (km)"
+    else:
+        x_vals = gate_lon_pts if gate_lon_pts is not None else x_km
+        x_label = "Longitude (°)"
     
     fig = go.Figure()
     
     if view_mode == "Mean Profile":
-        # Plot mean profile (like SLCCI PLOTTER Panel 2)
+        # Plot mean profile
         fig.add_trace(go.Scatter(
-            x=x_km[valid_mask],
-            y=profile_mean[valid_mask],
+            x=x_vals[valid_mask],
+            y=profile_mean[valid_mask] * y_scale,
             mode="lines",
             name="Mean DOT",
-            line=dict(color="steelblue", width=2)
+            line=dict(color=ds_info['color'], width=2)
         ))
         
-        # Add std band
+        # Add std band if requested
         if show_std and dot_matrix is not None:
-            std = np.nanstd(dot_matrix, axis=1)
-            upper = profile_mean + std
-            lower = profile_mean - std
-            
+            profile_std = np.nanstd(dot_matrix, axis=1) * y_scale
+            upper = (profile_mean[valid_mask] * y_scale + profile_std[valid_mask])
+            lower = (profile_mean[valid_mask] * y_scale - profile_std[valid_mask])
             fig.add_trace(go.Scatter(
-                x=np.concatenate([x_km[valid_mask], x_km[valid_mask][::-1]]),
-                y=np.concatenate([upper[valid_mask], lower[valid_mask][::-1]]),
+                x=np.concatenate([x_vals[valid_mask], x_vals[valid_mask][::-1]]),
+                y=np.concatenate([upper, lower[::-1]]),
                 fill='toself',
-                fillcolor='rgba(70,130,180,0.2)',
-                line=dict(color='rgba(255,255,255,0)'),
+                fillcolor=f"rgba({int(ds_info['color'][1:3], 16)}, {int(ds_info['color'][3:5], 16)}, {int(ds_info['color'][5:7], 16)}, 0.2)",
+                line=dict(color='rgba(0,0,0,0)'),
                 name='±1 Std Dev'
             ))
     
-    else:  # Individual Periods
-        if dot_matrix is None or time_periods is None:
-            st.warning("No time period data available")
-            return
-        
-        n_periods = dot_matrix.shape[1]
-        period_labels = [str(p)[:7] for p in time_periods]
-        
-        selected = st.multiselect(
-            "Select periods",
-            options=list(range(n_periods)),
-            default=list(range(min(5, n_periods))),
-            format_func=lambda i: period_labels[i],
-            key="dot_periods"
-        )
-        
-        if not selected:
-            st.info("Select at least one period")
-            return
-        
-        colors = px.colors.qualitative.Plotly
-        for i, idx in enumerate(selected):
-            profile = dot_matrix[:, idx]
-            mask = ~np.isnan(profile)
-            if np.any(mask):
-                fig.add_trace(go.Scatter(
-                    x=x_km[mask],
-                    y=profile[mask],
-                    mode="lines",
-                    name=period_labels[idx],
-                    line=dict(color=colors[i % len(colors)])
-                ))
+    else:  # Individual Time Steps
+        if dot_matrix is None:
+            st.warning("No time step data available for individual profiles")
+        else:
+            n_time = dot_matrix.shape[1]
+            time_array = getattr(data, 'time_array', None)
+            
+            # Let user select time steps
+            max_select = min(10, n_time)
+            selected = st.multiselect(
+                "Select time steps",
+                options=list(range(n_time)),
+                default=list(range(min(5, n_time))),
+                format_func=lambda i: str(pd.Timestamp(time_array[i]).strftime('%Y-%m')) if time_array is not None else f"Step {i}",
+                key=f"{ds_info['type']}_time_steps",
+                max_selections=max_select
+            )
+            
+            if selected:
+                colors = px.colors.qualitative.Set2
+                for i, idx in enumerate(selected):
+                    profile = dot_matrix[:, idx]
+                    mask = ~np.isnan(profile)
+                    if np.any(mask):
+                        color = colors[i % len(colors)]
+                        label = str(pd.Timestamp(time_array[idx]).strftime('%Y-%m')) if time_array is not None else f"Step {idx}"
+                        fig.add_trace(go.Scatter(
+                            x=x_vals[mask],
+                            y=profile[mask] * y_scale,
+                            mode="lines",
+                            name=label,
+                            line=dict(color=color, width=1.5)
+                        ))
     
     # Add WEST/EAST labels
-    fig.add_annotation(
-        x=x_km[valid_mask].min(),
-        y=np.nanmax(profile_mean[valid_mask]),
-        text="WEST",
-        showarrow=False,
-        font=dict(size=12, color="black"),
-        xanchor="left"
-    )
-    fig.add_annotation(
-        x=x_km[valid_mask].max(),
-        y=np.nanmax(profile_mean[valid_mask]),
-        text="EAST",
-        showarrow=False,
-        font=dict(size=12, color="black"),
-        xanchor="right"
-    )
+    y_max = np.nanmax(profile_mean[valid_mask]) * y_scale
+    y_min = np.nanmin(profile_mean[valid_mask]) * y_scale
+    y_text = y_max - 0.05 * (y_max - y_min)
+    
+    fig.add_annotation(x=x_vals[valid_mask].min(), y=y_text, text="WEST", showarrow=False, font=dict(size=12, weight="bold"), xanchor="left")
+    fig.add_annotation(x=x_vals[valid_mask].max(), y=y_text, text="EAST", showarrow=False, font=dict(size=12, weight="bold"), xanchor="right")
     
     fig.update_layout(
-        title=f"{strait_name} - Pass {pass_number} - DOT Profile",
-        xaxis_title="Distance along longitude (km)",
-        yaxis_title="DOT (m)",
-        height=700,
-        template="plotly_white",
-        legend=dict(x=0.02, y=0.98, bgcolor='rgba(255,255,255,0.8)')
+        title=f"{ds_info['name']} - {strait_name}<br><sup>Mean DOT Profile Across Gate</sup>",
+        xaxis_title=x_label,
+        yaxis_title=f"DOT ({y_units})",
+        yaxis_tickformat=".3f",
+        height=500,
+        template="plotly_white"
     )
     
     st.plotly_chart(fig, use_container_width=True)
     
     # Stats
-    with st.expander("Profile Statistics"):
-        col1, col2, col3 = st.columns(3)
+    with st.expander("📊 Profile Statistics"):
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Mean DOT", f"{np.nanmean(profile_mean):.4f} m")
         with col2:
             st.metric("DOT Range", f"{np.nanmax(profile_mean) - np.nanmin(profile_mean):.4f} m")
         with col3:
-            st.metric("Gate Length", f"{x_km.max():.1f} km")
+            st.metric("Gate Length", f"{x_km[-1]:.1f} km" if len(x_km) > 0 else "N/A")
+        with col4:
+            st.metric("Valid Points", f"{np.sum(valid_mask)}/{len(profile_mean)}")
+
+
+# ==============================================================================
+# UNIFIED TAB 3: SPATIAL MAP
+# ==============================================================================
+def _render_unified_spatial_map(data, config: AppConfig, ds_info: dict):
+    """
+    Unified spatial map for ALL datasets.
+    Shows gate location and data coverage.
+    """
+    st.subheader(f"{ds_info['emoji']} {ds_info['name']} - Spatial Map")
+    
+    strait_name = getattr(data, 'strait_name', 'Unknown')
+    gate_lon_pts = getattr(data, 'gate_lon_pts', None)
+    gate_lat_pts = getattr(data, 'gate_lat_pts', None)
+    df = getattr(data, 'df', None)
+    time_range = getattr(data, 'time_range', ('', ''))
+    n_obs = getattr(data, 'n_observations', 0)
+    
+    # For gridded data, also get the DOT grid
+    dot_mean_grid = getattr(data, 'dot_mean_grid', None)
+    lat_grid = getattr(data, 'lat_grid', None)
+    lon_grid = getattr(data, 'lon_grid', None)
+    
+    # Info
+    period_str = ""
+    if time_range[0]:
+        period_str = f"{time_range[0][:10]} to {time_range[1][:10]}"
+    
+    st.markdown(f"**Gate**: {strait_name}")
+    if period_str:
+        st.markdown(f"**Period**: {period_str}")
+    if n_obs:
+        st.markdown(f"**Observations**: {n_obs:,}")
+    
+    # Options
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        show_gate = st.checkbox("Show gate line", value=True, key=f"{ds_info['type']}_map_gate")
+    with col2:
+        if dot_mean_grid is not None:
+            colorscale = st.selectbox("Colorscale", ["viridis", "RdBu_r", "Plasma"], key=f"{ds_info['type']}_map_colorscale")
+    
+    fig = go.Figure()
+    
+    # GRIDDED DATA: Show heatmap
+    if dot_mean_grid is not None and lat_grid is not None and lon_grid is not None:
+        if hasattr(dot_mean_grid, 'values'):
+            z_data = dot_mean_grid.values
+        else:
+            z_data = dot_mean_grid
+        
+        vmin = np.nanpercentile(z_data, 5)
+        vmax = np.nanpercentile(z_data, 95)
+        
+        fig.add_trace(go.Heatmap(
+            x=lon_grid,
+            y=lat_grid,
+            z=z_data,
+            colorscale=colorscale,
+            zmin=vmin,
+            zmax=vmax,
+            colorbar=dict(title="DOT (m)"),
+            name="Mean DOT"
+        ))
+    
+    # ALONG-TRACK DATA: Show scatter points
+    elif df is not None and 'lon' in df.columns and 'lat' in df.columns:
+        # Sample for performance
+        df_sample = df.sample(min(5000, len(df))) if len(df) > 5000 else df
+        
+        fig.add_trace(go.Scatter(
+            x=df_sample['lon'],
+            y=df_sample['lat'],
+            mode='markers',
+            marker=dict(
+                size=3,
+                color=df_sample['dot'] if 'dot' in df_sample.columns else ds_info['color'],
+                colorscale='viridis',
+                colorbar=dict(title="DOT (m)") if 'dot' in df_sample.columns else None,
+                opacity=0.6
+            ),
+            name='Observations'
+        ))
+    
+    # Add gate line
+    if show_gate and gate_lon_pts is not None and gate_lat_pts is not None:
+        fig.add_trace(go.Scatter(
+            x=gate_lon_pts,
+            y=gate_lat_pts,
+            mode="lines+markers",
+            name="Gate",
+            line=dict(color="red", width=3),
+            marker=dict(size=4, color="red")
+        ))
+    
+    # If no gate coords but df exists, show approximate location
+    elif show_gate and df is not None and 'lon' in df.columns:
+        lon_range = [df['lon'].min(), df['lon'].max()]
+        lat_mean = df['lat'].mean() if 'lat' in df.columns else 70
+        fig.add_trace(go.Scatter(
+            x=lon_range,
+            y=[lat_mean, lat_mean],
+            mode="lines",
+            name="Approx Gate",
+            line=dict(color="red", width=2, dash="dash")
+        ))
+    
+    fig.update_layout(
+        title=f"{ds_info['name']} - {strait_name}<br><sup>Spatial Coverage</sup>",
+        xaxis_title="Longitude (°)",
+        yaxis_title="Latitude (°)",
+        height=600,
+        template="plotly_white",
+        yaxis=dict(scaleanchor="x", scaleratio=1) if dot_mean_grid is not None else {}
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Stats
+    with st.expander("📊 Spatial Statistics"):
+        if gate_lon_pts is not None:
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Lon Range", f"{gate_lon_pts.min():.2f}° to {gate_lon_pts.max():.2f}°")
+            with col2:
+                st.metric("Lat Range", f"{gate_lat_pts.min():.2f}° to {gate_lat_pts.max():.2f}°")
+            with col3:
+                x_km = getattr(data, 'x_km', None)
+                if x_km is not None and len(x_km) > 0:
+                    st.metric("Gate Length", f"{x_km[-1]:.1f} km")
+            with col4:
+                st.metric("N Observations", f"{n_obs:,}" if n_obs else "N/A")
+
+
+# ==============================================================================
+# UNIFIED TAB 4: MONTHLY ANALYSIS
+# ==============================================================================
+def _render_unified_monthly_analysis(data, config: AppConfig, ds_info: dict):
+    """
+    Unified 12-month DOT analysis for ALL datasets.
+    Shows DOT profile vs distance/longitude for each month with linear regression.
+    Includes R² and slope statistics.
+    """
+    st.subheader(f"{ds_info['emoji']} {ds_info['name']} - Monthly Analysis")
+    
+    # Get required data
+    dot_matrix = getattr(data, 'dot_matrix', None)
+    time_array = getattr(data, 'time_array', None)
+    x_km = getattr(data, 'x_km', None)
+    gate_lon_pts = getattr(data, 'gate_lon_pts', None)
+    df = getattr(data, 'df', None)
+    strait_name = getattr(data, 'strait_name', 'Unknown')
+    
+    # For along-track data (SLCCI), use df directly
+    if dot_matrix is None and df is not None and 'month' in df.columns:
+        # Along-track mode
+        _render_monthly_from_df(df, strait_name, ds_info, config)
+        return
+    
+    # For gridded data (DTU, CMEMS L4)
+    if dot_matrix is None or time_array is None or x_km is None:
+        st.warning("⚠️ Missing data for monthly analysis")
+        return
+    
+    # Convert time to pandas for month extraction
+    time_pd = pd.to_datetime(time_array)
+    months = time_pd.month
+    
+    # Options
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        show_regression = st.checkbox("Show linear regression", value=True, key=f"{ds_info['type']}_monthly_reg")
+    with col2:
+        x_axis_mode = st.selectbox("X-axis", ["Distance (km)", "Longitude (°)"], key=f"{ds_info['type']}_monthly_xaxis")
+    with col3:
+        y_units = st.selectbox("Y units", ["m", "cm", "mm"], key=f"{ds_info['type']}_monthly_yunits")
+    
+    # Y-axis scaling
+    y_scale = {"m": 1.0, "cm": 100.0, "mm": 1000.0}[y_units]
+    
+    month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    
+    fig = make_subplots(
+        rows=3, cols=4,
+        subplot_titles=[f"{month_names[i]} ({i+1})" for i in range(12)],
+        horizontal_spacing=0.05,
+        vertical_spacing=0.1
+    )
+    
+    # X-axis values
+    if x_axis_mode == "Distance (km)":
+        x_vals = x_km
+        x_label = "Distance (km)"
+    else:
+        x_vals = gate_lon_pts if gate_lon_pts is not None else x_km
+        x_label = "Longitude (°)"
+    
+    slopes_info = []
+    
+    for month in range(1, 13):
+        row = (month - 1) // 4 + 1
+        col = (month - 1) % 4 + 1
+        
+        # Get time indices for this month
+        month_mask = months == month
+        if not np.any(month_mask):
+            continue
+        
+        # Average DOT profile for this month
+        dot_month = dot_matrix[:, month_mask]
+        dot_mean = np.nanmean(dot_month, axis=1)
+        
+        # Valid data mask
+        mask = np.isfinite(x_vals) & np.isfinite(dot_mean)
+        if np.sum(mask) < 2:
+            continue
+        
+        x_valid = x_vals[mask]
+        y_valid = dot_mean[mask] * y_scale
+        
+        # Scatter
+        fig.add_trace(
+            go.Scatter(
+                x=x_valid, y=y_valid, mode='markers',
+                marker=dict(size=4, color=ds_info['color'], opacity=0.6),
+                showlegend=False
+            ),
+            row=row, col=col
+        )
+        
+        # Regression
+        if show_regression and len(x_valid) > 2:
+            try:
+                from scipy import stats as scipy_stats
+                slope, intercept, r_value, p_value, std_err = scipy_stats.linregress(x_valid, y_valid)
+                r_squared = r_value ** 2
+                
+                # Convert slope to m/100km for standard comparison
+                if x_axis_mode == "Distance (km)":
+                    slope_m_100km = (slope / y_scale) * 100
+                else:
+                    # For longitude, approximate
+                    slope_m_100km = slope / y_scale
+                
+                slopes_info.append({
+                    'month': month,
+                    'name': month_names[month-1],
+                    'slope': slope,
+                    'slope_m_100km': slope_m_100km,
+                    'r_squared': r_squared,
+                    'n_time': np.sum(month_mask),
+                    'n_points': len(x_valid)
+                })
+                
+                # Regression line
+                x_line = np.linspace(x_valid.min(), x_valid.max(), 50)
+                y_line = slope * x_line + intercept
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_line, y=y_line, mode='lines',
+                        line=dict(color='red', width=2),
+                        showlegend=False,
+                        hovertemplate=f"R²={r_squared:.3f}<br>slope={slope:.4f}"
+                    ),
+                    row=row, col=col
+                )
+            except Exception:
+                pass
+    
+    fig.update_layout(
+        title=f"{ds_info['name']} - {strait_name} - Monthly Mean DOT Profile",
+        height=700,
+        template="plotly_white",
+        showlegend=False
+    )
+    
+    # Axis labels
+    x_label_short = "km" if x_axis_mode == "Distance (km)" else "Lon (°)"
+    for i in range(1, 13):
+        row = (i - 1) // 4 + 1
+        col = (i - 1) % 4 + 1
+        if row == 3:
+            fig.update_xaxes(title_text=x_label_short, row=row, col=col)
+        if col == 1:
+            fig.update_yaxes(title_text=f"DOT ({y_units})", row=row, col=col)
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Summary table with R² and slope
+    if slopes_info:
+        with st.expander("📊 Monthly Slopes & R² Summary"):
+            slopes_df = pd.DataFrame(slopes_info)
+            
+            display_df = pd.DataFrame({
+                'Month': slopes_df['name'],
+                f'Slope ({y_units}/{x_label_short})': slopes_df['slope'].apply(lambda x: f"{x:.4f}"),
+                'Slope (m/100km)': slopes_df['slope_m_100km'].apply(lambda x: f"{x:.4f}"),
+                'R²': slopes_df['r_squared'].apply(lambda x: f"{x:.3f}"),
+                'N time steps': slopes_df['n_time'],
+                'N points': slopes_df['n_points']
+            })
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Mean Slope", f"{slopes_df['slope_m_100km'].mean():.4f} m/100km")
+            with col2:
+                st.metric("Std Dev", f"{slopes_df['slope_m_100km'].std():.4f} m/100km")
+            with col3:
+                st.metric("Mean R²", f"{slopes_df['r_squared'].mean():.3f}")
+            with col4:
+                st.metric("Months with Data", len(slopes_df))
+
+
+def _render_monthly_from_df(df: pd.DataFrame, strait_name: str, ds_info: dict, config: AppConfig):
+    """
+    Render 12-month DOT analysis for along-track data (SLCCI-style).
+    Takes a DataFrame with lon, lat, dot, month columns.
+    """
+    st.subheader(f"{ds_info['emoji']} {ds_info['name']} - 12 Months DOT Analysis")
+    
+    if df is None or df.empty:
+        st.warning("No data available for monthly analysis.")
+        return
+    
+    required_cols = ['lon', 'lat', 'dot', 'month']
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        st.error(f"Missing required columns: {missing}")
+        return
+    
+    # Options
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        show_regression = st.checkbox("Show linear regression", value=True, key=f"monthly_df_reg_{ds_info['name']}")
+    with col2:
+        x_axis_mode = st.selectbox("X-axis", ["Distance (km)", "Longitude (°)"], key=f"monthly_df_xaxis_{ds_info['name']}")
+    with col3:
+        y_units = st.selectbox("Y units", ["m", "cm", "mm"], key=f"monthly_df_yunits_{ds_info['name']}")
+    
+    y_scale = {"m": 1.0, "cm": 100.0, "mm": 1000.0}[y_units]
+    
+    month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    
+    fig = make_subplots(
+        rows=3, cols=4,
+        subplot_titles=[f"{month_names[i]} ({i+1})" for i in range(12)],
+        horizontal_spacing=0.05,
+        vertical_spacing=0.1
+    )
+    
+    R_earth = 6371.0
+    mean_lat = df['lat'].mean()
+    lat_rad = np.deg2rad(mean_lat)
+    
+    # Compute x_km for distance mode
+    lon_min = df['lon'].min()
+    df = df.copy()
+    df['x_km'] = R_earth * np.deg2rad(df['lon'] - lon_min) * np.cos(lat_rad)
+    
+    slopes_info = []
+    
+    for month in range(1, 13):
+        row = (month - 1) // 4 + 1
+        col = (month - 1) % 4 + 1
+        
+        month_df = df[df['month'] == month]
+        if len(month_df) < 2:
+            continue
+        
+        if x_axis_mode == "Distance (km)":
+            x_data = month_df['x_km'].values
+        else:
+            x_data = month_df['lon'].values
+        
+        dot_data = month_df['dot'].values * y_scale
+        
+        mask = np.isfinite(x_data) & np.isfinite(dot_data)
+        if np.sum(mask) < 2:
+            continue
+        
+        x_valid = x_data[mask]
+        y_valid = dot_data[mask]
+        
+        fig.add_trace(
+            go.Scatter(
+                x=x_valid, y=y_valid, mode='markers',
+                marker=dict(size=3, color=ds_info['color'], opacity=0.5),
+                showlegend=False
+            ),
+            row=row, col=col
+        )
+        
+        if show_regression and len(x_valid) > 2:
+            try:
+                from scipy import stats as scipy_stats
+                slope, intercept, r_value, p_value, std_err = scipy_stats.linregress(x_valid, y_valid)
+                r_squared = r_value ** 2
+                
+                if x_axis_mode == "Distance (km)":
+                    slope_m_100km = (slope / y_scale) * 100
+                else:
+                    km_per_deg = R_earth * np.cos(lat_rad) * np.pi / 180
+                    slope_m_100km = (slope / y_scale) * km_per_deg * 100
+                
+                slopes_info.append({
+                    'month': month, 'name': month_names[month-1],
+                    'slope': slope, 'slope_m_100km': slope_m_100km,
+                    'r_squared': r_squared, 'n_points': len(x_valid)
+                })
+                
+                x_line = np.linspace(x_valid.min(), x_valid.max(), 50)
+                y_line = slope * x_line + intercept
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_line, y=y_line, mode='lines',
+                        line=dict(color='red', width=2), showlegend=False
+                    ),
+                    row=row, col=col
+                )
+            except Exception:
+                pass
+    
+    fig.update_layout(
+        title=f"{ds_info['emoji']} {ds_info['name']} - {strait_name} - Monthly DOT Analysis",
+        height=700, template="plotly_white", showlegend=False
+    )
+    
+    x_label_short = "km" if x_axis_mode == "Distance (km)" else "Lon (°)"
+    for i in range(1, 13):
+        row = (i - 1) // 4 + 1
+        col = (i - 1) % 4 + 1
+        if row == 3:
+            fig.update_xaxes(title_text=x_label_short, row=row, col=col)
+        if col == 1:
+            fig.update_yaxes(title_text=f"DOT ({y_units})", row=row, col=col)
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    if slopes_info:
+        with st.expander("📊 Monthly Slopes & R² Summary"):
+            slopes_df = pd.DataFrame(slopes_info)
+            display_df = pd.DataFrame({
+                'Month': slopes_df['name'],
+                f'Slope ({y_units}/{x_label_short})': slopes_df['slope'].apply(lambda x: f"{x:.4f}"),
+                'Slope (m/100km)': slopes_df['slope_m_100km'].apply(lambda x: f"{x:.4f}"),
+                'R²': slopes_df['r_squared'].apply(lambda x: f"{x:.3f}"),
+                'N Points': slopes_df['n_points']
+            })
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Mean Slope", f"{slopes_df['slope_m_100km'].mean():.4f} m/100km")
+            with col2:
+                st.metric("Std Dev", f"{slopes_df['slope_m_100km'].std():.4f} m/100km")
+            with col3:
+                st.metric("Mean R²", f"{slopes_df['r_squared'].mean():.3f}")
+            with col4:
+                st.metric("Months with Data", len(slopes_df))
+
+
+# ==============================================================================
+# UNIFIED GEOSTROPHIC VELOCITY
+# ==============================================================================
+def _render_unified_geostrophic_velocity(data, config: AppConfig, ds_info: dict):
+    """
+    Render geostrophic velocity analysis for any dataset.
+    Uses v = -g/f * (dη/dx) where f = 2Ω sin(lat)
+    """
+    st.subheader(f"{ds_info['emoji']} {ds_info['name']} - Geostrophic Velocity")
+    
+    g = 9.81  # m/s²
+    OMEGA = 7.2921e-5  # Earth's angular velocity (rad/s)
+    
+    strait_name = getattr(data, 'strait_name', 'Unknown')
+    
+    # Try to get pre-computed values (CMEMS/DTU style)
+    v_geostrophic_series = getattr(data, 'v_geostrophic_series', None)
+    mean_latitude = getattr(data, 'mean_latitude', None)
+    coriolis_f = getattr(data, 'coriolis_f', None)
+    slope_series = getattr(data, 'slope_series', None)
+    time_array = getattr(data, 'time_array', None)
+    
+    # For SLCCI, compute from slope_series
+    if v_geostrophic_series is None and slope_series is not None:
+        if mean_latitude is None:
+            df = getattr(data, 'df', None)
+            if df is not None and 'lat' in df.columns:
+                mean_latitude = df['lat'].mean()
+            else:
+                mean_latitude = 45.0  # fallback
+        
+        lat_rad = np.deg2rad(mean_latitude)
+        coriolis_f = 2 * OMEGA * np.sin(lat_rad)
+        
+        # slope is in m/100km, convert to m/m
+        slope_m_m = slope_series / 100000.0
+        v_geostrophic_series = -g / coriolis_f * slope_m_m
+    
+    if v_geostrophic_series is None:
+        st.warning("No geostrophic velocity data available. Requires slope data.")
+        return
+    
+    # Build time index
+    if hasattr(v_geostrophic_series, 'index'):
+        time_index = v_geostrophic_series.index
+        v_values = v_geostrophic_series.values
+    else:
+        if time_array is not None:
+            time_index = pd.to_datetime(time_array)
+        else:
+            time_index = pd.date_range('2000-01', periods=len(v_geostrophic_series), freq='MS')
+        v_values = np.array(v_geostrophic_series)
+    
+    st.info(f"Computed at lat={mean_latitude:.2f}° (f={coriolis_f:.2e} s⁻¹)")
+    
+    # Options
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        show_trend = st.checkbox("Show trend line", value=True, key=f"geo_trend_{ds_info['name']}")
+    with col2:
+        units = st.selectbox("Units", ["cm/s", "m/s"], key=f"geo_units_{ds_info['name']}")
+    
+    scale = 100.0 if units == "cm/s" else 1.0
+    v_scaled = v_values * scale
+    
+    # Time series plot
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=time_index,
+        y=v_scaled,
+        mode='lines+markers',
+        name='Geostrophic velocity',
+        line=dict(color=ds_info['color'], width=2),
+        marker=dict(size=5)
+    ))
+    
+    if show_trend and len(v_scaled) > 2:
+        try:
+            from scipy import stats as scipy_stats
+            x_numeric = np.arange(len(v_scaled))
+            mask = np.isfinite(v_scaled)
+            if np.sum(mask) > 2:
+                slope, intercept, r_value, _, _ = scipy_stats.linregress(x_numeric[mask], v_scaled[mask])
+                y_trend = slope * x_numeric + intercept
+                fig.add_trace(go.Scatter(
+                    x=time_index, y=y_trend, mode='lines',
+                    name=f'Trend (R²={r_value**2:.3f})',
+                    line=dict(color='red', dash='dash', width=2)
+                ))
+        except Exception:
+            pass
+    
+    # Add zero line
+    fig.add_hline(y=0, line_dash="dot", line_color="gray")
+    
+    fig.update_layout(
+        title=f"{ds_info['emoji']} {strait_name} - Geostrophic Velocity",
+        xaxis_title="Date",
+        yaxis_title=f"Velocity ({units})",
+        height=500,
+        template="plotly_white"
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Monthly climatology
+    with st.expander("📊 Monthly Climatology"):
+        df_v = pd.DataFrame({'time': time_index, 'v': v_scaled})
+        df_v['month'] = pd.to_datetime(df_v['time']).dt.month
+        
+        monthly_mean = df_v.groupby('month')['v'].mean()
+        monthly_std = df_v.groupby('month')['v'].std()
+        
+        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        
+        fig_clim = go.Figure()
+        fig_clim.add_trace(go.Bar(
+            x=month_names,
+            y=monthly_mean.values,
+            error_y=dict(type='data', array=monthly_std.values),
+            marker_color=ds_info['color']
+        ))
+        fig_clim.add_hline(y=0, line_dash="dot", line_color="gray")
+        fig_clim.update_layout(
+            title="Monthly Mean Geostrophic Velocity",
+            xaxis_title="Month",
+            yaxis_title=f"Velocity ({units})",
+            height=400,
+            template="plotly_white"
+        )
+        st.plotly_chart(fig_clim, use_container_width=True)
+    
+    # Statistics
+    with st.expander("📈 Statistics"):
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Mean", f"{np.nanmean(v_scaled):.2f} {units}")
+        with col2:
+            st.metric("Std Dev", f"{np.nanstd(v_scaled):.2f} {units}")
+        with col3:
+            st.metric("Max", f"{np.nanmax(v_scaled):.2f} {units}")
+        with col4:
+            st.metric("Min", f"{np.nanmin(v_scaled):.2f} {units}")
+
+
+# ==============================================================================
+# UNIFIED EXPORT TAB
+# ==============================================================================
+def _render_unified_export_tab(data, config: AppConfig, ds_info: dict):
+    """Unified export tab for all dataset types."""
+    st.subheader(f"{ds_info['emoji']} {ds_info['name']} - Data Export")
+    
+    strait_name = getattr(data, 'strait_name', 'Unknown')
+    pass_number = getattr(data, 'pass_number', 0)
+    
+    # Collect available data for export
+    export_options = []
+    
+    # 1. Slope time series
+    slope_series = getattr(data, 'slope_series', None)
+    time_array = getattr(data, 'time_array', None)
+    if slope_series is not None and len(slope_series) > 0:
+        export_options.append("Slope Time Series")
+    
+    # 2. DOT profile (raw dataframe)
+    df = getattr(data, 'df', None)
+    if df is not None and not df.empty:
+        export_options.append("DOT Observations (DataFrame)")
+    
+    # 3. DOT matrix (for gridded data)
+    dot_matrix = getattr(data, 'dot_matrix', None)
+    lon_array = getattr(data, 'lon_array', None)
+    if dot_matrix is not None:
+        export_options.append("DOT Matrix (Gridded)")
+    
+    # 4. Geostrophic velocity
+    v_geo = getattr(data, 'v_geostrophic_series', None)
+    if v_geo is not None:
+        export_options.append("Geostrophic Velocity")
+    
+    if not export_options:
+        st.warning("No data available for export.")
+        return
+    
+    selected = st.multiselect(
+        "Select data to export",
+        export_options,
+        default=export_options[:1]
+    )
+    
+    if not selected:
+        st.info("Select at least one data type to export.")
+        return
+    
+    st.markdown("---")
+    
+    # Export each selected type
+    for export_type in selected:
+        st.markdown(f"### {export_type}")
+        
+        if export_type == "Slope Time Series":
+            if hasattr(slope_series, 'index'):
+                df_export = pd.DataFrame({
+                    'time': slope_series.index,
+                    'slope_m_100km': slope_series.values
+                })
+            else:
+                times = time_array if time_array is not None else np.arange(len(slope_series))
+                df_export = pd.DataFrame({
+                    'time': times,
+                    'slope_m_100km': slope_series
+                })
+            
+            st.dataframe(df_export.head(20), use_container_width=True)
+            csv = df_export.to_csv(index=False)
+            st.download_button(
+                "📥 Download Slope CSV",
+                csv,
+                f"{strait_name}_{ds_info['type']}_slope.csv",
+                "text/csv"
+            )
+        
+        elif export_type == "DOT Observations (DataFrame)":
+            st.dataframe(df.head(50), use_container_width=True)
+            csv = df.to_csv(index=False)
+            st.download_button(
+                "📥 Download DOT CSV",
+                csv,
+                f"{strait_name}_{ds_info['type']}_dot.csv",
+                "text/csv"
+            )
+        
+        elif export_type == "DOT Matrix (Gridded)":
+            st.write(f"Matrix shape: {dot_matrix.shape} (lon × time)")
+            # Create matrix DataFrame with lon as index
+            if time_array is not None:
+                cols = [str(t)[:10] for t in time_array]
+            else:
+                cols = [f"t_{i}" for i in range(dot_matrix.shape[1])]
+            
+            if lon_array is not None:
+                idx = lon_array
+            else:
+                idx = np.arange(dot_matrix.shape[0])
+            
+            df_matrix = pd.DataFrame(dot_matrix, index=idx, columns=cols)
+            st.dataframe(df_matrix.head(20), use_container_width=True)
+            csv = df_matrix.to_csv()
+            st.download_button(
+                "📥 Download DOT Matrix CSV",
+                csv,
+                f"{strait_name}_{ds_info['type']}_dot_matrix.csv",
+                "text/csv"
+            )
+        
+        elif export_type == "Geostrophic Velocity":
+            if hasattr(v_geo, 'index'):
+                df_export = pd.DataFrame({
+                    'time': v_geo.index,
+                    'v_geostrophic_m_s': v_geo.values
+                })
+            else:
+                times = time_array if time_array is not None else np.arange(len(v_geo))
+                df_export = pd.DataFrame({
+                    'time': times,
+                    'v_geostrophic_m_s': v_geo
+                })
+            
+            st.dataframe(df_export.head(20), use_container_width=True)
+            csv = df_export.to_csv(index=False)
+            st.download_button(
+                "📥 Download Geostrophic CSV",
+                csv,
+                f"{strait_name}_{ds_info['type']}_geostrophic.csv",
+                "text/csv"
+            )
 
 
 # ==============================================================================
@@ -683,9 +1508,10 @@ def _render_spatial_map(slcci_data, config: AppConfig):
 def _render_slcci_monthly_analysis(slcci_data, config: AppConfig):
     """
     Render 12-month DOT analysis like SLCCI PLOTTER.
-    Shows DOT vs Longitude for each month (1-12) with linear regression.
+    Shows DOT vs Longitude/Distance for each month (1-12) with linear regression.
+    Includes R² and slope statistics.
     """
-    st.subheader("12 Months DOT Analysis")
+    st.subheader("🟠 SLCCI - 12 Months DOT Analysis")
     
     df = getattr(slcci_data, 'df', None)
     strait_name = getattr(slcci_data, 'strait_name', 'Unknown')
@@ -700,11 +1526,16 @@ def _render_slcci_monthly_analysis(slcci_data, config: AppConfig):
         return
     
     # Options
-    col1, col2 = st.columns([2, 1])
+    col1, col2, col3 = st.columns(3)
     with col1:
-        show_regression = st.checkbox("Show linear regression", value=True, key="monthly_reg")
+        show_regression = st.checkbox("Show linear regression", value=True, key="slcci_monthly_reg")
     with col2:
-        slope_units = st.selectbox("Slope units", ["mm/m", "m/100km"], key="monthly_units")
+        x_axis_mode = st.selectbox("X-axis", ["Longitude (°)", "Distance (km)"], key="slcci_monthly_xaxis")
+    with col3:
+        y_units = st.selectbox("Y units", ["m", "cm", "mm"], key="slcci_monthly_yunits")
+    
+    # Y-axis scaling
+    y_scale = {"m": 1.0, "cm": 100.0, "mm": 1000.0}[y_units]
     
     month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -720,6 +1551,11 @@ def _render_slcci_monthly_analysis(slcci_data, config: AppConfig):
     mean_lat = df['lat'].mean()
     lat_rad = np.deg2rad(mean_lat)
     
+    # Compute x_km for distance mode
+    if x_axis_mode == "Distance (km)" and 'lon' in df.columns:
+        lon_min = df['lon'].min()
+        df['x_km'] = R_earth * np.deg2rad(df['lon'] - lon_min) * np.cos(lat_rad)
+    
     slopes_info = []
     
     for month in range(1, 13):
@@ -730,59 +1566,67 @@ def _render_slcci_monthly_analysis(slcci_data, config: AppConfig):
         if len(month_df) < 2:
             continue
         
-        lon = month_df['lon'].values
-        dot = month_df['dot'].values
+        # Get x and y values based on mode
+        if x_axis_mode == "Distance (km)":
+            x_data = month_df['x_km'].values
+            x_label = "Distance (km)"
+        else:
+            x_data = month_df['lon'].values
+            x_label = "Longitude (°)"
         
-        mask = np.isfinite(lon) & np.isfinite(dot)
+        dot_data = month_df['dot'].values * y_scale
+        
+        mask = np.isfinite(x_data) & np.isfinite(dot_data)
         if np.sum(mask) < 2:
             continue
         
-        lon_valid = lon[mask]
-        dot_valid = dot[mask]
+        x_valid = x_data[mask]
+        y_valid = dot_data[mask]
         
         # Scatter
         fig.add_trace(
             go.Scatter(
-                x=lon_valid, y=dot_valid, mode='markers',
-                marker=dict(size=3, color='steelblue', opacity=0.5),
+                x=x_valid, y=y_valid, mode='markers',
+                marker=dict(size=3, color='#FF7F0E', opacity=0.5),  # Orange for SLCCI
                 showlegend=False
             ),
             row=row, col=col
         )
         
         # Regression
-        if show_regression and len(lon_valid) > 2:
+        if show_regression and len(x_valid) > 2:
             try:
-                lon_rad_arr = np.deg2rad(lon_valid)
-                dlon_rad = lon_rad_arr - lon_rad_arr.min()
-                x_km = R_earth * dlon_rad * np.cos(lat_rad)
+                from scipy import stats as scipy_stats
+                slope, intercept, r_value, p_value, std_err = scipy_stats.linregress(x_valid, y_valid)
+                r_squared = r_value ** 2
                 
-                slope_m_km, intercept = np.polyfit(x_km, dot_valid, 1)
-                
-                if slope_units == "mm/m":
-                    slope_display = slope_m_km * 1000
+                # Convert slope to m/100km for standard comparison
+                if x_axis_mode == "Distance (km)":
+                    slope_m_100km = (slope / y_scale) * 100  # m/100km
                 else:
-                    slope_display = slope_m_km * 100
+                    # For longitude, approximate using mean latitude
+                    km_per_deg = R_earth * np.cos(lat_rad) * np.pi / 180
+                    slope_m_100km = (slope / y_scale) * km_per_deg * 100
                 
                 slopes_info.append({
                     'month': month,
                     'name': month_names[month-1],
-                    'slope': slope_display,
-                    'n_points': len(lon_valid)
+                    'slope': slope,
+                    'slope_m_100km': slope_m_100km,
+                    'r_squared': r_squared,
+                    'n_points': len(x_valid)
                 })
                 
                 # Regression line
-                lon_line = np.linspace(lon_valid.min(), lon_valid.max(), 50)
-                lon_line_rad = np.deg2rad(lon_line)
-                dlon_line_rad = lon_line_rad - lon_rad_arr.min()
-                x_km_line = R_earth * dlon_line_rad * np.cos(lat_rad)
-                dot_line = slope_m_km * x_km_line + intercept
+                x_line = np.linspace(x_valid.min(), x_valid.max(), 50)
+                y_line = slope * x_line + intercept
                 
                 fig.add_trace(
                     go.Scatter(
-                        x=lon_line, y=dot_line, mode='lines',
+                        x=x_line, y=y_line, mode='lines',
                         line=dict(color='red', width=2),
-                        showlegend=False
+                        showlegend=False,
+                        hovertemplate=f"R²={r_squared:.3f}<br>slope={slope:.4f}"
                     ),
                     row=row, col=col
                 )
@@ -790,36 +1634,48 @@ def _render_slcci_monthly_analysis(slcci_data, config: AppConfig):
                 pass
     
     fig.update_layout(
-        title=f"{strait_name} - Pass {pass_number} - Monthly DOT vs Longitude",
+        title=f"🟠 SLCCI - {strait_name} - Pass {pass_number} - Monthly DOT Analysis",
         height=700,
         template="plotly_white",
         showlegend=False
     )
     
     # Axis labels
+    x_label_short = "km" if x_axis_mode == "Distance (km)" else "Lon (°)"
     for i in range(1, 13):
         row = (i - 1) // 4 + 1
         col = (i - 1) % 4 + 1
         if row == 3:
-            fig.update_xaxes(title_text="Lon (°)", row=row, col=col)
+            fig.update_xaxes(title_text=x_label_short, row=row, col=col)
         if col == 1:
-            fig.update_yaxes(title_text="DOT (m)", row=row, col=col)
+            fig.update_yaxes(title_text=f"DOT ({y_units})", row=row, col=col)
     
     st.plotly_chart(fig, use_container_width=True)
     
-    # Summary table
+    # Summary table with R²
     if slopes_info:
-        with st.expander("Monthly Slopes Summary"):
+        with st.expander("📊 Monthly Slopes & R² Summary"):
             slopes_df = pd.DataFrame(slopes_info)
-            slopes_df.columns = ['Month #', 'Month', f'Slope ({slope_units})', 'N Points']
-            st.dataframe(slopes_df, use_container_width=True)
             
-            col1, col2, col3 = st.columns(3)
+            # Format columns for display
+            display_df = pd.DataFrame({
+                'Month': slopes_df['name'],
+                f'Slope ({y_units}/{x_label_short})': slopes_df['slope'].apply(lambda x: f"{x:.4f}"),
+                'Slope (m/100km)': slopes_df['slope_m_100km'].apply(lambda x: f"{x:.4f}"),
+                'R²': slopes_df['r_squared'].apply(lambda x: f"{x:.3f}"),
+                'N Points': slopes_df['n_points']
+            })
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Mean Slope", f"{slopes_df[f'Slope ({slope_units})'].mean():.4f}")
+                st.metric("Mean Slope", f"{slopes_df['slope_m_100km'].mean():.4f} m/100km")
             with col2:
-                st.metric("Std Dev", f"{slopes_df[f'Slope ({slope_units})'].std():.4f}")
+                st.metric("Std Dev", f"{slopes_df['slope_m_100km'].std():.4f} m/100km")
             with col3:
+                st.metric("Mean R²", f"{slopes_df['r_squared'].mean():.3f}")
+            with col4:
                 st.metric("Months with Data", len(slopes_df))
 
 
@@ -2278,7 +3134,7 @@ def _render_multi_comparison_tabs(loaded_datasets: dict, config: AppConfig):
         "📊 DOT Profile",
         "🗺️ Spatial Overview",
         "🌊 Geostrophic Velocity",
-        "📉 Correlation Matrix",
+        "� Monthly Comparison",
         "📥 Export"
     ])
     
@@ -2291,7 +3147,7 @@ def _render_multi_comparison_tabs(loaded_datasets: dict, config: AppConfig):
     with tab4:
         _render_multi_geostrophic_comparison(loaded_datasets, config)
     with tab5:
-        _render_multi_correlation(loaded_datasets, config)
+        _render_multi_monthly_comparison(loaded_datasets, config)
     with tab6:
         _render_multi_export(loaded_datasets, config)
 
@@ -2564,6 +3420,96 @@ def _render_multi_geostrophic_comparison(loaded_datasets: dict, config: AppConfi
     st.info("For transport (Sv), multiply velocity by cross-section area. Gate depth profile required.")
 
 
+def _render_multi_monthly_comparison(loaded_datasets: dict, config: AppConfig):
+    """Render monthly climatology comparison across datasets."""
+    st.subheader("📅 Monthly Climatology Comparison")
+    
+    # Collect monthly means for each dataset
+    monthly_data = {}
+    
+    for dk, data in loaded_datasets.items():
+        slope = getattr(data, 'slope_series', None)
+        time_arr = getattr(data, 'time_array', None)
+        
+        if slope is None or time_arr is None:
+            continue
+        
+        # Create DataFrame and compute monthly means
+        time_pd = pd.to_datetime(time_arr)
+        df = pd.DataFrame({'slope': slope, 'month': time_pd.month})
+        monthly_mean = df.groupby('month')['slope'].agg(['mean', 'std', 'count'])
+        
+        monthly_data[DATASET_NAMES.get(dk, dk)] = {
+            'mean': monthly_mean['mean'],
+            'std': monthly_mean['std'],
+            'count': monthly_mean['count'],
+            'color': DATASET_COLORS.get(dk, 'gray')
+        }
+    
+    if not monthly_data:
+        st.warning("No datasets with slope data for monthly comparison")
+        return
+    
+    # Options
+    col1, col2 = st.columns(2)
+    with col1:
+        show_error_bars = st.checkbox("Show ±1 std dev", value=True, key="multi_monthly_std")
+    with col2:
+        y_units = st.selectbox("Units", ["m/100km", "cm/km"], key="multi_monthly_units")
+    
+    scale = 1.0 if y_units == "m/100km" else 100.0
+    
+    month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    
+    fig = go.Figure()
+    
+    for name, mdata in monthly_data.items():
+        months = mdata['mean'].index
+        y_vals = mdata['mean'].values * scale
+        y_std = mdata['std'].values * scale if show_error_bars else None
+        
+        fig.add_trace(go.Scatter(
+            x=[month_names[m-1] for m in months],
+            y=y_vals,
+            mode='lines+markers',
+            name=name,
+            line=dict(color=mdata['color'], width=2),
+            marker=dict(size=8),
+            error_y=dict(type='data', array=y_std, visible=show_error_bars) if show_error_bars else None
+        ))
+    
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+    
+    fig.update_layout(
+        title="Monthly Mean Slope by Dataset",
+        xaxis_title="Month",
+        yaxis_title=f"Slope ({y_units})",
+        height=450,
+        template="plotly_white"
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Summary statistics table
+    st.markdown("### 📊 Monthly Statistics by Dataset")
+    
+    summary_rows = []
+    for name, mdata in monthly_data.items():
+        mean_slope = mdata['mean'].mean()
+        std_slope = mdata['mean'].std()
+        n_months = len(mdata['mean'])
+        summary_rows.append({
+            'Dataset': name,
+            'Mean Slope (m/100km)': f"{mean_slope:.4f}",
+            'Std Dev': f"{std_slope:.4f}",
+            'Months with Data': n_months
+        })
+    
+    summary_df = pd.DataFrame(summary_rows)
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+
 def _render_multi_correlation(loaded_datasets: dict, config: AppConfig):
     """Render correlation analysis between datasets."""
     st.subheader("Correlation Analysis")
@@ -2764,10 +3710,11 @@ def _render_multi_export(loaded_datasets: dict, config: AppConfig):
 
 def _render_cmems_l4_tabs(cmems_l4_data, config: AppConfig):
     """Render tabs for CMEMS L4 gridded data."""
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📈 Slope Timeline",
         "📊 DOT Profile",
         "🗺️ Spatial Map",
+        "📅 Monthly Analysis",
         "🌊 Geostrophic Velocity",
         "📥 Export"
     ])
@@ -2779,8 +3726,10 @@ def _render_cmems_l4_tabs(cmems_l4_data, config: AppConfig):
     with tab3:
         _render_cmems_l4_spatial(cmems_l4_data, config)
     with tab4:
-        _render_dtu_geostrophic_velocity(cmems_l4_data, config)
+        _render_gridded_monthly_analysis(cmems_l4_data, config)
     with tab5:
+        _render_dtu_geostrophic_velocity(cmems_l4_data, config)
+    with tab6:
         _render_dtu_export_tab(cmems_l4_data, config)
 
 
@@ -2836,25 +3785,31 @@ def _render_cmems_l4_spatial(cmems_l4_data, config: AppConfig):
 # CMEMS-ONLY TABS
 # ==============================================================================
 def _render_cmems_tabs(cmems_data, config: AppConfig):
-    """Render tabs for CMEMS data only."""
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "Slope Timeline",
-        "DOT Profile",
-        "Spatial Map",
-        "Geostrophic Velocity",
+    """Render tabs for CMEMS data only - uses unified functions."""
+    # Get dataset info
+    ds_info = _get_unified_dataset_info(cmems_data, "cmems_l4")
+    
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        f"{ds_info['emoji']} Slope Timeline",
+        f"{ds_info['emoji']} DOT Profile",
+        f"{ds_info['emoji']} Spatial Map",
+        f"{ds_info['emoji']} Monthly Analysis",
+        f"{ds_info['emoji']} Geostrophic Velocity",
         "📥 Export"
     ])
     
     with tab1:
-        _render_slope_timeline(cmems_data, config)
+        _render_unified_slope_timeline(cmems_data, config, ds_info)
     with tab2:
-        _render_dot_profile(cmems_data, config)
+        _render_unified_dot_profile(cmems_data, config, ds_info)
     with tab3:
-        _render_spatial_map(cmems_data, config)
+        _render_unified_spatial_map(cmems_data, config, ds_info)
     with tab4:
-        _render_geostrophic_velocity(cmems_data, config)
+        _render_unified_monthly_analysis(cmems_data, config, ds_info)
     with tab5:
-        _render_export_tab(None, cmems_data, config)
+        _render_unified_geostrophic_velocity(cmems_data, config, ds_info)
+    with tab6:
+        _render_unified_export_tab(cmems_data, config, ds_info)
 
 
 # ==============================================================================
@@ -2863,53 +3818,89 @@ def _render_cmems_tabs(cmems_data, config: AppConfig):
 
 def _render_dtu_tabs(dtu_data, config: AppConfig):
     """
-    Render tabs for DTUSpace gridded data.
-    
-    ISOLATED from SLCCI/CMEMS - uses DTU-specific rendering functions.
+    Render tabs for DTUSpace gridded data - uses unified functions.
     """
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🟢 Slope Timeline",
-        "🟢 DOT Profile",
-        "🟢 Spatial Map",
-        "🟢 Geostrophic Velocity",
+    # Get dataset info
+    ds_info = _get_unified_dataset_info(dtu_data, "dtu")
+    
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        f"{ds_info['emoji']} Slope Timeline",
+        f"{ds_info['emoji']} DOT Profile",
+        f"{ds_info['emoji']} Spatial Map",
+        f"{ds_info['emoji']} Monthly Analysis",
+        f"{ds_info['emoji']} Geostrophic Velocity",
         "📥 Export"
     ])
     
     with tab1:
-        _render_dtu_slope_timeline(dtu_data, config)
+        _render_unified_slope_timeline(dtu_data, config, ds_info)
     with tab2:
-        _render_dtu_dot_profile(dtu_data, config)
+        _render_unified_dot_profile(dtu_data, config, ds_info)
     with tab3:
-        _render_dtu_spatial_map(dtu_data, config)
+        _render_unified_spatial_map(dtu_data, config, ds_info)
     with tab4:
-        _render_dtu_geostrophic_velocity(dtu_data, config)
+        _render_unified_monthly_analysis(dtu_data, config, ds_info)
     with tab5:
-        _render_dtu_export_tab(dtu_data, config)
+        _render_unified_geostrophic_velocity(dtu_data, config, ds_info)
+    with tab6:
+        _render_unified_export_tab(dtu_data, config, ds_info)
 
 
 # ==============================================================================
 # DTU TAB 1: SLOPE TIMELINE
 # ==============================================================================
 
+def _get_gridded_dataset_info(data):
+    """Get dataset type info (DTU or CMEMS L4) from PassData object."""
+    data_source = getattr(data, 'data_source', '')
+    dataset_name = getattr(data, 'dataset_name', '')
+    
+    # Detect CMEMS L4 by data_source
+    if 'cmems' in data_source.lower() or 'cmems_l4' in dataset_name.lower():
+        return {
+            'emoji': '🟣',
+            'name': dataset_name or 'CMEMS L4',
+            'color': '#9B59B6',  # Purple for CMEMS L4
+            'type': 'cmems_l4'
+        }
+    else:
+        return {
+            'emoji': '🟢',
+            'name': dataset_name or 'DTUSpace v4',
+            'color': COLOR_DTU,  # Green for DTU
+            'type': 'dtu'
+        }
+
+
 def _render_dtu_slope_timeline(dtu_data, config: AppConfig):
     """
-    Render DTUSpace slope timeline.
+    Render DTUSpace/CMEMS L4 slope timeline.
     
     From DTUSpace_plotter notebook Panel 1:
     - X-axis: time_array (monthly dates)
     - Y-axis: slope_series (m/100km)
     """
-    st.subheader("🟢 DTUSpace - Slope Timeline")
+    # Get dataset info dynamically
+    ds_info = _get_gridded_dataset_info(dtu_data)
+    
+    st.subheader(f"{ds_info['emoji']} {ds_info['name']} - Slope Timeline")
     
     slope_series = getattr(dtu_data, 'slope_series', None)
     time_array = getattr(dtu_data, 'time_array', None)
     strait_name = getattr(dtu_data, 'strait_name', 'Unknown')
-    dataset_name = getattr(dtu_data, 'dataset_name', 'DTUSpace v4')
-    start_year = getattr(dtu_data, 'start_year', 2006)
-    end_year = getattr(dtu_data, 'end_year', 2017)
+    dataset_name = ds_info['name']
+    start_year = getattr(dtu_data, 'start_year', None)
+    end_year = getattr(dtu_data, 'end_year', None)
+    time_range = getattr(dtu_data, 'time_range', None)
+    
+    # Get year range from time_range if not available
+    if start_year is None and time_range:
+        start_year = time_range[0][:4] if time_range[0] else '?'
+    if end_year is None and time_range:
+        end_year = time_range[1][:4] if time_range[1] else '?'
     
     if slope_series is None or time_array is None:
-        st.error("❌ No slope data available in DTUPassData")
+        st.error("❌ No slope data available")
         return
     
     # Check for valid data
@@ -2920,15 +3911,20 @@ def _render_dtu_slope_timeline(dtu_data, config: AppConfig):
         st.warning("⚠️ All slope values are NaN")
         return
     
-    # Display info
-    st.info(f"📊 **{dataset_name}** | {strait_name} | {start_year}–{end_year}")
+    # Display info - add (West) or (East) if it's a divided gate
+    gate_suffix = ""
+    if "west" in strait_name.lower():
+        gate_suffix = " (West)"
+    elif "east" in strait_name.lower():
+        gate_suffix = " (East)"
+    st.info(f"📊 **{dataset_name}** | {strait_name}{gate_suffix} | {start_year}–{end_year}")
     
     # Options
     col1, col2 = st.columns([2, 1])
     with col1:
-        show_trend = st.checkbox("Show trend line", value=True, key="dtu_slope_trend")
+        show_trend = st.checkbox("Show trend line", value=True, key=f"{ds_info['type']}_slope_trend")
     with col2:
-        unit = st.selectbox("Units", ["m/100km", "cm/km"], key="dtu_slope_unit")
+        unit = st.selectbox("Units", ["m/100km", "cm/km"], key=f"{ds_info['type']}_slope_unit")
     
     # Convert units
     if unit == "cm/km":
@@ -2953,8 +3949,8 @@ def _render_dtu_slope_timeline(dtu_data, config: AppConfig):
         y=valid_y,
         mode="markers+lines",
         name="DOT Slope",
-        marker=dict(size=6, color=COLOR_DTU),
-        line=dict(width=2, color=COLOR_DTU)
+        marker=dict(size=6, color=ds_info['color']),
+        line=dict(width=2, color=ds_info['color'])
     ))
     
     # Zero line
@@ -3005,20 +4001,24 @@ def _render_dtu_slope_timeline(dtu_data, config: AppConfig):
 
 def _render_dtu_dot_profile(dtu_data, config: AppConfig):
     """
-    Render DTUSpace mean DOT profile across gate.
+    Render DTUSpace/CMEMS L4 mean DOT profile across gate.
     
     From DTUSpace_plotter notebook Panel 2:
-    - X-axis: x_km (Distance along gate in km)
-    - Y-axis: profile_mean (Mean DOT in m)
+    - X-axis: x_km (Distance along gate in km) or longitude
+    - Y-axis: profile_mean (Mean DOT in m/cm/mm)
     - With WEST/EAST labels
     """
-    st.subheader("🟢 DTUSpace - Mean DOT Profile")
+    # Get dataset info dynamically
+    ds_info = _get_gridded_dataset_info(dtu_data)
+    
+    st.subheader(f"{ds_info['emoji']} {ds_info['name']} - Mean DOT Profile")
     
     profile_mean = getattr(dtu_data, 'profile_mean', None)
     x_km = getattr(dtu_data, 'x_km', None)
+    gate_lon_pts = getattr(dtu_data, 'gate_lon_pts', None)
     dot_matrix = getattr(dtu_data, 'dot_matrix', None)
     strait_name = getattr(dtu_data, 'strait_name', 'Unknown')
-    dataset_name = getattr(dtu_data, 'dataset_name', 'DTUSpace v4')
+    dataset_name = ds_info['name']
     
     if profile_mean is None or x_km is None:
         st.error("❌ No profile data available")
@@ -3031,37 +4031,52 @@ def _render_dtu_dot_profile(dtu_data, config: AppConfig):
         return
     
     # Options
-    col1, col2 = st.columns([2, 1])
+    col1, col2, col3 = st.columns(3)
     with col1:
         view_mode = st.radio(
             "View mode",
             ["Mean Profile", "Individual Time Steps"],
             horizontal=True,
-            key="dtu_dot_view_mode"
+            key=f"{ds_info['type']}_dot_view_mode"
         )
     with col2:
-        show_std = st.checkbox("Show ±1 Std Dev", value=True, key="dtu_dot_std")
+        x_axis_mode = st.selectbox("X-axis", ["Distance (km)", "Longitude (°)"], key=f"{ds_info['type']}_dot_xaxis")
+    with col3:
+        y_units = st.selectbox("Y units", ["m", "cm", "mm"], key=f"{ds_info['type']}_dot_yunits")
+    
+    show_std = st.checkbox("Show ±1 Std Dev", value=True, key=f"{ds_info['type']}_dot_std")
+    
+    # Y scaling
+    y_scale = {"m": 1.0, "cm": 100.0, "mm": 1000.0}[y_units]
+    
+    # X values
+    if x_axis_mode == "Distance (km)":
+        x_vals = x_km
+        x_label = "Distance along gate (km)"
+    else:
+        x_vals = gate_lon_pts if gate_lon_pts is not None else x_km
+        x_label = "Longitude (°)"
     
     fig = go.Figure()
     
     if view_mode == "Mean Profile":
         # Plot mean profile
         fig.add_trace(go.Scatter(
-            x=x_km[valid_mask],
-            y=profile_mean[valid_mask],
+            x=x_vals[valid_mask],
+            y=profile_mean[valid_mask] * y_scale,
             mode="lines",
             name="Mean DOT",
-            line=dict(color=COLOR_DTU, width=2)
+            line=dict(color=ds_info['color'], width=2)
         ))
         
         # Add std band if requested
         if show_std and dot_matrix is not None:
-            profile_std = np.nanstd(dot_matrix, axis=1)
+            profile_std = np.nanstd(dot_matrix, axis=1) * y_scale
             fig.add_trace(go.Scatter(
-                x=np.concatenate([x_km[valid_mask], x_km[valid_mask][::-1]]),
+                x=np.concatenate([x_vals[valid_mask], x_vals[valid_mask][::-1]]),
                 y=np.concatenate([
-                    (profile_mean + profile_std)[valid_mask],
-                    (profile_mean - profile_std)[valid_mask][::-1]
+                    (profile_mean[valid_mask] * y_scale + profile_std[valid_mask]),
+                    (profile_mean[valid_mask] * y_scale - profile_std[valid_mask])[::-1]
                 ]),
                 fill='toself',
                 fillcolor='rgba(46, 139, 87, 0.2)',  # seagreen with alpha
@@ -3084,7 +4099,7 @@ def _render_dtu_dot_profile(dtu_data, config: AppConfig):
             options=list(range(n_time)),
             default=list(range(min(5, n_time))),
             format_func=lambda i: str(pd.Timestamp(time_array[i]).strftime('%Y-%m')) if time_array is not None else f"Step {i}",
-            key="dtu_time_steps",
+            key=f"{ds_info['type']}_time_steps",
             max_selections=max_select
         )
         
@@ -3102,20 +4117,20 @@ def _render_dtu_dot_profile(dtu_data, config: AppConfig):
                 color = colors[i % len(colors)]
                 label = str(pd.Timestamp(time_array[idx]).strftime('%Y-%m')) if time_array is not None else f"Step {idx}"
                 fig.add_trace(go.Scatter(
-                    x=x_km[mask],
-                    y=profile[mask],
+                    x=x_vals[mask],
+                    y=profile[mask] * y_scale,
                     mode="lines",
                     name=label,
                     line=dict(color=color, width=1.5)
                 ))
     
     # Add WEST/EAST labels (like DTUSpace_plotter notebook)
-    y_max = np.nanmax(profile_mean[valid_mask])
-    y_min = np.nanmin(profile_mean[valid_mask])
+    y_max = np.nanmax(profile_mean[valid_mask]) * y_scale
+    y_min = np.nanmin(profile_mean[valid_mask]) * y_scale
     y_text = y_max - 0.05 * (y_max - y_min)
     
     fig.add_annotation(
-        x=x_km[valid_mask].min(),
+        x=x_vals[valid_mask].min(),
         y=y_text,
         text="WEST",
         showarrow=False,
@@ -3123,7 +4138,7 @@ def _render_dtu_dot_profile(dtu_data, config: AppConfig):
         xanchor="left"
     )
     fig.add_annotation(
-        x=x_km[valid_mask].max(),
+        x=x_vals[valid_mask].max(),
         y=y_text,
         text="EAST",
         showarrow=False,
@@ -3133,8 +4148,8 @@ def _render_dtu_dot_profile(dtu_data, config: AppConfig):
     
     fig.update_layout(
         title=f"{dataset_name} - {strait_name}<br><sup>Mean DOT Profile Across Gate</sup>",
-        xaxis_title="Distance along gate (km)",
-        yaxis_title="DOT (m)",
+        xaxis_title=x_label,
+        yaxis_title=f"DOT ({y_units})",
         yaxis_tickformat=".3f",  # 3 decimal places like notebook
         height=500,
         template="plotly_white"
@@ -3249,26 +4264,218 @@ def _render_dtu_spatial_map(dtu_data, config: AppConfig):
 
 
 # ==============================================================================
+# GRIDDED MONTHLY ANALYSIS (for DTU and CMEMS L4)
+# ==============================================================================
+
+def _render_gridded_monthly_analysis(data, config: AppConfig):
+    """
+    Render 12-month DOT analysis for gridded datasets (DTU, CMEMS L4).
+    Shows DOT profile vs distance/longitude for each month with linear regression.
+    Includes R² and slope statistics.
+    """
+    ds_info = _get_gridded_dataset_info(data)
+    
+    st.subheader(f"{ds_info['emoji']} {ds_info['name']} - Monthly Analysis")
+    
+    # Get required data
+    dot_matrix = getattr(data, 'dot_matrix', None)  # (n_gate_pts, n_time)
+    time_array = getattr(data, 'time_array', None)
+    x_km = getattr(data, 'x_km', None)
+    gate_lon_pts = getattr(data, 'gate_lon_pts', None)
+    strait_name = getattr(data, 'strait_name', 'Unknown')
+    
+    if dot_matrix is None or time_array is None or x_km is None:
+        st.error("❌ Missing data for monthly analysis (dot_matrix, time_array, x_km)")
+        return
+    
+    # Convert time to pandas for month extraction
+    time_pd = pd.to_datetime(time_array)
+    months = time_pd.month
+    
+    # Options
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        show_regression = st.checkbox("Show linear regression", value=True, key=f"{ds_info['type']}_monthly_reg")
+    with col2:
+        x_axis_mode = st.selectbox("X-axis", ["Distance (km)", "Longitude (°)"], key=f"{ds_info['type']}_monthly_xaxis")
+    with col3:
+        y_units = st.selectbox("Y units", ["m", "cm", "mm"], key=f"{ds_info['type']}_monthly_yunits")
+    
+    # Y-axis scaling
+    y_scale = {"m": 1.0, "cm": 100.0, "mm": 1000.0}[y_units]
+    
+    month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    
+    fig = make_subplots(
+        rows=3, cols=4,
+        subplot_titles=[f"{month_names[i]} ({i+1})" for i in range(12)],
+        horizontal_spacing=0.05,
+        vertical_spacing=0.1
+    )
+    
+    # X-axis values
+    if x_axis_mode == "Distance (km)":
+        x_vals = x_km
+        x_label = "Distance (km)"
+    else:
+        x_vals = gate_lon_pts if gate_lon_pts is not None else x_km
+        x_label = "Longitude (°)"
+    
+    slopes_info = []
+    
+    for month in range(1, 13):
+        row = (month - 1) // 4 + 1
+        col = (month - 1) % 4 + 1
+        
+        # Get time indices for this month
+        month_mask = months == month
+        if not np.any(month_mask):
+            continue
+        
+        # Average DOT profile for this month
+        dot_month = dot_matrix[:, month_mask]
+        dot_mean = np.nanmean(dot_month, axis=1)
+        
+        # Valid data mask
+        mask = np.isfinite(x_vals) & np.isfinite(dot_mean)
+        if np.sum(mask) < 2:
+            continue
+        
+        x_valid = x_vals[mask]
+        y_valid = dot_mean[mask] * y_scale
+        
+        # Scatter
+        fig.add_trace(
+            go.Scatter(
+                x=x_valid, y=y_valid, mode='markers',
+                marker=dict(size=4, color=ds_info['color'], opacity=0.6),
+                showlegend=False
+            ),
+            row=row, col=col
+        )
+        
+        # Regression
+        if show_regression and len(x_valid) > 2:
+            try:
+                from scipy import stats as scipy_stats
+                slope, intercept, r_value, p_value, std_err = scipy_stats.linregress(x_valid, y_valid)
+                r_squared = r_value ** 2
+                
+                # For display, convert slope to meaningful units
+                if x_axis_mode == "Distance (km)":
+                    # slope is in y_units/km, convert to m/100km for standard comparison
+                    slope_m_100km = (slope / y_scale) * 100  # m/100km
+                    slope_display = f"{slope:.4f} {y_units}/km"
+                else:
+                    # slope is in y_units/degree
+                    slope_display = f"{slope:.4f} {y_units}/°"
+                    slope_m_100km = slope / y_scale  # approximate
+                
+                slopes_info.append({
+                    'month': month,
+                    'name': month_names[month-1],
+                    'slope': slope,
+                    'slope_m_100km': slope_m_100km,
+                    'r_squared': r_squared,
+                    'n_time': np.sum(month_mask),
+                    'n_points': len(x_valid)
+                })
+                
+                # Regression line
+                x_line = np.linspace(x_valid.min(), x_valid.max(), 50)
+                y_line = slope * x_line + intercept
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_line, y=y_line, mode='lines',
+                        line=dict(color='red', width=2),
+                        showlegend=False,
+                        hovertemplate=f"R²={r_squared:.3f}<br>slope={slope:.4f}"
+                    ),
+                    row=row, col=col
+                )
+            except Exception as e:
+                pass
+    
+    fig.update_layout(
+        title=f"{ds_info['name']} - {strait_name} - Monthly Mean DOT Profile",
+        height=700,
+        template="plotly_white",
+        showlegend=False
+    )
+    
+    # Axis labels
+    for i in range(1, 13):
+        row = (i - 1) // 4 + 1
+        col = (i - 1) % 4 + 1
+        if row == 3:
+            fig.update_xaxes(title_text=x_label, row=row, col=col)
+        if col == 1:
+            fig.update_yaxes(title_text=f"DOT ({y_units})", row=row, col=col)
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Summary table with R² and slope
+    if slopes_info:
+        with st.expander("📊 Monthly Slopes & R² Summary"):
+            slopes_df = pd.DataFrame(slopes_info)
+            
+            # Format columns for display
+            display_df = pd.DataFrame({
+                'Month': slopes_df['name'],
+                f'Slope ({y_units}/{"km" if x_axis_mode == "Distance (km)" else "°"})': slopes_df['slope'].apply(lambda x: f"{x:.4f}"),
+                'Slope (m/100km)': slopes_df['slope_m_100km'].apply(lambda x: f"{x:.4f}"),
+                'R²': slopes_df['r_squared'].apply(lambda x: f"{x:.3f}"),
+                'N time steps': slopes_df['n_time'],
+                'N points': slopes_df['n_points']
+            })
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Mean Slope", f"{slopes_df['slope_m_100km'].mean():.4f} m/100km")
+            with col2:
+                st.metric("Std Dev", f"{slopes_df['slope_m_100km'].std():.4f} m/100km")
+            with col3:
+                st.metric("Mean R²", f"{slopes_df['r_squared'].mean():.3f}")
+            with col4:
+                st.metric("Months with Data", len(slopes_df))
+
+
+# ==============================================================================
 # DTU TAB 4: GEOSTROPHIC VELOCITY
 # ==============================================================================
 
 def _render_dtu_geostrophic_velocity(dtu_data, config: AppConfig):
     """
-    Render DTUSpace geostrophic velocity.
+    Render DTUSpace/CMEMS L4 geostrophic velocity.
     
-    Uses pre-computed v_geostrophic_series from DTUService.
+    Uses pre-computed v_geostrophic_series from DTUService/CMEMSL4Service.
     """
-    st.subheader("🟢 DTUSpace - Geostrophic Velocity")
+    # Get dataset info dynamically
+    ds_info = _get_gridded_dataset_info(dtu_data)
+    
+    st.subheader(f"{ds_info['emoji']} {ds_info['name']} - Geostrophic Velocity")
     
     v_geo = getattr(dtu_data, 'v_geostrophic_series', None)
     time_array = getattr(dtu_data, 'time_array', None)
     mean_lat = getattr(dtu_data, 'mean_latitude', 70.0)
     coriolis_f = getattr(dtu_data, 'coriolis_f', 1e-4)
     strait_name = getattr(dtu_data, 'strait_name', 'Unknown')
-    dataset_name = getattr(dtu_data, 'dataset_name', 'DTUSpace v4')
+    dataset_name = ds_info['name']
     
     if v_geo is None or len(v_geo) == 0:
-        st.warning("⚠️ No geostrophic velocity data available")
+        st.warning("⚠️ No geostrophic velocity data available. Make sure the service computes v_geostrophic_series.")
+        st.info(f"""
+        **Debug Info:**
+        - data_source: `{getattr(dtu_data, 'data_source', 'N/A')}`
+        - slope_series available: `{getattr(dtu_data, 'slope_series', None) is not None}`
+        - mean_latitude: `{mean_lat}`
+        - coriolis_f: `{coriolis_f}`
+        """)
         return
     
     st.info(f"📍 Computing at lat={mean_lat:.2f}° (f={coriolis_f:.2e} s⁻¹)")
@@ -3285,8 +4492,8 @@ def _render_dtu_geostrophic_velocity(dtu_data, config: AppConfig):
         y=v_geo * 100,  # Convert m/s to cm/s
         mode="lines+markers",
         name="v_geostrophic",
-        line=dict(color=COLOR_DTU, width=2),
-        marker=dict(size=6, color=COLOR_DTU)
+        line=dict(color=ds_info['color'], width=2),
+        marker=dict(size=6, color=ds_info['color'])
     ))
     
     fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
@@ -3313,7 +4520,7 @@ def _render_dtu_geostrophic_velocity(dtu_data, config: AppConfig):
     fig_clim.add_trace(go.Bar(
         x=[month_names[m-1] for m in monthly_clim.index],
         y=monthly_clim.values * 100,
-        marker_color=[COLOR_DTU if v >= 0 else 'lightcoral' for v in monthly_clim.values],
+        marker_color=[ds_info['color'] if v >= 0 else 'lightcoral' for v in monthly_clim.values],
         name="Mean Velocity"
     ))
     
@@ -3366,14 +4573,17 @@ def _render_dtu_geostrophic_velocity(dtu_data, config: AppConfig):
 # ==============================================================================
 
 def _render_dtu_export_tab(dtu_data, config: AppConfig):
-    """Render export tab for DTUSpace data."""
-    st.subheader("📤 Export DTUSpace Data")
+    """Render export tab for DTUSpace/CMEMS L4 data."""
+    # Get dataset info dynamically
+    ds_info = _get_gridded_dataset_info(dtu_data)
+    
+    st.subheader(f"📤 Export {ds_info['name']} Data")
     
     # Info
     strait_name = getattr(dtu_data, 'strait_name', 'Unknown')
-    dataset_name = getattr(dtu_data, 'dataset_name', 'DTUSpace')
+    dataset_name = ds_info['name']
     
-    st.info(f"🟢 Exporting **{dataset_name}** data for **{strait_name}**")
+    st.info(f"{ds_info['emoji']} Exporting **{dataset_name}** data for **{strait_name}**")
     
     # Create tabs for different export types
     export_tabs = st.tabs(["📊 Synthetic Data", "📈 Time Series", "📉 Statistics"])
