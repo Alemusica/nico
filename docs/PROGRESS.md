@@ -1,11 +1,11 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-06 (Session - Recovery + Cache + Bathymetry Integration)
+> Last Updated: 2026-01-06 (Session - Recovery + Cache + Bathymetry + lon_filter + Standardization)
 > Agent: Use this file to track progress. Update after each task.
 
 ---
 
-## 🔄 SESSION 2026-01-06: Recovery & Integration
+## 🔄 SESSION 2026-01-06: Recovery, Integration & Standardization
 
 ### 🚨 Problema Critico: File Persi
 Durante una sessione precedente, `git checkout HEAD --` ha cancellato modifiche non committate.
@@ -19,6 +19,9 @@ Durante una sessione precedente, `git checkout HEAD --` ha cancellato modifiche 
 | `1497aa3` | Recover lost services from VS Code History |
 | `e2b268d` | Integrate recovered services into exports |
 | `1d95ded` | Integrate Cache and Bathymetry services |
+| `548b6a4` | Audit report + documentation updates |
+| `7c5bdda` | Integrate lon_filter for divided gates |
+| **PENDING** | Standardized Gate Division System |
 
 ### File Recuperati
 | File | Righe | Funzionalità |
@@ -56,14 +59,49 @@ def _render_computed_volume_transport():
         gate_depth = profile.mean_depth  # From GEBCO
 ```
 
+#### ✅ lon_filter Integration (`sidebar.py`)
+```python
+from app.components.loaders.base import apply_longitude_filter
+
+# In all _load_*_data() functions:
+lon_min, lon_max = _get_lon_filter_for_gate(config.selected_gate)
+if lon_min is not None or lon_max is not None:
+    pass_data = apply_longitude_filter(pass_data, lon_min, lon_max, config.selected_gate)
+```
+
+#### ✅ Standardized Gate Division System
+
+**New GateModel Fields:**
+- `parent_gate` - Reference to parent gate for divided sections
+- `division_longitude` - Longitude where gate is split West/East
+
+**Cache Key Strategy:**
+```python
+# Divided gates (Fram West, Fram East) share parent's cache
+cache_gate = _get_parent_gate_id(config.selected_gate)  # Returns "fram_strait"
+gate_name = cache_gate.replace(" ", "_").lower()
+cached_data = _cache.load("slcci", gate_name)
+
+# After loading, apply lon_filter for specific section
+pass_data = apply_longitude_filter(pass_data, lon_min, lon_max, config.selected_gate)
+```
+
+**Shapefile Resolution:**
+```python
+# _get_gate_shapefile() now uses parent for divided gates
+gate = service.get_gate("fram_strait_west")
+actual_gate = service.get_gate(gate.parent_gate)  # "fram_strait"
+shapefile = actual_gate.file  # "fram_strait_S3_pass_481.shp"
+```
+
 ### ⚠️ Problemi Identificati (vedi AUDIT_REPORT_2026-01-06.md)
 
 | Problema | Severity | Status |
 |----------|----------|--------|
-| lon_filter non integrato in sidebar | 🔴 HIGH | TODO |
-| Loaders module non usato | 🟠 MEDIUM | Decisione |
+| ~~lon_filter non integrato in sidebar~~ | ~~🔴 HIGH~~ | ✅ DONE |
+| Loaders module non usato | 🟠 MEDIUM | Dead code (OK) |
 | GEBCO file mancante | 🟠 MEDIUM | User action |
-| .pkl files in git | 🟡 LOW | TODO |
+| .pkl files in git | 🟡 LOW | .gitignore updated |
 
 ---
 

@@ -67,6 +67,34 @@ def _get_lon_filter_for_gate(gate_id: str) -> Tuple[Optional[float], Optional[fl
     return None, None
 
 
+def _get_parent_gate_id(gate_id: str) -> str:
+    """
+    Get the parent gate ID for cache key purposes.
+    
+    For divided gates (e.g., fram_strait_west), returns the parent (fram_strait).
+    This allows sharing cache between West/East sections.
+    
+    Args:
+        gate_id: Gate identifier (e.g., "fram_strait_west" or "fram_strait")
+        
+    Returns:
+        Parent gate ID if divided gate, otherwise the original gate_id
+    """
+    if not gate_id:
+        return gate_id
+    
+    try:
+        from src.services.gate_service import GateService
+        service = GateService()
+        gate = service.get_gate(gate_id)
+        if gate and gate.parent_gate:
+            return gate.parent_gate
+    except Exception:
+        pass
+    
+    return gate_id
+
+
 # ============================================================
 # PASS/TRACK EXTRACTION HELPERS
 # ============================================================
@@ -1152,8 +1180,9 @@ def _load_slcci_data(config: AppConfig):
                 st.sidebar.error("No passes found near gate")
                 return
         
-        # Check cache first
-        gate_name = config.selected_gate.replace(" ", "_").lower()
+        # Check cache first - use parent gate for cache key (Fram West/East share cache)
+        cache_gate = _get_parent_gate_id(config.selected_gate)
+        gate_name = cache_gate.replace(" ", "_").lower()
         cached_data = _cache.load("slcci", gate_name, pass_number=pass_number)
         
         if cached_data is not None:
@@ -1486,8 +1515,9 @@ def _load_cmems_l4_data(config: AppConfig):
         
         service = CMEMSL4Service()
         
-        # Check cache first
-        gate_name = config.selected_gate.replace(" ", "_").lower()
+        # Check cache first - use parent gate for cache key (Fram West/East share cache)
+        cache_gate = _get_parent_gate_id(config.selected_gate)
+        gate_name = cache_gate.replace(" ", "_").lower()
         cached_data = _cache.load("cmems_l4", gate_name)
         
         if cached_data is not None:
@@ -1583,7 +1613,12 @@ def _load_cmems_l4_data(config: AppConfig):
 
 
 def _get_gate_shapefile(gate_id: Optional[str]) -> Optional[str]:
-    """Get path to gate shapefile."""
+    """
+    Get path to gate shapefile.
+    
+    For divided gates (e.g., fram_strait_west), uses parent gate's shapefile.
+    This allows West/East sections to share the same data source.
+    """
     
     if not gate_id:
         return None
@@ -1596,16 +1631,22 @@ def _get_gate_shapefile(gate_id: Optional[str]) -> Optional[str]:
     # Try GateService first
     if GATE_SERVICE_AVAILABLE and _gate_service:
         gate = _gate_service.get_gate(gate_id)
-        if gate and hasattr(gate, 'shapefile') and gate.shapefile:
-            shp_path = gates_dir / gate.shapefile
-            if shp_path.exists():
-                return str(shp_path)
+        if gate:
+            # For divided gates, use parent's shapefile
+            actual_gate_id = gate.parent_gate if gate.parent_gate else gate_id
+            actual_gate = _gate_service.get_gate(actual_gate_id) if gate.parent_gate else gate
+            
+            if actual_gate and hasattr(actual_gate, 'file') and actual_gate.file:
+                shp_path = gates_dir / actual_gate.file
+                if shp_path.exists():
+                    return str(shp_path)
     
-    # Fallback: search by pattern
+    # Fallback: search by pattern (use parent gate id if divided)
+    search_id = _get_parent_gate_id(gate_id)
     patterns = [
-        f"*{gate_id}*.shp",
-        f"*{gate_id.replace('_', '-')}*.shp",
-        f"*{gate_id.replace('_', ' ')}*.shp",
+        f"*{search_id}*.shp",
+        f"*{search_id.replace('_', '-')}*.shp",
+        f"*{search_id.replace('_', ' ')}*.shp",
     ]
     
     for pattern in patterns:
@@ -1719,8 +1760,9 @@ def _load_dtu_data(config: AppConfig):
         
         service = DTUService()
         
-        # Check cache first
-        gate_name = config.selected_gate.replace(" ", "_").lower()
+        # Check cache first - use parent gate for cache key (Fram West/East share cache)
+        cache_gate = _get_parent_gate_id(config.selected_gate)
+        gate_name = cache_gate.replace(" ", "_").lower()
         cached_data = _cache.load("dtuspace", gate_name)
         
         if cached_data is not None:

@@ -311,9 +311,14 @@ class GateModel(BaseModel):
     longitude_range: Optional[List[float]] = Field(default=None, description="[lon_min, lon_max]")
     importance: Optional[str] = Field(default=None, description="Scientific importance")
     
-    # Longitude filter for subdivided gates (e.g., Fram West/East)
-    lon_filter_min: Optional[float] = Field(default=None, description="Min longitude filter for subdivided gates")
-    lon_filter_max: Optional[float] = Field(default=None, description="Max longitude filter for subdivided gates")
+    # --- Standardized Gate Division System ---
+    # Parent gate reference for divided gates (e.g., fram_strait_west -> fram_strait)
+    parent_gate: Optional[str] = Field(default=None, description="Parent gate ID for divided gates (uses parent shapefile)")
+    # Division longitude: single value where the gate is split West/East
+    division_longitude: Optional[float] = Field(default=None, description="Longitude where gate is divided (West < value < East)")
+    # Longitude filters (derived from division_longitude for consistency)
+    lon_filter_min: Optional[float] = Field(default=None, description="Min longitude filter (for East sections)")
+    lon_filter_max: Optional[float] = Field(default=None, description="Max longitude filter (for West sections)")
     
     @property
     def bbox(self) -> Optional[BoundingBox]:

@@ -3,51 +3,54 @@
 # Single source of truth for ocean gate definitions.
 # Used by both Streamlit and API.
 #
-# Last Updated: 2025-12-29
+# STANDARDIZED GATE DIVISION:
+# - Parent gates have full shapefile
+# - Child gates (West/East) reference parent_gate and use lon_filter
+# - Cache uses parent gate key for efficiency
+#
+# Last Updated: 2026-01-06
 
 metadata:
-  version: "1.1"
-  updated: "2025-12-29"
+  version: "1.2"
+  updated: "2026-01-06"
   shapefile_dir: "gates/"
   default_buffer_km: 50.0
 
 gates:
   # === ATLANTIC SECTOR ===
+  
+  # --- FRAM STRAIT (divided at 0° longitude) ---
   fram_strait:
     name: "Fram Strait (Full)"
     file: "fram_strait_S3_pass_481.shp"
-    description: "Main Arctic-Atlantic exchange"
+    description: "Main Arctic-Atlantic exchange (full width)"
     region: "Atlantic Sector"
     closest_passes: [481, 254, 127, 308, 55]
     latitude_range: [78.0, 80.0]
     longitude_range: [-20.0, 10.0]
-    datasets: ["SLCCI", "ERA5", "CMEMS-SST"]
+    division_longitude: 0.0
+    datasets: ["SLCCI", "ERA5", "CMEMS-SST", "CMEMS L4", "DTUSpace"]
     default_buffer_km: 50.0
 
   fram_strait_west:
     name: "Fram Strait WEST"
-    file: "fram_strait_S3_pass_481.shp"
+    parent_gate: "fram_strait"
     description: "West section (Greenland side, lon < 0°)"
     region: "Atlantic Sector"
-    closest_passes: [481, 254, 127, 308, 55]
-    latitude_range: [78.0, 80.0]
     longitude_range: [-20.0, 0.0]
-    datasets: ["SLCCI", "ERA5", "CMEMS-SST"]
-    default_buffer_km: 50.0
     lon_filter_max: 0.0
+    datasets: ["SLCCI", "ERA5", "CMEMS-SST", "CMEMS L4", "DTUSpace"]
 
   fram_strait_east:
     name: "Fram Strait EAST"
-    file: "fram_strait_S3_pass_481.shp"
+    parent_gate: "fram_strait"
     description: "East section (Svalbard side, lon > 0°)"
     region: "Atlantic Sector"
-    closest_passes: [481, 254, 127, 308, 55]
-    latitude_range: [78.0, 80.0]
     longitude_range: [0.0, 10.0]
-    datasets: ["SLCCI", "ERA5", "CMEMS-SST"]
-    default_buffer_km: 50.0
     lon_filter_min: 0.0
+    datasets: ["SLCCI", "ERA5", "CMEMS-SST", "CMEMS L4", "DTUSpace"]
     
+  # --- DENMARK STRAIT (no division) ---
   denmark_strait:
     name: "Denmark Strait"
     file: "denmark_strait_TPJ_pass_246.shp"
@@ -56,42 +59,41 @@ gates:
     closest_passes: [246, 172, 320, 98, 394]
     latitude_range: [66.0, 68.0]
     longitude_range: [-28.0, -24.0]
-    datasets: ["SLCCI", "ERA5", "CMEMS-SST"]
+    datasets: ["SLCCI", "ERA5", "CMEMS-SST", "CMEMS L4", "DTUSpace"]
     default_buffer_km: 50.0
     
+  # --- DAVIS STRAIT (divided at -57° longitude) ---
   davis_strait:
     name: "Davis Strait (Full)"
     file: "davis_strait.shp"
     description: "Baffin Bay - Labrador Sea (full width)"
     region: "Atlantic Sector"
-    closest_passes: []
+    closest_passes: [248, 146]
     latitude_range: [67.6, 68.2]
     longitude_range: [-64.5, -53.0]
-    datasets: ["SLCCI", "ERA5"]
+    division_longitude: -57.0
+    datasets: ["SLCCI", "ERA5", "CMEMS L4", "DTUSpace"]
     default_buffer_km: 75.0
     
   davis_strait_east:
     name: "Davis Strait EAST"
-    file: "davis_strait_east.shp"
-    description: "Davis Strait - Eastern section (Greenland side, lon > -57°)"
+    parent_gate: "davis_strait"
+    description: "East section (Greenland side, lon > -57°)"
     region: "Atlantic Sector"
-    closest_passes: []
-    latitude_range: [68.13, 68.17]
     longitude_range: [-57.0, -53.0]
-    datasets: ["SLCCI", "ERA5", "CMEMS L3", "CMEMS L4", "DTUSpace"]
-    default_buffer_km: 50.0
+    lon_filter_min: -57.0
+    datasets: ["SLCCI", "ERA5", "CMEMS L4", "DTUSpace"]
     
   davis_strait_west:
     name: "Davis Strait WEST"
-    file: "davis_strait_west.shp"
-    description: "Davis Strait - Western section (Baffin Island side, lon < -57°)"
+    parent_gate: "davis_strait"
+    description: "West section (Baffin Island side, lon < -57°)"
     region: "Atlantic Sector"
-    closest_passes: []
-    latitude_range: [67.68, 68.13]
     longitude_range: [-64.5, -57.0]
-    datasets: ["SLCCI", "ERA5", "CMEMS L3", "CMEMS L4", "DTUSpace"]
-    default_buffer_km: 50.0
+    lon_filter_max: -57.0
+    datasets: ["SLCCI", "ERA5", "CMEMS L4", "DTUSpace"]
     
+  # --- OTHER ATLANTIC GATES ---
   barents_opening:
     name: "Barents Opening"
     file: "barents_sea_opening_S3_pass_481.shp"
@@ -100,7 +102,7 @@ gates:
     closest_passes: [481, 254, 127]
     latitude_range: [70.0, 76.0]
     longitude_range: [15.0, 25.0]
-    datasets: ["SLCCI", "ERA5", "CMEMS-SST"]
+    datasets: ["SLCCI", "ERA5", "CMEMS-SST", "CMEMS L4", "DTUSpace"]
     default_buffer_km: 50.0
     
   norwegian_boundary:
@@ -111,7 +113,7 @@ gates:
     closest_passes: [220, 146, 294]
     latitude_range: [62.0, 66.0]
     longitude_range: [-10.0, 5.0]
-    datasets: ["SLCCI", "ERA5"]
+    datasets: ["SLCCI", "ERA5", "CMEMS L4", "DTUSpace"]
     default_buffer_km: 50.0
 
   # === PACIFIC SECTOR ===
@@ -123,7 +125,7 @@ gates:
     closest_passes: [76, 152, 228, 304, 380]
     latitude_range: [65.0, 66.0]
     longitude_range: [168.0, -168.0]  # Crosses dateline
-    datasets: ["SLCCI", "ERA5"]
+    datasets: ["SLCCI", "ERA5", "CMEMS L4", "DTUSpace"]
     default_buffer_km: 50.0
 
   # === CANADIAN ARCHIPELAGO ===

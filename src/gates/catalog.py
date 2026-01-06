@@ -82,6 +82,9 @@ class GateCatalog:
                 default_buffer_km=info.get("default_buffer_km", default_buffer),
                 latitude_range=info.get("latitude_range"),
                 longitude_range=info.get("longitude_range"),
+                # Standardized Gate Division System
+                parent_gate=info.get("parent_gate"),
+                division_longitude=info.get("division_longitude"),
                 lon_filter_min=info.get("lon_filter_min"),
                 lon_filter_max=info.get("lon_filter_max"),
             )
