@@ -1,0 +1,220 @@
+"""
+Base loader classes and utilities.
+"""
+
+from dataclasses import dataclass
+from typing import Optional, Any
+from pathlib import Path
+
+
+@dataclass
+class DataLoaderResult:
+    """Result of a data loading operation."""
+    success: bool
+    data: Optional[Any] = None
+    error_message: Optional[str] = None
+    warning_message: Optional[str] = None
+    info_message: Optional[str] = None
+    
+    # Metadata
+    n_observations: int = 0
+    n_cycles: int = 0
+    lon_range: tuple = (0, 0)
+    lat_range: tuple = (0, 0)
+    strait_name: str = ""
+    pass_number: int = 0
+
+
+class BaseDataLoader:
+    """Base class for data loaders."""
+    
+    def __init__(self, config):
+        self.config = config
+    
+    def validate_paths(self) -> DataLoaderResult:
+        """Validate required paths exist."""
+        raise NotImplementedError
+    
+    def load(self) -> DataLoaderResult:
+        """Load data and return result."""
+        raise NotImplementedError
+
+
+def get_gate_shapefile(gate_id: Optional[str], use_parent: bool = False) -> Optional[str]:
+    """
+    Get the shapefile path for a gate.
+    
+    For divided gates (e.g., davis_strait_west), returns the parent gate
+    shapefile (davis_strait.shp) to show the full gate line.
+    
+    Args:
+        gate_id: Gate identifier
+        use_parent: If True, return parent gate for divided gates
+        
+    Returns:
+        Path to shapefile or None
+    """
+    if not gate_id:
+        return None
+    
+    gates_dir = Path(__file__).parent.parent.parent.parent / "gates"
+    
+    # Check for _west or _east suffix -> return parent gate
+    parent_gate_id = None
+    if gate_id.endswith("_west") or gate_id.endswith("_east"):
+        parent_gate_id = gate_id.rsplit("_", 1)[0]
+    
+    # If use_parent and we have a parent, use it
+    if use_parent and parent_gate_id:
+        gate_id = parent_gate_id
+    
+    # Try exact match
+    shp_path = gates_dir / f"{gate_id}.shp"
+    if shp_path.exists():
+        return str(shp_path)
+    
+    # Try with different patterns
+    patterns = [
+        f"{gate_id}_TPJ_pass_*.shp",
+        f"{gate_id}_S3_pass_*.shp",
+        f"{gate_id}_*.shp",
+    ]
+    
+    for pattern in patterns:
+        matches = list(gates_dir.glob(pattern))
+        if matches:
+            return str(matches[0])
+    
+    return None
+
+
+def apply_longitude_filter(pass_data, lon_min: float = None, lon_max: float = None, gate_name: str = ""):
+    """
+    Apply longitude filter to PassData, filtering gate points and recomputing derived values.
+    
+    This is used for divided gates (East/West) where we load the FULL gate shapefile
+    but only want data from a specific longitude range.
+    
+    Args:
+        pass_data: PassData object
+        lon_min: Minimum longitude (data must be > lon_min)
+        lon_max: Maximum longitude (data must be < lon_max)
+        gate_name: Name of selected gate for logging
+        
+    Returns:
+        Modified PassData or None if no data remains
+    """
+    import numpy as np
+    import pandas as pd
+    from dataclasses import replace
+    
+    if lon_min is None and lon_max is None:
+        return pass_data
+    
+    gate_lon = getattr(pass_data, 'gate_lon_pts', None)
+    if gate_lon is None or len(gate_lon) == 0:
+        return pass_data
+    
+    # Build longitude mask for gate points
+    mask = np.ones(len(gate_lon), dtype=bool)
+    if lon_min is not None:
+        mask &= (gate_lon > lon_min)
+    if lon_max is not None:
+        mask &= (gate_lon < lon_max)
+    
+    n_filtered = np.sum(mask)
+    if n_filtered == 0:
+        return None
+    
+    # Filter gate points
+    new_gate_lon = gate_lon[mask]
+    new_gate_lat = pass_data.gate_lat_pts[mask] if hasattr(pass_data, 'gate_lat_pts') and pass_data.gate_lat_pts is not None else None
+    
+    # Recompute x_km
+    R_earth = 6371.0
+    if new_gate_lat is not None and len(new_gate_lat) > 0:
+        lat_rad = np.deg2rad(np.mean(new_gate_lat))
+        lon_rad = np.deg2rad(new_gate_lon)
+        new_x_km = (lon_rad - lon_rad[0]) * np.cos(lat_rad) * R_earth
+    else:
+        old_x_km = getattr(pass_data, 'x_km', None)
+        new_x_km = old_x_km[mask] if old_x_km is not None else None
+    
+    # Filter DataFrame
+    df = getattr(pass_data, 'df', None)
+    new_df = None
+    if df is not None and not df.empty and 'lon' in df.columns:
+        df_mask = pd.Series(True, index=df.index)
+        if lon_min is not None:
+            df_mask &= (df['lon'] > lon_min)
+        if lon_max is not None:
+            df_mask &= (df['lon'] < lon_max)
+        
+        new_df = df[df_mask].copy()
+        
+        if new_df.empty:
+            return None
+    
+    # Filter DOT matrix and recompute derived values
+    dot_matrix = getattr(pass_data, 'dot_matrix', None)
+    new_dot_matrix = None
+    new_profile_mean = None
+    new_slope_series = None
+    
+    if dot_matrix is not None and len(dot_matrix) > 0:
+        new_dot_matrix = dot_matrix[mask, :]
+        new_profile_mean = np.nanmean(new_dot_matrix, axis=1)
+        
+        # Recompute slope_series
+        n_time = new_dot_matrix.shape[1]
+        new_slope_series = np.full(n_time, np.nan, dtype=float)
+        
+        for it in range(n_time):
+            y = new_dot_matrix[:, it]
+            valid = np.isfinite(new_x_km) & np.isfinite(y)
+            if np.sum(valid) >= 2:
+                try:
+                    a, b = np.polyfit(new_x_km[valid], y[valid], 1)
+                    new_slope_series[it] = a * 100.0
+                except:
+                    pass
+    
+    # Update strait_name suffix
+    suffix = ""
+    if lon_max is not None and lon_min is None:
+        suffix = " (West)"
+    elif lon_min is not None and lon_max is None:
+        suffix = " (East)"
+    
+    new_strait_name = getattr(pass_data, 'strait_name', 'Unknown')
+    if suffix and suffix not in new_strait_name:
+        new_strait_name = new_strait_name + suffix
+    
+    # Create new PassData
+    try:
+        return replace(
+            pass_data,
+            gate_lon_pts=new_gate_lon,
+            gate_lat_pts=new_gate_lat,
+            x_km=new_x_km,
+            df=new_df if new_df is not None else df,
+            dot_matrix=new_dot_matrix if new_dot_matrix is not None else dot_matrix,
+            profile_mean=new_profile_mean if new_profile_mean is not None else getattr(pass_data, 'profile_mean', None),
+            slope_series=new_slope_series if new_slope_series is not None else getattr(pass_data, 'slope_series', None),
+            strait_name=new_strait_name,
+        )
+    except TypeError:
+        # If replace fails, return modified pass_data
+        pass_data.gate_lon_pts = new_gate_lon
+        pass_data.gate_lat_pts = new_gate_lat
+        pass_data.x_km = new_x_km
+        if new_df is not None:
+            pass_data.df = new_df
+        if new_dot_matrix is not None:
+            pass_data.dot_matrix = new_dot_matrix
+        if new_profile_mean is not None:
+            pass_data.profile_mean = new_profile_mean
+        if new_slope_series is not None:
+            pass_data.slope_series = new_slope_series
+        pass_data.strait_name = new_strait_name
+        return pass_data
