@@ -82,6 +82,8 @@ class GateCatalog:
                 default_buffer_km=info.get("default_buffer_km", default_buffer),
                 latitude_range=info.get("latitude_range"),
                 longitude_range=info.get("longitude_range"),
+                lon_filter_min=info.get("lon_filter_min"),
+                lon_filter_max=info.get("lon_filter_max"),
             )
     
     def get(self, gate_id: str) -> Optional[GateModel]:

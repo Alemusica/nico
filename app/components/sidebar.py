@@ -35,8 +35,36 @@ from ..state import (
 # Import cache service for persistent data caching
 from src.services.cache_service import DataCache
 
+# Import longitude filter for divided gates (Fram West/East, Davis West/East)
+from app.components.loaders.base import apply_longitude_filter
+
 # Global cache instance
 _cache = DataCache()
+
+
+def _get_lon_filter_for_gate(gate_id: str) -> Tuple[Optional[float], Optional[float]]:
+    """
+    Get longitude filter values for a gate from GateService.
+    
+    Args:
+        gate_id: Gate identifier (e.g., "fram_strait_west")
+        
+    Returns:
+        Tuple of (lon_filter_min, lon_filter_max) - both None if no filter
+    """
+    if not gate_id:
+        return None, None
+    
+    try:
+        from src.services.gate_service import GateService
+        service = GateService()
+        gate = service.get_gate(gate_id)
+        if gate:
+            return gate.lon_filter_min, gate.lon_filter_max
+    except Exception:
+        pass
+    
+    return None, None
 
 
 # ============================================================
@@ -1147,6 +1175,17 @@ def _load_slcci_data(config: AppConfig):
                 # Save to cache
                 _cache.save("slcci", gate_name, pass_data, pass_number=pass_number)
         
+        # Apply longitude filter for divided gates (Fram West/East, Davis West/East)
+        lon_min, lon_max = _get_lon_filter_for_gate(config.selected_gate)
+        if lon_min is not None or lon_max is not None:
+            pass_data = apply_longitude_filter(pass_data, lon_min, lon_max, config.selected_gate)
+            if pass_data is None:
+                st.sidebar.error(f"❌ No data after longitude filter ({lon_min}° to {lon_max}°)")
+                return
+            filter_info = f" [lon: {lon_min or '-∞'}° to {lon_max or '+∞'}°]"
+        else:
+            filter_info = ""
+        
         # Store in session state using dedicated function
         store_slcci_data(pass_data)
         st.session_state["slcci_service"] = service
@@ -1158,7 +1197,7 @@ def _load_slcci_data(config: AppConfig):
         n_cyc = pass_data.df['cycle'].nunique() if hasattr(pass_data, 'df') and 'cycle' in pass_data.df.columns else 0
         
         st.sidebar.success(f"""
-        ✅ SLCCI Data Loaded!
+        ✅ SLCCI Data Loaded!{filter_info}
         - Pass: {pass_number}
         - Observations: {n_obs:,}
         - Cycles: {n_cyc}
@@ -1499,6 +1538,17 @@ def _load_cmems_l4_data(config: AppConfig):
             # Save to cache
             _cache.save("cmems_l4", gate_name, pass_data)
         
+        # Apply longitude filter for divided gates (Fram West/East, Davis West/East)
+        lon_min, lon_max = _get_lon_filter_for_gate(config.selected_gate)
+        if lon_min is not None or lon_max is not None:
+            pass_data = apply_longitude_filter(pass_data, lon_min, lon_max, config.selected_gate)
+            if pass_data is None:
+                st.sidebar.error(f"❌ No data after longitude filter ({lon_min}° to {lon_max}°)")
+                return
+            filter_info = f" [lon: {lon_min or '-∞'}° to {lon_max or '+∞'}°]"
+        else:
+            filter_info = ""
+        
         # Store in session state (use cmems key for compatibility)
         st.session_state["dataset_cmems_l4"] = pass_data
         st.session_state["cmems_l4_service"] = service
@@ -1510,7 +1560,7 @@ def _load_cmems_l4_data(config: AppConfig):
         gate_length = pass_data.x_km[-1] if len(pass_data.x_km) > 0 else 0
         
         st.sidebar.success(f"""
-        ✅ CMEMS L4 Data Loaded!
+        ✅ CMEMS L4 Data Loaded!{filter_info}
         - Gate: {pass_data.strait_name}
         - Source: {pass_data.data_source}
         - Period: {pass_data.time_range[0][:10]} to {pass_data.time_range[1][:10]}
@@ -1699,6 +1749,17 @@ def _load_dtu_data(config: AppConfig):
             # Save to cache
             _cache.save("dtuspace", gate_name, pass_data)
         
+        # Apply longitude filter for divided gates (Fram West/East, Davis West/East)
+        lon_min, lon_max = _get_lon_filter_for_gate(config.selected_gate)
+        if lon_min is not None or lon_max is not None:
+            pass_data = apply_longitude_filter(pass_data, lon_min, lon_max, config.selected_gate)
+            if pass_data is None:
+                st.sidebar.error(f"❌ No data after longitude filter ({lon_min}° to {lon_max}°)")
+                return
+            filter_info = f" [lon: {lon_min or '-∞'}° to {lon_max or '+∞'}°]"
+        else:
+            filter_info = ""
+        
         # Store in session state using dedicated DTU function
         store_dtu_data(pass_data)
         st.session_state["dtu_service"] = service
@@ -1716,7 +1777,7 @@ def _load_dtu_data(config: AppConfig):
         gate_length = pass_data.x_km[-1] if len(pass_data.x_km) > 0 else 0
         
         st.sidebar.success(f"""
-        ✅ DTUSpace Data Loaded!
+        ✅ DTUSpace Data Loaded!{filter_info}
         - Gate: {pass_data.strait_name}
         - Dataset: {pass_data.dataset_name}
         - Period: {config.dtu_start_year}–{config.dtu_end_year}
