@@ -1387,7 +1387,43 @@ def _render_unified_export_tab(data, config: AppConfig, ds_info: dict):
 
 
 # ==============================================================================
-# TAB 3: SPATIAL MAP (from SLCCI PLOTTER Panel 3)
+# ⚠️ LEGACY FUNCTIONS - DEPRECATED (2026-01-06)
+# ==============================================================================
+# The following functions are LEGACY and have been replaced by unified functions:
+#
+# REPLACED BY _render_unified_spatial_map():
+#   - _render_spatial_map()
+#
+# REPLACED BY _render_unified_monthly_analysis():
+#   - _render_slcci_monthly_analysis()
+#   - _render_gridded_monthly_analysis()
+#
+# REPLACED BY _render_unified_geostrophic_velocity():
+#   - _render_geostrophic_velocity()
+#   - _render_dtu_geostrophic_velocity()
+#
+# REPLACED BY _render_unified_slope_timeline():
+#   - _render_dtu_slope_timeline()
+#
+# REPLACED BY _render_unified_dot_profile():
+#   - _render_dtu_dot_profile()
+#
+# REPLACED BY _render_unified_spatial_map():
+#   - _render_dtu_spatial_map()
+#
+# REPLACED BY _render_unified_export_tab():
+#   - _render_dtu_export_tab()
+#
+# DUPLICATE (already defined above):
+#   - _get_gridded_dataset_info()
+#
+# These functions are kept for backwards compatibility and reference.
+# DO NOT USE - Use the _render_unified_* functions instead.
+# ==============================================================================
+
+
+# ==============================================================================
+# TAB 3: SPATIAL MAP (from SLCCI PLOTTER Panel 3) [LEGACY]
 # ==============================================================================
 def _render_spatial_map(slcci_data, config: AppConfig):
     """Render spatial map of DOT measurements."""
@@ -1503,7 +1539,7 @@ def _render_spatial_map(slcci_data, config: AppConfig):
 
 
 # ==============================================================================
-# TAB 4: MONTHLY ANALYSIS (from SLCCI PLOTTER 12-subplot figure)
+# TAB 4: MONTHLY ANALYSIS (from SLCCI PLOTTER 12-subplot figure) [LEGACY]
 # ==============================================================================
 def _render_slcci_monthly_analysis(slcci_data, config: AppConfig):
     """
@@ -1680,7 +1716,7 @@ def _render_slcci_monthly_analysis(slcci_data, config: AppConfig):
 
 
 # ==============================================================================
-# TAB 5: GEOSTROPHIC VELOCITY
+# TAB 5: GEOSTROPHIC VELOCITY [LEGACY]
 # ==============================================================================
 def _render_geostrophic_velocity(slcci_data, config):
     """
@@ -3847,7 +3883,7 @@ def _render_dtu_tabs(dtu_data, config: AppConfig):
 
 
 # ==============================================================================
-# DTU TAB 1: SLOPE TIMELINE
+# DTU TAB 1: SLOPE TIMELINE [LEGACY]
 # ==============================================================================
 
 def _get_gridded_dataset_info(data):
@@ -3996,7 +4032,7 @@ def _render_dtu_slope_timeline(dtu_data, config: AppConfig):
 
 
 # ==============================================================================
-# DTU TAB 2: DOT PROFILE
+# DTU TAB 2: DOT PROFILE [LEGACY]
 # ==============================================================================
 
 def _render_dtu_dot_profile(dtu_data, config: AppConfig):
@@ -4169,7 +4205,7 @@ def _render_dtu_dot_profile(dtu_data, config: AppConfig):
 
 
 # ==============================================================================
-# DTU TAB 3: SPATIAL MAP (GRIDDED - uses pcolormesh style)
+# DTU TAB 3: SPATIAL MAP (GRIDDED - uses pcolormesh style) [LEGACY]
 # ==============================================================================
 
 def _render_dtu_spatial_map(dtu_data, config: AppConfig):
@@ -4446,7 +4482,7 @@ def _render_gridded_monthly_analysis(data, config: AppConfig):
 
 
 # ==============================================================================
-# DTU TAB 4: GEOSTROPHIC VELOCITY
+# DTU TAB 4: GEOSTROPHIC VELOCITY [LEGACY]
 # ==============================================================================
 
 def _render_dtu_geostrophic_velocity(dtu_data, config: AppConfig):
@@ -4569,7 +4605,7 @@ def _render_dtu_geostrophic_velocity(dtu_data, config: AppConfig):
 
 
 # ==============================================================================
-# DTU TAB 5: EXPORT
+# DTU TAB 5: EXPORT [LEGACY]
 # ==============================================================================
 
 def _render_dtu_export_tab(dtu_data, config: AppConfig):
