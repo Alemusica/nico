@@ -311,6 +311,10 @@ class GateModel(BaseModel):
     longitude_range: Optional[List[float]] = Field(default=None, description="[lon_min, lon_max]")
     importance: Optional[str] = Field(default=None, description="Scientific importance")
     
+    # Longitude filter for subdivided gates (e.g., Fram West/East)
+    lon_filter_min: Optional[float] = Field(default=None, description="Min longitude filter for subdivided gates")
+    lon_filter_max: Optional[float] = Field(default=None, description="Max longitude filter for subdivided gates")
+    
     @property
     def bbox(self) -> Optional[BoundingBox]:
         """Get bounding box from lat/lon fields or ranges."""

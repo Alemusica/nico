@@ -14,7 +14,7 @@ metadata:
 gates:
   # === ATLANTIC SECTOR ===
   fram_strait:
-    name: "🧊 Fram Strait"
+    name: "Fram Strait (Full)"
     file: "fram_strait_S3_pass_481.shp"
     description: "Main Arctic-Atlantic exchange"
     region: "Atlantic Sector"
@@ -23,9 +23,33 @@ gates:
     longitude_range: [-20.0, 10.0]
     datasets: ["SLCCI", "ERA5", "CMEMS-SST"]
     default_buffer_km: 50.0
+
+  fram_strait_west:
+    name: "Fram Strait WEST"
+    file: "fram_strait_S3_pass_481.shp"
+    description: "West section (Greenland side, lon < 0°)"
+    region: "Atlantic Sector"
+    closest_passes: [481, 254, 127, 308, 55]
+    latitude_range: [78.0, 80.0]
+    longitude_range: [-20.0, 0.0]
+    datasets: ["SLCCI", "ERA5", "CMEMS-SST"]
+    default_buffer_km: 50.0
+    lon_filter_max: 0.0
+
+  fram_strait_east:
+    name: "Fram Strait EAST"
+    file: "fram_strait_S3_pass_481.shp"
+    description: "East section (Svalbard side, lon > 0°)"
+    region: "Atlantic Sector"
+    closest_passes: [481, 254, 127, 308, 55]
+    latitude_range: [78.0, 80.0]
+    longitude_range: [0.0, 10.0]
+    datasets: ["SLCCI", "ERA5", "CMEMS-SST"]
+    default_buffer_km: 50.0
+    lon_filter_min: 0.0
     
   denmark_strait:
-    name: "🌀 Denmark Strait"
+    name: "Denmark Strait"
     file: "denmark_strait_TPJ_pass_246.shp"
     description: "Iceland-Greenland overflow"
     region: "Atlantic Sector"
@@ -36,7 +60,7 @@ gates:
     default_buffer_km: 50.0
     
   davis_strait:
-    name: "❄️ Davis Strait (Full)"
+    name: "Davis Strait (Full)"
     file: "davis_strait.shp"
     description: "Baffin Bay - Labrador Sea (full width)"
     region: "Atlantic Sector"
@@ -47,7 +71,7 @@ gates:
     default_buffer_km: 75.0
     
   davis_strait_east:
-    name: "❄️ Davis Strait EAST"
+    name: "Davis Strait EAST"
     file: "davis_strait_east.shp"
     description: "Davis Strait - Eastern section (Greenland side, lon > -57°)"
     region: "Atlantic Sector"
@@ -58,7 +82,7 @@ gates:
     default_buffer_km: 50.0
     
   davis_strait_west:
-    name: "❄️ Davis Strait WEST"
+    name: "Davis Strait WEST"
     file: "davis_strait_west.shp"
     description: "Davis Strait - Western section (Baffin Island side, lon < -57°)"
     region: "Atlantic Sector"
@@ -69,7 +93,7 @@ gates:
     default_buffer_km: 50.0
     
   barents_opening:
-    name: "🌡️ Barents Opening"
+    name: "Barents Opening"
     file: "barents_sea_opening_S3_pass_481.shp"
     description: "Atlantic water inflow"
     region: "Atlantic Sector"
@@ -80,7 +104,7 @@ gates:
     default_buffer_km: 50.0
     
   norwegian_boundary:
-    name: "🇳🇴 Norwegian Sea Boundary"
+    name: "Norwegian Sea Boundary"
     file: "norwegian_sea_boundary_TPJ_pass_220.shp"
     description: "Atlantic-Nordic Seas"
     region: "Atlantic Sector"
@@ -92,7 +116,7 @@ gates:
 
   # === PACIFIC SECTOR ===
   bering_strait:
-    name: "🌊 Bering Strait"
+    name: "Bering Strait"
     file: "bering_strait_TPJ_pass_076.shp"
     description: "Pacific-Arctic gateway"
     region: "Pacific Sector"
@@ -104,7 +128,7 @@ gates:
 
   # === CANADIAN ARCHIPELAGO ===
   nares_strait:
-    name: "🏔️ Nares Strait"
+    name: "Nares Strait"
     file: "nares_strait.shp"
     description: "Greenland-Ellesmere Island"
     region: "Canadian Archipelago"
@@ -115,7 +139,7 @@ gates:
     default_buffer_km: 75.0
     
   lancaster_sound:
-    name: "🚢 Lancaster Sound"
+    name: "Lancaster Sound"
     file: "lancaster_sound.shp"
     description: "Northwest Passage entrance"
     region: "Canadian Archipelago"
@@ -129,7 +153,7 @@ gates:
 regions:
   atlantic_sector:
     name: "Atlantic Sector"
-    gates: ["fram_strait", "denmark_strait", "davis_strait", "davis_strait_east", "davis_strait_west", "barents_opening", "norwegian_boundary"]
+    gates: ["fram_strait", "fram_strait_west", "fram_strait_east", "denmark_strait", "davis_strait", "davis_strait_east", "davis_strait_west", "barents_opening", "norwegian_boundary"]
     
   pacific_sector:
     name: "Pacific Sector"

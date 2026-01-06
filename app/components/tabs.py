@@ -15,6 +15,14 @@ import io
 
 from .sidebar import AppConfig
 from ..state import get_slcci_data, get_cmems_data, is_comparison_mode, get_dtu_data
+from .charts import (
+    render_slope_timeline,
+    render_dot_profile,
+    render_spatial_map,
+    render_geostrophic_velocity,
+    render_volume_transport_tab,
+    get_pass_data_attributes,
+)
 
 # Comparison mode colors (from COMPARISON_BATCH notebook)
 COLOR_SLCCI = "darkorange"

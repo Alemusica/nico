@@ -443,7 +443,7 @@ def _render_gate_selection(config: AppConfig) -> AppConfig:
     selected_region = st.sidebar.selectbox(
         "Region",
         ["All Regions"] + regions,
-        key="sidebar_region"
+        key="main_sidebar_region"
     )
     
     # Get gates for selected region
@@ -456,20 +456,28 @@ def _render_gate_selection(config: AppConfig) -> AppConfig:
     gate_options = ["None (Global)"] + [g.name for g in gates]
     gate_ids = [None] + [g.id for g in gates]
     
+    # Sync with globe selection (selected_gate)
+    globe_selected = st.session_state.get("selected_gate")
+    default_idx = 0
+    if globe_selected and globe_selected in gate_ids:
+        default_idx = gate_ids.index(globe_selected)
+    
     selected_idx = st.sidebar.selectbox(
         "Gate",
         range(len(gate_options)),
+        index=default_idx,
         format_func=lambda i: gate_options[i],
-        key="sidebar_gate"
+        key="main_sidebar_gate"
     )
     
     config.selected_gate = gate_ids[selected_idx]
+    st.session_state["selected_gate"] = config.selected_gate  # Sync back to globe
     
     # Show gate info
     if config.selected_gate:
         gate = _gate_service.get_gate(config.selected_gate)
         if gate:
-            st.sidebar.caption(f"📍 {gate.region} - {gate.description}")
+            st.sidebar.caption(f"{gate.region} - {gate.description}")
     
     # Buffer
     config.gate_buffer_km = st.sidebar.slider(

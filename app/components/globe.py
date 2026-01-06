@@ -92,7 +92,7 @@ def render_globe_landing(on_gate_select: Optional[callable] = None):
             clicked_gate = point["customdata"]
             if clicked_gate != selected_gate:
                 st.session_state["selected_gate"] = clicked_gate
-                st.session_state["sidebar_gate"] = clicked_gate
+                # Note: sidebar will pick this up via its own sync mechanism
                 if on_gate_select:
                     on_gate_select(clicked_gate)
                 st.rerun()

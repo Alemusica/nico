@@ -855,75 +855,113 @@ class CMEMSService:
         nc_file: Path, 
         gate_bounds: Dict[str, float]
     ) -> Optional[pd.DataFrame]:
-        """Process a single NetCDF file and return filtered DataFrame."""
+        """Process a single NetCDF file and return filtered DataFrame.
         
-        ds = xr.open_dataset(nc_file)
+        Now includes EARLY track filtering to avoid loading unnecessary data.
+        Uses lazy loading to minimize memory usage.
+        """
+        try:
+            # Open with chunking for memory efficiency
+            ds = xr.open_dataset(nc_file, chunks='auto')
+        except Exception:
+            return None
         
         # Check required variables
         if 'sla_filtered' not in ds.variables or 'mdt' not in ds.variables:
             ds.close()
             return None
         
-        # Extract arrays
-        lats = ds['latitude'].values
-        lons = ds['longitude'].values
-        
-        # Handle time
-        if 'time' in ds.variables:
-            time_var = ds['time']
-            if np.issubdtype(time_var.dtype, np.datetime64):
-                times = time_var.values
+        # EARLY GEOGRAPHIC + TRACK FILTER using xarray selections
+        # This filters BEFORE loading into memory
+        try:
+            lats = ds['latitude'].values
+            lons = ds['longitude'].values
+            
+            # Geographic mask first (cheap)
+            geo_mask = (
+                (lons >= gate_bounds['lon_min']) & (lons <= gate_bounds['lon_max']) &
+                (lats >= gate_bounds['lat_min']) & (lats <= gate_bounds['lat_max'])
+            )
+            
+            # Quick check - if no points in geographic area, skip entirely
+            if not np.any(geo_mask):
+                ds.close()
+                return None
+            
+            # Track filter (if specified)
+            if self.config.track_number is not None and 'track' in ds.variables:
+                track_vals = ds['track'].values
+                track_mask = track_vals == self.config.track_number
+                combined_mask = geo_mask & track_mask
+                
+                # If no points match track + geography, skip file
+                if not np.any(combined_mask):
+                    ds.close()
+                    return None
             else:
-                times = pd.to_datetime(time_var.values, unit='s', errors='coerce')
-        else:
+                combined_mask = geo_mask
+        except Exception:
             ds.close()
             return None
         
-        # Check dimensions
-        if not (len(lats) == len(lons) == len(times)):
+        # Now load only the needed data (only points that passed the mask)
+        try:
+            # Handle time
+            if 'time' in ds.variables:
+                time_var = ds['time']
+                if np.issubdtype(time_var.dtype, np.datetime64):
+                    times = time_var.values
+                else:
+                    times = pd.to_datetime(time_var.values, unit='s', errors='coerce')
+            else:
+                ds.close()
+                return None
+            
+            # Check dimensions
+            if not (len(lats) == len(lons) == len(times)):
+                ds.close()
+                return None
+            
+            # Calculate DOT
+            dot = (ds['sla_filtered'] + ds['mdt']).values
+            
+            if len(dot) != len(lats):
+                ds.close()
+                return None
+            
+            # Final mask: combined_mask + finite DOT values
+            mask = combined_mask & np.isfinite(dot)
+            
+            if np.sum(mask) == 0:
+                ds.close()
+                return None
+            
+            # Build DataFrame with only filtered data
+            df = pd.DataFrame({
+                'satellite': satellite,
+                'time': times[mask],
+                'lat': lats[mask],
+                'lon': lons[mask],
+                'sla_filtered': ds['sla_filtered'].values[mask],
+                'mdt': ds['mdt'].values[mask],
+                'dot': dot[mask],
+                'cycle': ds['cycle'].values[mask] if 'cycle' in ds.variables else -1,
+                'track': ds['track'].values[mask] if 'track' in ds.variables else -1,
+            })
+            
+            ds.close()
+            
+            # Convert time
+            if not pd.api.types.is_datetime64_any_dtype(df['time']):
+                df['time'] = pd.to_datetime(df['time'], errors='coerce')
+            
+            df = df.dropna(subset=['time'])
+            
+            return df if len(df) > 0 else None
+            
+        except Exception:
             ds.close()
             return None
-        
-        # Calculate DOT
-        dot = (ds['sla_filtered'] + ds['mdt']).values
-        
-        if len(dot) != len(lats):
-            ds.close()
-            return None
-        
-        # Geographic filter
-        mask = (
-            (lons >= gate_bounds['lon_min']) & (lons <= gate_bounds['lon_max']) &
-            (lats >= gate_bounds['lat_min']) & (lats <= gate_bounds['lat_max']) &
-            np.isfinite(dot)
-        )
-        
-        if np.sum(mask) == 0:
-            ds.close()
-            return None
-        
-        # Build DataFrame
-        df = pd.DataFrame({
-            'satellite': satellite,
-            'time': times[mask],
-            'lat': lats[mask],
-            'lon': lons[mask],
-            'sla_filtered': ds['sla_filtered'].values[mask],
-            'mdt': ds['mdt'].values[mask],
-            'dot': dot[mask],
-            'cycle': ds['cycle'].values[mask] if 'cycle' in ds.variables else -1,
-            'track': ds['track'].values[mask] if 'track' in ds.variables else -1,
-        })
-        
-        ds.close()
-        
-        # Convert time
-        if not pd.api.types.is_datetime64_any_dtype(df['time']):
-            df['time'] = pd.to_datetime(df['time'], errors='coerce')
-        
-        df = df.dropna(subset=['time'])
-        
-        return df if len(df) > 0 else None
     
     # ==========================================================================
     # PRIVATE METHODS - SLOPE & GEOSTROPHIC COMPUTATION

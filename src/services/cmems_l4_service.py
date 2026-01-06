@@ -152,6 +152,10 @@ class CMEMSL4PassData:
     gate_lon_pts: np.ndarray
     gate_lat_pts: np.ndarray
     
+    # Tab 4: Geostrophic Velocities (from Copernicus, not computed)
+    ugos_matrix: Optional[np.ndarray] = None  # Shape: (n_gate_pts, n_time) - m/s
+    vgos_matrix: Optional[np.ndarray] = None  # Shape: (n_gate_pts, n_time) - m/s
+    
     # Fields with defaults (must come after required fields)
     data_source: str = "CMEMS L4"
     
@@ -283,6 +287,7 @@ class CMEMSL4Service:
         self,
         config: CMEMSL4Config,
         progress_callback: Optional[callable] = None,
+        use_cache: bool = True,
     ) -> Optional[CMEMSL4PassData]:
         """
         Load CMEMS L4 gridded data for a gate via API.
@@ -290,6 +295,7 @@ class CMEMSL4Service:
         Args:
             config: CMEMSL4Config with gate path and parameters
             progress_callback: Optional callback(progress, message)
+            use_cache: If True, try to load from persistent cache first
         
         Returns:
             CMEMSL4PassData object or None if loading fails
@@ -301,6 +307,21 @@ class CMEMSL4Service:
         if not config.gate_path:
             logger.error("No gate path provided")
             return None
+        
+        # Extract gate name for cache key
+        strait_name = _extract_strait_name(config.gate_path)
+        
+        # Try loading from persistent cache first
+        if use_cache:
+            from src.services.cache_service import get_cache
+            cache = get_cache()
+            
+            cached_data = cache.load("cmems_l4", strait_name)
+            if cached_data is not None:
+                logger.info(f"⚡ Loaded CMEMS L4 {strait_name} from cache (instant!)")
+                if progress_callback:
+                    progress_callback(1.0, "Loaded from cache!")
+                return cached_data
         
         # Load gate
         if progress_callback:
@@ -406,6 +427,39 @@ class CMEMSL4Service:
             return None
         
         if progress_callback:
+            progress_callback(0.75, "Extracting geostrophic velocities...")
+        
+        # Extract UGOS and VGOS if available (Copernicus geostrophic velocities)
+        ugos_matrix = None
+        vgos_matrix = None
+        
+        for vel_name, matrix_name in [("ugos", "ugos_matrix"), ("vgos", "vgos_matrix")]:
+            if vel_name in ds.data_vars:
+                vel_var = ds[vel_name]
+                vel_data = vel_var.values
+                vel_matrix = np.zeros((n_pts, n_time))
+                
+                if vel_var.dims == ("time", "latitude", "longitude") or vel_var.dims == ("time", "lat", "lon"):
+                    for it in range(n_time):
+                        vel_matrix[:, it] = vel_data[it, lat_idx, lon_idx]
+                elif vel_var.dims == ("latitude", "longitude", "time") or vel_var.dims == ("lat", "lon", "time"):
+                    for it in range(n_time):
+                        vel_matrix[:, it] = vel_data[lat_idx, lon_idx, it]
+                else:
+                    logger.warning(f"Unexpected {vel_name} dimensions: {vel_var.dims}")
+                    vel_matrix = None
+                
+                if vel_name == "ugos":
+                    ugos_matrix = vel_matrix
+                else:
+                    vgos_matrix = vel_matrix
+                
+                if vel_matrix is not None:
+                    logger.info(f"Extracted {vel_name}: shape {vel_matrix.shape}")
+            else:
+                logger.warning(f"{vel_name} not found in dataset")
+        
+        if progress_callback:
             progress_callback(0.8, "Computing slope time series...")
         
         # Compute slope series
@@ -422,7 +476,7 @@ class CMEMSL4Service:
         
         logger.info(f"Loaded CMEMS L4: {n_obs} observations, {n_time} time steps")
         
-        return CMEMSL4PassData(
+        pass_data = CMEMSL4PassData(
             strait_name=strait_name,
             data_source="CMEMS L4 (Gridded)",
             slope_series=slope_series,
@@ -432,10 +486,20 @@ class CMEMSL4Service:
             dot_matrix=dot_matrix,
             gate_lon_pts=gate_lon_pts,
             gate_lat_pts=gate_lat_pts,
+            ugos_matrix=ugos_matrix,
+            vgos_matrix=vgos_matrix,
             ds=ds,
             n_observations=int(n_obs),
             time_range=(str(time_vals.min()), str(time_vals.max())),
         )
+        
+        # Save to persistent cache for future instant loading
+        if use_cache:
+            from src.services.cache_service import get_cache
+            cache = get_cache()
+            cache.save("cmems_l4", strait_name, pass_data)
+        
+        return pass_data
     
     def _download_subset(
         self,

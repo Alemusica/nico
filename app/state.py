@@ -20,6 +20,10 @@ class AppConfig:
     gate_geometry: Any = None
     gate_buffer_km: float = 50.0
     
+    # Longitude filter for subdivided gates (e.g., Fram West/East, Davis West/East)
+    lon_filter_min: Optional[float] = None
+    lon_filter_max: Optional[float] = None
+    
     # Data source
     selected_dataset_type: str = "SLCCI"
     data_source_mode: str = "local"  # "local" or "api"
