@@ -72,6 +72,7 @@ class CacheEntry:
     gate_name: str         # e.g., "fram_strait"
     pass_number: Optional[int]  # For along-track datasets
     track_number: Optional[int]  # For CMEMS L3
+    time_range_key: Optional[str]  # e.g., "2002_2021" for distinguishing different time ranges
     file_path: str         # Relative path to pickle file
     created_at: str        # ISO timestamp
     size_bytes: int        # File size
@@ -83,6 +84,9 @@ class CacheEntry:
     
     @classmethod
     def from_dict(cls, d: Dict) -> "CacheEntry":
+        # Handle old entries without time_range_key
+        if 'time_range_key' not in d:
+            d['time_range_key'] = None
         return cls(**d)
 
 
@@ -111,6 +115,7 @@ class DataCache:
         data: Any,
         pass_number: Optional[int] = None,
         track_number: Optional[int] = None,
+        time_range: Optional[tuple] = None,  # (start_year, end_year)
     ) -> bool:
         """
         Save PassData to cache.
@@ -121,6 +126,7 @@ class DataCache:
             data: PassData object to cache
             pass_number: Pass number for along-track datasets
             track_number: Track number for CMEMS L3
+            time_range: Optional (start_year, end_year) tuple to distinguish different time ranges
             
         Returns:
             True if saved successfully
@@ -130,8 +136,13 @@ class DataCache:
             dataset_dir = self.cache_dir / dataset
             dataset_dir.mkdir(parents=True, exist_ok=True)
             
+            # Generate time_range_key from tuple
+            time_range_key = None
+            if time_range is not None:
+                time_range_key = f"{time_range[0]}_{time_range[1]}"
+            
             # Generate filename
-            filename = self._generate_filename(gate_name, pass_number, track_number)
+            filename = self._generate_filename(gate_name, pass_number, track_number, time_range_key)
             file_path = dataset_dir / filename
             
             # Save data
@@ -157,6 +168,7 @@ class DataCache:
                 gate_name=gate_name,
                 pass_number=pass_number,
                 track_number=track_number,
+                time_range_key=time_range_key,
                 file_path=str(file_path.relative_to(self.cache_dir)),
                 created_at=datetime.now().isoformat(),
                 size_bytes=file_path.stat().st_size,
@@ -165,7 +177,7 @@ class DataCache:
             )
             
             # Update index
-            key = self._make_key(dataset, gate_name, pass_number, track_number)
+            key = self._make_key(dataset, gate_name, pass_number, track_number, time_range_key)
             self._index[key] = entry.to_dict()
             self._save_index()
             
@@ -184,6 +196,7 @@ class DataCache:
         gate_name: str,
         pass_number: Optional[int] = None,
         track_number: Optional[int] = None,
+        time_range: Optional[tuple] = None,  # (start_year, end_year)
     ) -> Optional[Any]:
         """
         Load PassData from cache.
@@ -193,11 +206,13 @@ class DataCache:
             gate_name: Gate identifier
             pass_number: Pass number (for along-track)
             track_number: Track number (for CMEMS L3)
+            time_range: Optional (start_year, end_year) tuple
             
         Returns:
             PassData object or None if not cached
         """
-        key = self._make_key(dataset, gate_name, pass_number, track_number)
+        time_range_key = f"{time_range[0]}_{time_range[1]}" if time_range else None
+        key = self._make_key(dataset, gate_name, pass_number, track_number, time_range_key)
         
         if key not in self._index:
             logger.debug(f"Cache miss: {key}")
@@ -232,9 +247,11 @@ class DataCache:
         gate_name: str,
         pass_number: Optional[int] = None,
         track_number: Optional[int] = None,
+        time_range: Optional[tuple] = None,  # (start_year, end_year)
     ) -> bool:
         """Check if data is cached."""
-        key = self._make_key(dataset, gate_name, pass_number, track_number)
+        time_range_key = f"{time_range[0]}_{time_range[1]}" if time_range else None
+        key = self._make_key(dataset, gate_name, pass_number, track_number, time_range_key)
         
         if key not in self._index:
             return False
@@ -256,9 +273,11 @@ class DataCache:
         gate_name: str,
         pass_number: Optional[int] = None,
         track_number: Optional[int] = None,
+        time_range: Optional[tuple] = None,  # (start_year, end_year)
     ) -> Optional[Dict]:
         """Get cache entry metadata without loading data."""
-        key = self._make_key(dataset, gate_name, pass_number, track_number)
+        time_range_key = f"{time_range[0]}_{time_range[1]}" if time_range else None
+        key = self._make_key(dataset, gate_name, pass_number, track_number, time_range_key)
         return self._index.get(key)
     
     def list_cached(self, dataset: Optional[str] = None) -> List[Dict]:
@@ -282,9 +301,11 @@ class DataCache:
         gate_name: str,
         pass_number: Optional[int] = None,
         track_number: Optional[int] = None,
+        time_range: Optional[tuple] = None,  # (start_year, end_year)
     ) -> bool:
         """Clear specific cached item."""
-        key = self._make_key(dataset, gate_name, pass_number, track_number)
+        time_range_key = f"{time_range[0]}_{time_range[1]}" if time_range else None
+        key = self._make_key(dataset, gate_name, pass_number, track_number, time_range_key)
         
         if key not in self._index:
             return False
@@ -379,12 +400,20 @@ class DataCache:
             file_path = self.cache_dir / entry['file_path']
             size_mb = entry.get('size_bytes', 0) / (1024 * 1024)
             
+            # Format time range for display
+            time_range_key = entry.get('time_range_key')
+            if time_range_key:
+                years = time_range_key.replace('_', '-')
+            else:
+                years = None
+            
             entries.append({
                 'key': key,
                 'dataset': entry['dataset'].upper(),
                 'gate': entry['gate_name'],
                 'pass': entry.get('pass_number'),
                 'track': entry.get('track_number'),
+                'years': years,  # e.g., "2002-2021"
                 'size_mb': size_mb,
                 'date_range': entry.get('date_range', 'unknown'),
                 'created': entry.get('created_at', ''),
@@ -392,8 +421,8 @@ class DataCache:
                 'exists': file_path.exists(),
             })
         
-        # Sort by dataset, then gate
-        entries.sort(key=lambda x: (x['dataset'], x['gate']))
+        # Sort by dataset, then gate, then years
+        entries.sort(key=lambda x: (x['dataset'], x['gate'], x.get('years') or ''))
         return entries
     
     # ==========================================================================
@@ -406,6 +435,7 @@ class DataCache:
         gate_name: str,
         pass_number: Optional[int] = None,
         track_number: Optional[int] = None,
+        time_range_key: Optional[str] = None,
     ) -> str:
         """Generate unique cache key."""
         parts = [dataset, gate_name.lower().replace(' ', '_')]
@@ -416,6 +446,9 @@ class DataCache:
         if track_number is not None:
             parts.append(f"track_{track_number}")
         
+        if time_range_key is not None:
+            parts.append(f"years_{time_range_key}")
+        
         return "/".join(parts)
     
     def _generate_filename(
@@ -423,16 +456,22 @@ class DataCache:
         gate_name: str,
         pass_number: Optional[int] = None,
         track_number: Optional[int] = None,
+        time_range_key: Optional[str] = None,
     ) -> str:
         """Generate cache filename."""
         clean_name = gate_name.lower().replace(' ', '_').replace('-', '_')
         
+        parts = [clean_name]
+        
         if pass_number is not None:
-            return f"{clean_name}_pass_{pass_number}.pkl"
+            parts.append(f"pass_{pass_number}")
         elif track_number is not None:
-            return f"{clean_name}_track_{track_number}.pkl"
-        else:
-            return f"{clean_name}.pkl"
+            parts.append(f"track_{track_number}")
+        
+        if time_range_key is not None:
+            parts.append(f"years_{time_range_key}")
+        
+        return "_".join(parts) + ".pkl"
     
     def _load_index(self) -> Dict:
         """Load cache index from disk."""

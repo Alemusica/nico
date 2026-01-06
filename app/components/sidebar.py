@@ -1251,12 +1251,14 @@ def _load_slcci_data(config: AppConfig):
                 return
         
         # Check cache first - use parent gate for cache key (Fram West/East share cache)
+        # Include cycle range in cache key so different time ranges are cached separately
         cache_gate = _get_parent_gate_id(config.selected_gate)
         gate_name = cache_gate.replace(" ", "_").lower()
-        cached_data = _cache.load("slcci", gate_name, pass_number=pass_number)
+        time_range = (config.cycle_start, config.cycle_end)  # Use cycles as time range
+        cached_data = _cache.load("slcci", gate_name, pass_number=pass_number, time_range=time_range)
         
         if cached_data is not None:
-            st.sidebar.success("📦 Loaded from cache!")
+            st.sidebar.success(f"📦 Loaded from cache! (cycles {config.cycle_start}-{config.cycle_end})")
             pass_data = cached_data
         else:
             # Load from source
@@ -1271,8 +1273,8 @@ def _load_slcci_data(config: AppConfig):
                     st.sidebar.error(f"❌ No data for pass {pass_number}")
                     return
                 
-                # Save to cache
-                _cache.save("slcci", gate_name, pass_data, pass_number=pass_number)
+                # Save to cache with time range
+                _cache.save("slcci", gate_name, pass_data, pass_number=pass_number, time_range=time_range)
         
         # Apply longitude filter for divided gates (Fram West/East, Davis West/East)
         lon_min, lon_max = _get_lon_filter_for_gate(config.selected_gate)
@@ -1586,25 +1588,21 @@ def _load_cmems_l4_data(config: AppConfig):
         service = CMEMSL4Service()
         
         # Check cache first - use parent gate for cache key (Fram West/East share cache)
+        # Include time range in cache key so different time ranges are cached separately
         cache_gate = _get_parent_gate_id(config.selected_gate)
         gate_name = cache_gate.replace(" ", "_").lower()
-        cached_data = _cache.load("cmems_l4", gate_name)
+        
+        # Extract years for cache key
+        start_year = config.cmems_l4_start.year
+        end_year = config.cmems_l4_end.year
+        time_range = (start_year, end_year)
+        
+        cached_data = _cache.load("cmems_l4", gate_name, time_range=time_range)
         
         if cached_data is not None:
-            # Verify time range matches (or close enough)
-            cached_start = cached_data.time_range[0][:10] if hasattr(cached_data, 'time_range') else None
-            cached_end = cached_data.time_range[1][:10] if hasattr(cached_data, 'time_range') else None
-            request_start = str(config.cmems_l4_start)
-            request_end = str(config.cmems_l4_end)
-            
-            if cached_start == request_start and cached_end == request_end:
-                st.sidebar.success("📦 Loaded from cache!")
-                pass_data = cached_data
-            else:
-                st.sidebar.info("⏳ Cache time range differs, fetching new data...")
-                cached_data = None  # Force reload
-        
-        if cached_data is None:
+            st.sidebar.success(f"📦 Loaded from cache! ({start_year}-{end_year})")
+            pass_data = cached_data
+        else:
             # Create config and load from API
             l4_config = CMEMSL4Config(
                 gate_path=gate_path,
@@ -1637,8 +1635,8 @@ def _load_cmems_l4_data(config: AppConfig):
                 st.sidebar.error("❌ No data returned from API")
                 return
             
-            # Save to cache
-            _cache.save("cmems_l4", gate_name, pass_data)
+            # Save to cache with time range
+            _cache.save("cmems_l4", gate_name, pass_data, time_range=time_range)
         
         # Apply longitude filter for divided gates (Fram West/East, Davis West/East)
         lon_min, lon_max = _get_lon_filter_for_gate(config.selected_gate)
@@ -1833,12 +1831,14 @@ def _load_dtu_data(config: AppConfig):
         service = DTUService()
         
         # Check cache first - use parent gate for cache key (Fram West/East share cache)
+        # Include time range in cache key so different time ranges are cached separately
         cache_gate = _get_parent_gate_id(config.selected_gate)
         gate_name = cache_gate.replace(" ", "_").lower()
-        cached_data = _cache.load("dtuspace", gate_name)
+        time_range = (config.dtu_start_year, config.dtu_end_year)
+        cached_data = _cache.load("dtuspace", gate_name, time_range=time_range)
         
         if cached_data is not None:
-            st.sidebar.success("📦 Loaded from cache!")
+            st.sidebar.success(f"📦 Loaded from cache! ({config.dtu_start_year}-{config.dtu_end_year})")
             pass_data = cached_data
         else:
             with st.sidebar.status("🟢 Loading DTUSpace data...", expanded=True) as status:
@@ -1860,8 +1860,8 @@ def _load_dtu_data(config: AppConfig):
                 st.sidebar.error("❌ No data found for this gate/period")
                 return
             
-            # Save to cache
-            _cache.save("dtuspace", gate_name, pass_data)
+            # Save to cache with time range
+            _cache.save("dtuspace", gate_name, pass_data, time_range=time_range)
         
         # Apply longitude filter for divided gates (Fram West/East, Davis West/East)
         lon_min, lon_max = _get_lon_filter_for_gate(config.selected_gate)
