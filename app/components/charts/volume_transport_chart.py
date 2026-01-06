@@ -1,6 +1,7 @@
 """
 Volume Transport Chart Components.
 Renders volume transport visualizations for the dashboard.
+Integrates BathymetryService for realistic cross-section calculations.
 """
 
 import numpy as np
@@ -8,8 +9,128 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
+from typing import Optional, Tuple
 
 from .utils import DATASET_COLORS, get_pass_data_attributes
+
+# Optional: Bathymetry service for realistic depth profiles
+try:
+    from src.services.bathymetry_service import BathymetryService, BathymetryProfile
+    BATHYMETRY_AVAILABLE = True
+except ImportError:
+    BATHYMETRY_AVAILABLE = False
+    BathymetryProfile = None
+
+
+def _get_bathymetry_profile(pass_data):
+    """
+    Load bathymetry profile along gate if GEBCO data is available.
+    
+    Args:
+        pass_data: PassData object with lon/lat coordinates
+        
+    Returns:
+        BathymetryProfile or None if not available
+    """
+    if not BATHYMETRY_AVAILABLE:
+        return None
+    
+    # Get coordinates from pass_data
+    lon = getattr(pass_data, 'lon', None) or getattr(pass_data, 'gate_lon', None)
+    lat = getattr(pass_data, 'lat', None) or getattr(pass_data, 'gate_lat', None)
+    x_km = getattr(pass_data, 'x_km', None)
+    
+    if lon is None or lat is None:
+        return None
+    
+    try:
+        service = BathymetryService()
+        profile = service.extract_profile(lon, lat, x_km)
+        return profile
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Bathymetry extraction failed: {e}")
+        return None
+
+
+def render_bathymetry_profile(pass_data, height: int = 300) -> Optional[go.Figure]:
+    """
+    Render bathymetry cross-section along gate.
+    
+    Args:
+        pass_data: PassData object with lon/lat coordinates
+        height: Chart height in pixels
+        
+    Returns:
+        go.Figure with bathymetry profile or None
+    """
+    profile = _get_bathymetry_profile(pass_data)
+    strait_name = getattr(pass_data, 'strait_name', 'Unknown')
+    
+    if profile is None:
+        # Return placeholder
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"<b>{strait_name} - Bathymetry</b><br><br>" +
+                 "GEBCO bathymetry not available.<br>" +
+                 "Download from: https://www.gebco.net/",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=14),
+            align="center"
+        )
+        fig.update_layout(
+            height=height,
+            template="plotly_white",
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False)
+        )
+        return fig
+    
+    fig = go.Figure()
+    
+    # Fill area for bathymetry (ocean floor)
+    fig.add_trace(go.Scatter(
+        x=profile.x_km,
+        y=-profile.depth,  # Negative to show depth below sea level
+        fill='tozeroy',
+        fillcolor='rgba(139, 90, 43, 0.5)',
+        line=dict(color='saddlebrown', width=2),
+        name='Ocean Floor'
+    ))
+    
+    # Sea level reference
+    fig.add_hline(y=0, line_dash="solid", line_color="blue", line_width=2)
+    
+    # Sill depth marker
+    fig.add_hline(
+        y=-profile.sill_depth, 
+        line_dash="dash", 
+        line_color="red",
+        annotation_text=f"Sill: {profile.sill_depth:.0f} m"
+    )
+    
+    fig.update_layout(
+        title=f"{strait_name} - Bathymetry Cross-Section",
+        xaxis_title="Distance along gate (km)",
+        yaxis_title="Depth (m)",
+        height=height,
+        template="plotly_white",
+        yaxis=dict(autorange='reversed' if profile.depth.max() > 0 else True),
+        annotations=[
+            dict(
+                text=f"Mean: {profile.mean_depth:.0f} m | Max: {profile.max_depth:.0f} m | Source: {profile.source}",
+                xref="paper", yref="paper",
+                x=0.02, y=0.02,
+                showarrow=False,
+                font=dict(size=10),
+                bgcolor="rgba(255,255,255,0.8)"
+            )
+        ]
+    )
+    
+    return fig
 
 
 def render_volume_transport_tab(pass_data, height: int = 500):
@@ -93,13 +214,24 @@ def _render_volume_transport_timeseries(pass_data, height: int = 500):
 
 
 def _render_computed_volume_transport(pass_data, height: int = 500):
-    """Compute volume transport from geostrophic velocity and gate geometry."""
+    """Compute volume transport from geostrophic velocity and gate geometry with bathymetry support."""
     strait_name = getattr(pass_data, 'strait_name', 'Unknown')
     v_geostrophic_series = getattr(pass_data, 'v_geostrophic_series', None)
-    gate_depth = getattr(pass_data, 'gate_depth', 200)  # Default 200m
+    gate_depth = getattr(pass_data, 'gate_depth', None)  # May be None
     gate_width_km = getattr(pass_data, 'gate_width_km', None)
     time_array = getattr(pass_data, 'time_array', None)
     x_km = getattr(pass_data, 'x_km', None)
+    
+    # Try to get bathymetry for realistic depth
+    bathymetry_profile = _get_bathymetry_profile(pass_data)
+    depth_source = "default"
+    
+    if bathymetry_profile is not None:
+        # Use mean depth from bathymetry
+        gate_depth = bathymetry_profile.mean_depth
+        depth_source = bathymetry_profile.source
+    elif gate_depth is None:
+        gate_depth = 200  # Default fallback
     
     # Estimate gate width from x_km if not provided
     if gate_width_km is None and x_km is not None:
@@ -145,7 +277,7 @@ def _render_computed_volume_transport(pass_data, height: int = 500):
         template="plotly_white",
         annotations=[
             dict(
-                text=f"Gate: {gate_width_km:.0f} km × {gate_depth:.0f} m",
+                text=f"Gate: {gate_width_km:.0f} km × {gate_depth:.0f} m (depth: {depth_source})",
                 xref="paper", yref="paper",
                 x=0.02, y=0.98,
                 showarrow=False,

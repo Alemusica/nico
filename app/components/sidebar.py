@@ -32,6 +32,12 @@ from ..state import (
     get_dtu_data
 )
 
+# Import cache service for persistent data caching
+from src.services.cache_service import DataCache
+
+# Global cache instance
+_cache = DataCache()
+
 
 # ============================================================
 # PASS/TRACK EXTRACTION HELPERS
@@ -1066,7 +1072,7 @@ def _render_latitude_warning(config: AppConfig) -> AppConfig:
 
 
 def _load_slcci_data(config: AppConfig):
-    """Load SLCCI data using SLCCIService (local or API)."""
+    """Load SLCCI data using SLCCIService (local or API) with cache support."""
     
     # Validate geoid path (always needed)
     if not Path(config.slcci_geoid_path).exists():
@@ -1090,6 +1096,9 @@ def _load_slcci_data(config: AppConfig):
         
         cycles = list(range(config.cycle_start, config.cycle_end + 1))
         
+        # Determine pass number first (needed for cache key)
+        pass_number = config.pass_number
+        
         slcci_config = SLCCIConfig(
             base_dir=config.slcci_base_dir,
             geoid_path=config.slcci_geoid_path,
@@ -1104,50 +1113,58 @@ def _load_slcci_data(config: AppConfig):
         
         service = SLCCIService(slcci_config)
         
-        with st.spinner(f"Loading {len(cycles)} cycles..."):
-            
-            # Determine pass number
-            pass_number = config.pass_number
-            
-            if config.pass_mode == "auto":
-                st.sidebar.info("🔍 Finding closest pass...")
-                closest = service.find_closest_pass(gate_path, n_passes=1)
-                if closest:
-                    pass_number = closest[0][0]
-                    st.sidebar.success(f"Found pass {pass_number}")
-                else:
-                    st.sidebar.error("No passes found near gate")
-                    return
-            
-            # Load pass data
-            pass_data = service.load_pass_data(
-                gate_path=gate_path,
-                pass_number=pass_number,
-                cycles=cycles,
-            )
-            
-            if pass_data is None:
-                st.sidebar.error(f"❌ No data for pass {pass_number}")
+        # Auto-find pass if needed
+        if config.pass_mode == "auto":
+            st.sidebar.info("🔍 Finding closest pass...")
+            closest = service.find_closest_pass(gate_path, n_passes=1)
+            if closest:
+                pass_number = closest[0][0]
+                st.sidebar.success(f"Found pass {pass_number}")
+            else:
+                st.sidebar.error("No passes found near gate")
                 return
-            
-            # Store in session state using dedicated function
-            store_slcci_data(pass_data)
-            st.session_state["slcci_service"] = service
-            st.session_state["slcci_config"] = config
-            st.session_state["datasets"] = {}  # Clear generic
-            
-            # Success message
-            n_obs = len(pass_data.df) if hasattr(pass_data, 'df') else 0
-            n_cyc = pass_data.df['cycle'].nunique() if hasattr(pass_data, 'df') and 'cycle' in pass_data.df.columns else 0
-            
-            st.sidebar.success(f"""
-            ✅ SLCCI Data Loaded!
-            - Pass: {pass_number}
-            - Observations: {n_obs:,}
-            - Cycles: {n_cyc}
-            """)
-            
-            st.rerun()
+        
+        # Check cache first
+        gate_name = config.selected_gate.replace(" ", "_").lower()
+        cached_data = _cache.load("slcci", gate_name, pass_number=pass_number)
+        
+        if cached_data is not None:
+            st.sidebar.success("📦 Loaded from cache!")
+            pass_data = cached_data
+        else:
+            # Load from source
+            with st.spinner(f"Loading {len(cycles)} cycles..."):
+                pass_data = service.load_pass_data(
+                    gate_path=gate_path,
+                    pass_number=pass_number,
+                    cycles=cycles,
+                )
+                
+                if pass_data is None:
+                    st.sidebar.error(f"❌ No data for pass {pass_number}")
+                    return
+                
+                # Save to cache
+                _cache.save("slcci", gate_name, pass_data, pass_number=pass_number)
+        
+        # Store in session state using dedicated function
+        store_slcci_data(pass_data)
+        st.session_state["slcci_service"] = service
+        st.session_state["slcci_config"] = config
+        st.session_state["datasets"] = {}  # Clear generic
+        
+        # Success message
+        n_obs = len(pass_data.df) if hasattr(pass_data, 'df') else 0
+        n_cyc = pass_data.df['cycle'].nunique() if hasattr(pass_data, 'df') and 'cycle' in pass_data.df.columns else 0
+        
+        st.sidebar.success(f"""
+        ✅ SLCCI Data Loaded!
+        - Pass: {pass_number}
+        - Observations: {n_obs:,}
+        - Cycles: {n_cyc}
+        """)
+        
+        st.rerun()
             
     except ImportError as e:
         st.sidebar.error(f"❌ Service not available: {e}")
@@ -1405,7 +1422,7 @@ def _render_cmems_l4_time_range(config: AppConfig) -> AppConfig:
 
 
 def _load_cmems_l4_data(config: AppConfig):
-    """Load CMEMS L4 data via API for the selected gate."""
+    """Load CMEMS L4 data via API for the selected gate with cache support."""
     
     # Check copernicusmarine
     try:
@@ -1430,35 +1447,57 @@ def _load_cmems_l4_data(config: AppConfig):
         
         service = CMEMSL4Service()
         
-        # Create config
-        l4_config = CMEMSL4Config(
-            gate_path=gate_path,
-            time_start=str(config.cmems_l4_start),
-            time_end=str(config.cmems_l4_end),
-            buffer_deg=config.cmems_l4_buffer,
-            variables=config.cmems_l4_variables,
-        )
+        # Check cache first
+        gate_name = config.selected_gate.replace(" ", "_").lower()
+        cached_data = _cache.load("cmems_l4", gate_name)
         
-        with st.sidebar.status("🌐 Downloading CMEMS L4 data...", expanded=True) as status:
-            progress_text = st.empty()
+        if cached_data is not None:
+            # Verify time range matches (or close enough)
+            cached_start = cached_data.time_range[0][:10] if hasattr(cached_data, 'time_range') else None
+            cached_end = cached_data.time_range[1][:10] if hasattr(cached_data, 'time_range') else None
+            request_start = str(config.cmems_l4_start)
+            request_end = str(config.cmems_l4_end)
             
-            def progress_callback(progress: float, message: str):
-                progress_text.write(f"{message} ({progress*100:.0f}%)")
-            
-            st.write(f"🚪 Gate: {config.selected_gate}")
-            st.write(f"📅 Period: {config.cmems_l4_start} to {config.cmems_l4_end}")
-            st.write(f"📊 Variables: {', '.join(config.cmems_l4_variables)}")
-            
-            pass_data = service.load_gate_data(
-                config=l4_config,
-                progress_callback=progress_callback
+            if cached_start == request_start and cached_end == request_end:
+                st.sidebar.success("📦 Loaded from cache!")
+                pass_data = cached_data
+            else:
+                st.sidebar.info("⏳ Cache time range differs, fetching new data...")
+                cached_data = None  # Force reload
+        
+        if cached_data is None:
+            # Create config and load from API
+            l4_config = CMEMSL4Config(
+                gate_path=gate_path,
+                time_start=str(config.cmems_l4_start),
+                time_end=str(config.cmems_l4_end),
+                buffer_deg=config.cmems_l4_buffer,
+                variables=config.cmems_l4_variables,
             )
             
-            status.update(label="✅ CMEMS L4 downloaded!", state="complete", expanded=False)
-        
-        if pass_data is None:
-            st.sidebar.error("❌ No data returned from API")
-            return
+            with st.sidebar.status("🌐 Downloading CMEMS L4 data...", expanded=True) as status:
+                progress_text = st.empty()
+                
+                def progress_callback(progress: float, message: str):
+                    progress_text.write(f"{message} ({progress*100:.0f}%)")
+                
+                st.write(f"🚪 Gate: {config.selected_gate}")
+                st.write(f"📅 Period: {config.cmems_l4_start} to {config.cmems_l4_end}")
+                st.write(f"📊 Variables: {', '.join(config.cmems_l4_variables)}")
+                
+                pass_data = service.load_gate_data(
+                    config=l4_config,
+                    progress_callback=progress_callback
+                )
+                
+                status.update(label="✅ CMEMS L4 downloaded!", state="complete", expanded=False)
+            
+            if pass_data is None:
+                st.sidebar.error("❌ No data returned from API")
+                return
+            
+            # Save to cache
+            _cache.save("cmems_l4", gate_name, pass_data)
         
         # Store in session state (use cmems key for compatibility)
         st.session_state["dataset_cmems_l4"] = pass_data
@@ -1613,7 +1652,7 @@ def _render_dtu_time_range(config: AppConfig) -> AppConfig:
 
 
 def _load_dtu_data(config: AppConfig):
-    """Load DTUSpace data for the selected gate."""
+    """Load DTUSpace data for the selected gate with cache support."""
     
     # Validate
     if not config.dtu_nc_path or not Path(config.dtu_nc_path).exists():
@@ -1630,24 +1669,35 @@ def _load_dtu_data(config: AppConfig):
         
         service = DTUService()
         
-        with st.sidebar.status("🟢 Loading DTUSpace data...", expanded=True) as status:
-            st.write(f"📁 File: {Path(config.dtu_nc_path).name}")
-            st.write(f"🚪 Gate: {config.selected_gate}")
-            st.write(f"📅 Period: {config.dtu_start_year}–{config.dtu_end_year}")
-            
-            pass_data = service.load_gate_data(
-                nc_path=config.dtu_nc_path,
-                gate_path=gate_path,
-                start_year=config.dtu_start_year,
-                end_year=config.dtu_end_year,
-                n_gate_pts=config.dtu_n_gate_pts
-            )
-            
-            status.update(label="✅ DTUSpace loaded!", state="complete", expanded=False)
+        # Check cache first
+        gate_name = config.selected_gate.replace(" ", "_").lower()
+        cached_data = _cache.load("dtuspace", gate_name)
         
-        if pass_data is None:
-            st.sidebar.error("❌ No data found for this gate/period")
-            return
+        if cached_data is not None:
+            st.sidebar.success("📦 Loaded from cache!")
+            pass_data = cached_data
+        else:
+            with st.sidebar.status("🟢 Loading DTUSpace data...", expanded=True) as status:
+                st.write(f"📁 File: {Path(config.dtu_nc_path).name}")
+                st.write(f"🚪 Gate: {config.selected_gate}")
+                st.write(f"📅 Period: {config.dtu_start_year}–{config.dtu_end_year}")
+                
+                pass_data = service.load_gate_data(
+                    nc_path=config.dtu_nc_path,
+                    gate_path=gate_path,
+                    start_year=config.dtu_start_year,
+                    end_year=config.dtu_end_year,
+                    n_gate_pts=config.dtu_n_gate_pts
+                )
+                
+                status.update(label="✅ DTUSpace loaded!", state="complete", expanded=False)
+            
+            if pass_data is None:
+                st.sidebar.error("❌ No data found for this gate/period")
+                return
+            
+            # Save to cache
+            _cache.save("dtuspace", gate_name, pass_data)
         
         # Store in session state using dedicated DTU function
         store_dtu_data(pass_data)
