@@ -25,6 +25,9 @@ pyod>=2.0.0
 imbalanced-learn>=0.11.0
 statsmodels>=0.14.0
 
+# Fingerprint Engine (MiniRocket)
+sktime>=0.30.0
+
 # Causal Discovery
 tigramite>=5.2.0
 networkx>=3.0
