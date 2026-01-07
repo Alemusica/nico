@@ -192,11 +192,84 @@ DEFINE FIELD human_approval_rate ON agent_fitness TYPE float;
 4. **PCMCI** - Runge et al. 2019 - Causal discovery
 5. **Novelty Search** - Lehman & Stanley 2011 - Open-ended evolution
 
-### Repositories
+### 🧬 LLM-Guided Evolutionary Frameworks (Priority)
+
+| Framework | Description | Link |
+|-----------|-------------|------|
+| **LLaMEA** | LLM (GPT-4/Claude) guida evoluzione multi-obiettivo. Ideale per memoria STM/LTM | https://github.com/XAI-liacs/LLaMEA |
+| **EvoAgentX** | Self-evolving multi-agent ecosystems, goal-driven | https://github.com/EvoAgentX/EvoAgentX |
+| **OpenEvolve** | Evolutionary coding agent per scoprire algoritmi breakthrough | https://github.com/algorithmicsuperintelligence/openevolve |
+| **EvoAgent** | Estende agenti esperti a multi-agent via EA | https://github.com/siyuyuan/evoagent |
+| **LLM-Guided-Evolution** | Combina LLM expertise con evoluzione robusta | https://github.com/clint-kristopher-morris/llm-guided-evolution |
+| **LLM_EA** | Framework generale EA + LLM | https://github.com/xiaofangxd/LLM_EA |
+
+### Awesome Lists (Papers & Resources)
+- [LLM4EC](https://github.com/wuxingyu-ai/LLM4EC) - LLM + Evolutionary Computation
+- [Awesome Self-Evolving Agents](https://github.com/EvoAgentX/Awesome-Self-Evolving-Agents)
+
+### Multi-Agent Frameworks
 - [AutoGen](https://github.com/microsoft/autogen)
 - [CrewAI](https://github.com/joaomdmoura/crewAI)
 - [LangGraph](https://github.com/langchain-ai/langgraph)
 - [Remembrance RDNN](../binaural_golden/src/core/rdnn_memory.py)
+
+---
+
+## 🎓 Hybrid Curriculum Learning
+
+> **Curriculum Learning**: Addestramento che segue sequenza ordinata da facile → difficile.
+> Accelera apprendimento, evita stagnation locale, migliora performance finali.
+
+### Approccio Ibrido per CTW
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 HYBRID CURRICULUM                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  FIXED/STATIC (Human-defined)         DYNAMIC/ADAPTIVE     │
+│  ─────────────────────────           ──────────────────    │
+│  1. Single variable correlations  →  LLM selects next      │
+│  2. Known teleconnections (NAO)   →  based on STM feedback │
+│  3. Multi-variable patterns       →  LTM knowledge guides  │
+│  4. Cross-region discovery        →  complexity scaling    │
+│                                                             │
+│  Pre-defined sequence                Real-time adaptation   │
+│  (control, reproducibility)          (efficiency, novelty) │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### CTW Curriculum Stages
+
+| Stage | Task | Difficulty | Agent Role |
+|-------|------|------------|------------|
+| 1 | Single source → single event | ⭐ | Validate data quality |
+| 2 | Known causal chains (NAO → flood) | ⭐⭐ | Reproduce known patterns |
+| 3 | Multi-source fusion | ⭐⭐⭐ | Physics-constrained aggregation |
+| 4 | Novel precursor discovery | ⭐⭐⭐⭐ | Explore gray zone patterns |
+| 5 | Cross-region teleconnections | ⭐⭐⭐⭐⭐ | Global pattern synthesis |
+
+### Memory Architecture
+
+```python
+class AgentMemory:
+    """STM + LTM for curriculum-guided evolution."""
+    
+    # Short-Term Memory (current generation)
+    stm: Dict[str, Any] = {
+        "current_fitness": [...],
+        "recent_discoveries": [...],
+        "failed_hypotheses": [...],
+    }
+    
+    # Long-Term Memory (persistent across runs)
+    ltm: SurrealDBStore = {
+        "validated_patterns": [...],
+        "physics_constraints": [...],
+        "expert_feedback": [...],
+        "curriculum_progress": {...},
+    }
+```
 
 ### Related CTW Components
 - `src/surge_shazam/causal/pcmci_runner.py` - Causal discovery
