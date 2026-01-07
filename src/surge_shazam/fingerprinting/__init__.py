@@ -24,7 +24,26 @@ from .engine import (
     VARIABLE_GROUPS,
 )
 
+from .database import (
+    FingerprintDB,
+    get_fingerprint_db,
+    store_fingerprint,
+    search_fingerprints,
+)
+
+from .matcher import (
+    FingerprintMatcher,
+    MatchResult,
+    MatchType,
+    Alert,
+    AlertSeverity,
+    MatcherConfig,
+    get_matcher,
+    quick_match,
+)
+
 __all__ = [
+    # Engine
     "FingerprintEngine",
     "Fingerprint",
     "SimilarityResult",
@@ -32,4 +51,18 @@ __all__ = [
     "compare_fingerprints",
     "VARIABLE_WEIGHTS",
     "VARIABLE_GROUPS",
+    # Database
+    "FingerprintDB",
+    "get_fingerprint_db",
+    "store_fingerprint",
+    "search_fingerprints",
+    # Matcher
+    "FingerprintMatcher",
+    "MatchResult",
+    "MatchType",
+    "Alert",
+    "AlertSeverity",
+    "MatcherConfig",
+    "get_matcher",
+    "quick_match",
 ]
