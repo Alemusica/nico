@@ -1,101 +1,47 @@
 {
-  "slcci/davis_strait_east/pass_248": {
-    "dataset": "slcci",
-    "gate_name": "Davis Strait East",
-    "pass_number": 248,
-    "track_number": null,
-    "file_path": "slcci/davis_strait_east_pass_248.pkl",
-    "created_at": "2026-01-05T12:12:51.809407",
-    "size_bytes": 51067,
-    "n_observations": 276,
-    "date_range": "2008-07 to 2015-10"
-  },
-  "slcci/davis_strait_west/pass_248": {
-    "dataset": "slcci",
-    "gate_name": "Davis Strait West",
-    "pass_number": 248,
-    "track_number": null,
-    "file_path": "slcci/davis_strait_west_pass_248.pkl",
-    "created_at": "2026-01-05T12:15:20.406246",
-    "size_bytes": 1441881,
-    "n_observations": 9932,
-    "date_range": "2008-07 to 2016-02"
-  },
-  "cmems_l4/davis_strait": {
-    "dataset": "cmems_l4",
-    "gate_name": "Davis Strait",
-    "pass_number": null,
-    "track_number": null,
-    "file_path": "cmems_l4/davis_strait.pkl",
-    "created_at": "2026-01-05T12:16:53.269603",
-    "size_bytes": 13098413,
-    "n_observations": 0,
-    "date_range": "unknown"
-  },
-  "dtuspace/davis_strait": {
-    "dataset": "dtuspace",
-    "gate_name": "Davis Strait",
-    "pass_number": null,
-    "track_number": null,
-    "file_path": "dtuspace/davis_strait.pkl",
-    "created_at": "2026-01-05T12:25:39.984133",
-    "size_bytes": 3261444,
-    "n_observations": 57600,
-    "date_range": "2006-01 to 2017-12"
-  },
-  "slcci/davis_strait/pass_248": {
-    "dataset": "slcci",
-    "gate_name": "Davis Strait",
-    "pass_number": 248,
-    "track_number": null,
-    "file_path": "slcci/davis_strait_pass_248.pkl",
-    "created_at": "2026-01-05T14:02:49.093370",
-    "size_bytes": 1441876,
-    "n_observations": 9932,
-    "date_range": "2008-07 to 2016-02"
-  },
-  "cmems_l4/fram_strait": {
-    "dataset": "cmems_l4",
-    "gate_name": "Fram Strait",
-    "pass_number": null,
-    "track_number": null,
-    "file_path": "cmems_l4/fram_strait.pkl",
-    "created_at": "2026-01-05T15:33:58.977005",
-    "size_bytes": 17274372,
-    "n_observations": 0,
-    "date_range": "unknown"
-  },
-  "slcci/davis_strait/pass_146": {
-    "dataset": "slcci",
-    "gate_name": "Davis Strait",
-    "pass_number": 146,
-    "track_number": null,
-    "file_path": "slcci/davis_strait_pass_146.pkl",
-    "created_at": "2026-01-05T16:18:11.749280",
-    "size_bytes": 824397,
-    "n_observations": 6268,
-    "date_range": "2008-07 to 2016-02"
-  },
   "cmems_l4/bering_strait": {
     "dataset": "cmems_l4",
-    "gate_name": "Bering Strait",
+    "gate_name": "bering_strait",
     "pass_number": null,
     "track_number": null,
     "file_path": "cmems_l4/bering_strait.pkl",
-    "created_at": "2026-01-05T17:16:03.400434",
-    "size_bytes": 13025583,
+    "created_at": "2026-01-06T20:11:27.068808",
+    "size_bytes": 16600213,
     "n_observations": 0,
     "date_range": "unknown"
   },
   "dtuspace/bering_strait": {
     "dataset": "dtuspace",
-    "gate_name": "Bering Strait",
+    "gate_name": "bering_strait",
     "pass_number": null,
     "track_number": null,
     "file_path": "dtuspace/bering_strait.pkl",
-    "created_at": "2026-01-05T17:17:56.066060",
+    "created_at": "2026-01-06T18:17:57.960890",
     "size_bytes": 3253605,
     "n_observations": 57600,
     "date_range": "2006-01 to 2017-12"
+  },
+  "slcci/bering_strait/pass_78": {
+    "dataset": "slcci",
+    "gate_name": "bering_strait",
+    "pass_number": 78,
+    "track_number": null,
+    "file_path": "slcci/bering_strait_pass_78.pkl",
+    "created_at": "2026-01-06T20:13:06.244344",
+    "size_bytes": 37097,
+    "n_observations": 213,
+    "date_range": "2008-07 to 2008-10"
+  },
+  "cmems_l4/bering_strait/years_2019_2020": {
+    "dataset": "cmems_l4",
+    "gate_name": "bering_strait",
+    "pass_number": null,
+    "track_number": null,
+    "time_range_key": "2019_2020",
+    "file_path": "cmems_l4/bering_strait_years_2019_2020.pkl",
+    "created_at": "2026-01-10T14:29:19.721467",
+    "size_bytes": 7314261,
+    "n_observations": 0,
+    "date_range": "unknown"
   }
 }

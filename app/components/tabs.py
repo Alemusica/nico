@@ -3746,13 +3746,14 @@ def _render_multi_export(loaded_datasets: dict, config: AppConfig):
 
 def _render_cmems_l4_tabs(cmems_l4_data, config: AppConfig):
     """Render tabs for CMEMS L4 gridded data."""
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📈 Slope Timeline",
         "📊 DOT Profile",
         "🗺️ Spatial Map",
         "📅 Monthly Analysis",
         "🌊 Geostrophic Velocity",
-        "📥 Export"
+        "� Volume Transport",
+        "�📥 Export"
     ])
     
     with tab1:
@@ -3766,6 +3767,8 @@ def _render_cmems_l4_tabs(cmems_l4_data, config: AppConfig):
     with tab5:
         _render_dtu_geostrophic_velocity(cmems_l4_data, config)
     with tab6:
+        _render_volume_transport_tab_cmems_l4(cmems_l4_data, config)
+    with tab7:
         _render_dtu_export_tab(cmems_l4_data, config)
 
 
@@ -3815,6 +3818,271 @@ def _render_cmems_l4_spatial(cmems_l4_data, config: AppConfig):
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("No gate coordinates available")
+
+
+# ==============================================================================
+# VOLUME TRANSPORT TAB (CMEMS L4)
+# ==============================================================================
+def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
+    """
+    Render Volume Transport tab for CMEMS L4 with depth method selection.
+    
+    Uses:
+    - CMEMS L4 ugos/vgos for velocity
+    - Fixed depth (250m) or GEBCO bathymetry
+    - transport_service.py for calculations
+    """
+    st.subheader("🚢 Volume Transport Calculation")
+    
+    strait_name = getattr(cmems_l4_data, 'strait_name', 'Unknown')
+    ugos_matrix = getattr(cmems_l4_data, 'ugos_matrix', None)
+    vgos_matrix = getattr(cmems_l4_data, 'vgos_matrix', None)
+    gate_lon = getattr(cmems_l4_data, 'gate_lon_pts', None)
+    gate_lat = getattr(cmems_l4_data, 'gate_lat_pts', None)
+    x_km = getattr(cmems_l4_data, 'x_km', None)
+    time_array = getattr(cmems_l4_data, 'time_array', None)
+    
+    # Check velocity data
+    if ugos_matrix is None or vgos_matrix is None:
+        st.warning("⚠️ Velocity data (ugos/vgos) not available.")
+        st.info("""
+        **To enable Volume Transport:**
+        1. Go to sidebar → CMEMS L4 Variables
+        2. Select **ugos** and **vgos** 
+        3. Reload the data
+        """)
+        return
+    
+    st.success(f"✅ Velocity data loaded: {ugos_matrix.shape[1]} time steps")
+    
+    # === DEPTH METHOD SELECTION ===
+    st.markdown("### 📏 Depth Method")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        depth_method = st.radio(
+            "Select depth source:",
+            ["fixed", "gebco"],
+            format_func=lambda x: "🔢 Fixed Depth (250m)" if x == "fixed" else "🌊 GEBCO Bathymetry",
+            key="transport_depth_method",
+            horizontal=False
+        )
+    
+    with col2:
+        if depth_method == "fixed":
+            fixed_depth = st.number_input(
+                "Fixed Depth (m)",
+                min_value=50,
+                max_value=1000,
+                value=250,
+                step=50,
+                key="transport_fixed_depth"
+            )
+            st.caption("Assumes uniform depth across gate")
+        else:
+            gebco_path = config.gebco_nc_path
+            st.caption(f"Using: `{gebco_path.split('/')[-1]}`")
+            fixed_depth = st.number_input(
+                "Depth Cap (m)",
+                min_value=50,
+                max_value=1000,
+                value=250,
+                step=50,
+                key="transport_depth_cap",
+                help="Maximum depth to consider (for shallow analysis)"
+            )
+            
+            # Show cache status
+            try:
+                from src.services.gebco_service import get_bathymetry_cache
+                cache = get_bathymetry_cache()
+                if cache.exists(strait_name):
+                    st.success(f"📦 Bathymetry cached for {strait_name}")
+                    if st.button("🗑️ Clear Cache", key="clear_bathy_cache"):
+                        cache.clear(strait_name)
+                        st.info("Cache cleared. Will reload from GEBCO on next compute.")
+                        st.rerun()
+                else:
+                    st.info("No cache yet. Will be created on first compute.")
+            except Exception:
+                pass
+    
+    # === COMPUTE TRANSPORT ===
+    if st.button("🧮 Compute Volume Transport", type="primary", use_container_width=True):
+        with st.spinner("Computing transport..."):
+            try:
+                # Get depths
+                if depth_method == "fixed":
+                    depth_profile = np.full(len(gate_lon), fixed_depth)
+                    st.info(f"Using fixed depth: {fixed_depth}m across entire gate")
+                else:
+                    # Use GEBCO with caching
+                    try:
+                        from src.services.gebco_service import get_bathymetry_cache
+                        
+                        cache = get_bathymetry_cache()
+                        depth_profile = cache.get_or_compute(
+                            gate_name=strait_name,
+                            gate_lons=gate_lon,
+                            gate_lats=gate_lat,
+                            gebco_path=config.gebco_nc_path,
+                            depth_cap=fixed_depth
+                        )
+                        
+                        # Show cache status
+                        if cache.exists(strait_name):
+                            st.success(f"📦 Loaded from cache: {strait_name}")
+                        
+                        st.info(f"GEBCO depths: min={depth_profile.min():.0f}m, max={depth_profile.max():.0f}m, mean={depth_profile.mean():.0f}m")
+                    except Exception as e:
+                        st.error(f"Failed to load GEBCO: {e}")
+                        st.warning("Falling back to fixed depth")
+                        depth_profile = np.full(len(gate_lon), fixed_depth)
+                
+                # Compute transport using transport_service
+                from src.services.transport_service import calculate_volume_transport
+                
+                result = calculate_volume_transport(
+                    ugos_matrix=ugos_matrix,
+                    vgos_matrix=vgos_matrix,
+                    depth_profile=depth_profile,
+                    gate_lon=gate_lon,
+                    gate_lat=gate_lat,
+                    x_km=x_km,
+                    time_array=time_array,
+                    gate_name=strait_name
+                )
+                
+                if result is None:
+                    st.error("Transport calculation failed")
+                    return
+                
+                # Store in session state for persistence
+                st.session_state['volume_transport_result'] = result
+                st.session_state['depth_profile'] = depth_profile
+                st.success("✅ Transport computed successfully!")
+                
+            except Exception as e:
+                st.error(f"Error computing transport: {e}")
+                import traceback
+                with st.expander("Traceback"):
+                    st.code(traceback.format_exc())
+                return
+    
+    # === DISPLAY RESULTS ===
+    result = st.session_state.get('volume_transport_result')
+    depth_profile = st.session_state.get('depth_profile')
+    
+    if result is None:
+        st.info("👆 Click 'Compute Volume Transport' to calculate")
+        return
+    
+    # Statistics
+    st.markdown("### 📊 Transport Statistics")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Mean Transport", f"{result.mean_transport_sv:.2f} Sv")
+    with col2:
+        st.metric("Std Dev", f"{result.std_transport_sv:.2f} Sv")
+    with col3:
+        st.metric("Min", f"{result.min_transport_sv:.2f} Sv")
+    with col4:
+        st.metric("Max", f"{result.max_transport_sv:.2f} Sv")
+    
+    st.caption("1 Sv (Sverdrup) = 10⁶ m³/s")
+    
+    # Time series plot
+    st.markdown("### 📈 Transport Time Series")
+    
+    time_pd = pd.to_datetime(time_array)
+    
+    fig_ts = go.Figure()
+    fig_ts.add_trace(go.Scatter(
+        x=time_pd,
+        y=result.transport_sv,
+        mode='lines',
+        name='Volume Transport',
+        line=dict(color='steelblue', width=2)
+    ))
+    fig_ts.add_hline(y=0, line_dash="dash", line_color="gray")
+    fig_ts.add_hline(y=result.mean_transport_sv, line_dash="dot", line_color="red",
+                     annotation_text=f"Mean: {result.mean_transport_sv:.2f} Sv")
+    
+    fig_ts.update_layout(
+        title=f"{strait_name} - Volume Transport Time Series",
+        xaxis_title="Time",
+        yaxis_title="Transport (Sv)",
+        height=400,
+        template="plotly_white"
+    )
+    st.plotly_chart(fig_ts, use_container_width=True)
+    
+    # Monthly climatology
+    st.markdown("### 📅 Monthly Climatology")
+    
+    month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    
+    fig_month = go.Figure()
+    fig_month.add_trace(go.Bar(
+        x=month_names,
+        y=result.monthly_mean,
+        error_y=dict(type='data', array=result.monthly_std),
+        marker_color=['steelblue' if v >= 0 else 'coral' for v in result.monthly_mean],
+        name='Monthly Mean'
+    ))
+    fig_month.add_hline(y=0, line_color="black", line_width=1)
+    
+    fig_month.update_layout(
+        title="Monthly Mean Volume Transport",
+        xaxis_title="Month",
+        yaxis_title="Transport (Sv)",
+        height=400,
+        template="plotly_white"
+    )
+    st.plotly_chart(fig_month, use_container_width=True)
+    
+    # Bathymetry profile
+    if depth_profile is not None and x_km is not None:
+        st.markdown("### 🌊 Bathymetry Profile")
+        
+        fig_bathy = go.Figure()
+        fig_bathy.add_trace(go.Scatter(
+            x=x_km,
+            y=-depth_profile,  # Negative to show depth below surface
+            fill='tozeroy',
+            fillcolor='rgba(139, 90, 43, 0.5)',
+            line=dict(color='saddlebrown', width=2),
+            name='Depth'
+        ))
+        fig_bathy.add_hline(y=0, line_color="blue", line_width=2)  # Sea level
+        
+        fig_bathy.update_layout(
+            title=f"{strait_name} - Cross-Section Depth Profile",
+            xaxis_title="Distance along gate (km)",
+            yaxis_title="Depth (m)",
+            height=300,
+            template="plotly_white"
+        )
+        st.plotly_chart(fig_bathy, use_container_width=True)
+    
+    # Export
+    with st.expander("📥 Export Transport Data"):
+        # Create DataFrame
+        export_df = pd.DataFrame({
+            'time': time_pd,
+            'transport_sv': result.transport_sv,
+            'v_perp_mean_ms': np.nanmean(result.v_perp_profile) if result.v_perp_profile is not None else np.nan
+        })
+        
+        csv_data = export_df.to_csv(index=False)
+        st.download_button(
+            "Download Time Series (CSV)",
+            data=csv_data,
+            file_name=f"volume_transport_{strait_name.lower().replace(' ', '_')}.csv",
+            mime="text/csv"
+        )
 
 
 # ==============================================================================

@@ -1,7 +1,85 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-06 (Session - Unified Tabs + Geostrophic + Export)
+> Last Updated: 2026-01-10 (Session - Volume Transport + GEBCO Bathymetry)
 > Agent: Use this file to track progress. Update after each task.
+
+---
+
+## 🔄 SESSION 2026-01-10: Volume Transport + GEBCO Bathymetry Integration
+
+### 🎯 Obiettivo
+Integrare i dati di bathymetry GEBCO per il calcolo del volume transport usando le velocità geostrofiche CMEMS L4.
+
+### ✅ Nuove Funzionalità
+
+#### 1. Volume Transport Tab (CMEMS L4)
+**File**: `app/components/tabs.py`
+
+Nuova 7ª tab "🚢 Volume Transport" nel pannello CMEMS L4:
+
+| Componente | Descrizione |
+|------------|-------------|
+| Depth Method Selector | Radio buttons: Fixed 250m / GEBCO Bathymetry |
+| Depth Cap Input | Configurable 50-1000m |
+| Transport Statistics | Mean, Std, Min, Max in Sverdrup |
+| Time Series Plot | Trasporto vs tempo con media |
+| Monthly Climatology | Bar chart 12 mesi con error bars |
+| Bathymetry Profile | Cross-section del gate |
+| Export CSV | Download risultati |
+
+#### 2. Bathymetry Cache System
+**File**: `src/services/gebco_service.py`
+
+```python
+class BathymetryCache:
+    """Cache per profili bathymetry GEBCO (~KB invece di 830MB)"""
+    
+    def get_or_compute(gate_name, gate_lons, gate_lats, gebco_path, depth_cap):
+        # Carica da cache se esiste, altrimenti computa da GEBCO
+        ...
+    
+    def exists(gate_name) -> bool
+    def clear(gate_name) -> bool
+    def list_cached() -> list
+```
+
+**Cache location**: `data/cache/bathymetry/`
+
+#### 3. Sidebar Default Variables Update
+**File**: `app/components/sidebar.py`
+
+```python
+# Prima:
+default_vars = ["adt", "sla"]
+
+# Dopo:
+default_vars = ["adt", "sla", "ugos", "vgos"]
+```
+
+### ✅ Files Modificati
+
+| File | Modifiche |
+|------|-----------|
+| `app/components/tabs.py` | +260 righe: `_render_volume_transport_tab_cmems_l4()` |
+| `app/components/sidebar.py` | Default CMEMS L4 variables include velocities |
+| `src/services/gebco_service.py` | +200 righe: `BathymetryCache` class |
+
+### 📊 Volume Transport Formula
+```
+Q(t) = ∫ v_perp(x,t) × h(x) × dx
+
+Dove:
+- v_perp: velocità perpendicolare al gate (da ugos/vgos)
+- h(x): profondità (fixed 250m oppure GEBCO)
+- dx: larghezza segmento
+- Output in Sverdrup (1 Sv = 10⁶ m³/s)
+```
+
+### ⚠️ Note Importanti
+- **CMEMS L4 fornisce solo velocità superficiali**: usare profondità completa sovrastimerebbe il trasporto
+- **Depth cap consigliato**: 250m per analisi superficie
+- **GEBCO file**: 830MB NetCDF, ~460m risoluzione
+- **Cache**: primo compute lento (~30s), successivi istantanei
 
 ---
 

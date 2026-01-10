@@ -570,7 +570,7 @@ def _render_gate_selection(config: AppConfig) -> AppConfig:
     selected_region = st.sidebar.selectbox(
         "Region",
         ["All Regions"] + regions,
-        key="main_sidebar_region"
+        key="main_sidebar_region_v2"
     )
     
     # Get gates for selected region
@@ -594,7 +594,7 @@ def _render_gate_selection(config: AppConfig) -> AppConfig:
         range(len(gate_options)),
         index=default_idx,
         format_func=lambda i: gate_options[i],
-        key="main_sidebar_gate"
+        key="main_sidebar_gate_v2"
     )
     
     config.selected_gate = gate_ids[selected_idx]
@@ -688,7 +688,7 @@ def _render_data_source(config: AppConfig) -> AppConfig:
         if cmems_l4_loaded:
             col1, col2 = st.sidebar.columns([4, 1])
             with col1:
-                st.markdown("� **CMEMS L4** Gridded")
+                st.markdown("🟣 **CMEMS L4** Gridded")
             with col2:
                 if st.button("✖", key="remove_cmems_l4", help="Remove CMEMS L4 data"):
                     st.session_state["dataset_cmems_l4"] = None
@@ -1485,7 +1485,7 @@ def _render_cmems_l4_config(config: AppConfig) -> AppConfig:
     config.cmems_l4_variables = st.sidebar.multiselect(
         "Variables",
         ["adt", "sla", "ugos", "vgos", "ugosa", "vgosa"],
-        default=["adt", "sla"],
+        default=["adt", "sla", "ugos", "vgos"],
         key="sidebar_cmems_l4_vars",
         help="ADT=Absolute Dynamic Topography, SLA=Sea Level Anomaly, ugos/vgos=geostrophic velocities"
     )

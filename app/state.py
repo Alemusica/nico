@@ -74,6 +74,11 @@ class AppConfig:
     cmems_l4_buffer: float = 2.0  # Buffer around gate (degrees)
     cmems_l4_start: Any = None  # datetime.date
     cmems_l4_end: Any = None  # datetime.date
+    
+    # === BATHYMETRY / VOLUME TRANSPORT SETTINGS ===
+    depth_method: str = "fixed"  # "fixed" or "gebco"
+    fixed_depth_m: float = 250.0  # Fixed depth cap in meters
+    gebco_nc_path: str = "/Users/nicolocaron/Desktop/ARCFRESH/GEBCO_05_Jan_2026_a8956c607108/gebco_2025_n80.0_s60.0_w-180.0_e180.0.nc"
 
 
 def init_session_state():

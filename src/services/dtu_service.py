@@ -193,30 +193,64 @@ def _compute_x_km(gate_lon: np.ndarray, gate_lat: np.ndarray) -> np.ndarray:
 
 
 def _compute_slope_series(dot_matrix: np.ndarray, x_km: np.ndarray) -> np.ndarray:
-    """
-    Compute slope time series from DOT matrix.
-    
+    """Compute slope time series from DOT matrix.
+
+    Notes on performance:
+        The previous implementation used a Python loop over time with `np.polyfit`,
+        which is expensive (O(G*T) with very high constant factors).
+
+        This version computes slopes via vectorized least-squares with NaN handling.
+
     Args:
         dot_matrix: (n_gate_pts, n_time) array of DOT values
         x_km: (n_gate_pts,) distance along gate
-        
+
     Returns:
         slope_series: (n_time,) slopes in m/100km
     """
-    n_time = dot_matrix.shape[1]
-    slope_series = np.full(n_time, np.nan, dtype=float)
-    
-    for it in range(n_time):
-        y = dot_matrix[:, it]
-        mask = np.isfinite(x_km) & np.isfinite(y)
-        
-        if np.sum(mask) < 2:
-            continue
-        
-        a, _ = np.polyfit(x_km[mask], y[mask], 1)
-        slope_series[it] = a * 100.0  # m/100km
-    
-    return slope_series
+    x = np.asarray(x_km, dtype=float)
+    Y = np.asarray(dot_matrix, dtype=float)
+
+    if Y.ndim != 2:
+        raise ValueError(f"dot_matrix must be 2D (n_gate_pts, n_time); got shape={Y.shape}")
+
+    G, T = Y.shape
+    if x.shape[0] != G:
+        raise ValueError(f"x_km length must match dot_matrix rows; len(x_km)={x.shape[0]} G={G}")
+
+    # Valid x points (should usually be all True)
+    x_ok = np.isfinite(x)
+
+    # Compute per-time valid mask (handles NaNs in DOT)
+    ok = x_ok[:, None] & np.isfinite(Y)
+
+    # Replace invalid entries with 0 for masked sums
+    x_masked = np.where(ok, x[:, None], 0.0)
+    y_masked = np.where(ok, Y, 0.0)
+
+    n = ok.sum(axis=0).astype(float)  # (T,)
+
+    # Need at least 2 points to fit a line
+    slopes = np.full(T, np.nan, dtype=float)
+    valid = n >= 2
+    if not np.any(valid):
+        return slopes
+
+    sum_x = x_masked.sum(axis=0)
+    sum_y = y_masked.sum(axis=0)
+    sum_xx = (x_masked * x_masked).sum(axis=0)
+    sum_xy = (x_masked * y_masked).sum(axis=0)
+
+    denom = n * sum_xx - sum_x * sum_x
+
+    # Avoid division by ~0 (degenerate x)
+    good = valid & np.isfinite(denom) & (np.abs(denom) > 0.0)
+    slopes[good] = (n[good] * sum_xy[good] - sum_x[good] * sum_y[good]) / denom[good]
+
+    # Convert from m/km to m/100km
+    slopes *= 100.0
+
+    return slopes
 
 
 def _compute_geostrophic_velocity(
@@ -249,6 +283,52 @@ def _compute_geostrophic_velocity(
     v_geo = -g / f * slope_m_m
     
     return v_geo, f
+
+
+def _build_synthetic_df(
+    gate_lon: np.ndarray,
+    gate_lat: np.ndarray,
+    x_km: np.ndarray,
+    time_array: np.ndarray,
+    dot_matrix: np.ndarray,
+) -> pd.DataFrame:
+    """Build the DTU synthetic observation DataFrame efficiently.
+
+    The previous implementation built a Python list with nested loops (O(G*T)
+    Python overhead). This uses vectorized construction, which is much faster
+    and uses less intermediate Python objects.
+    """
+    gate_lon = np.asarray(gate_lon)
+    gate_lat = np.asarray(gate_lat)
+    x_km = np.asarray(x_km, dtype=float)
+    time_index = pd.to_datetime(time_array)
+
+    G = gate_lon.shape[0]
+    T = time_index.shape[0]
+
+    # Repeat gate coordinates for each timestep
+    lon_col = np.repeat(gate_lon, T)
+    lat_col = np.repeat(gate_lat, T)
+    x_km_col = np.repeat(x_km, T)
+
+    # Tile times for each gate point
+    time_col = np.tile(time_index.to_numpy(), G)
+
+    # DOT matrix is (G, T) => flatten in the same order as repeat/tile above
+    dot_col = np.asarray(dot_matrix).reshape(G * T, order="C")
+
+    df = pd.DataFrame(
+        {
+            "lon": lon_col,
+            "lat": lat_col,
+            "time": pd.to_datetime(time_col),
+            "dot": dot_col,
+            "x_km": x_km_col,
+        }
+    )
+    df["month"] = df["time"].dt.month
+    df["year"] = df["time"].dt.year
+    return df
 
 
 # ==============================================================================
@@ -332,16 +412,33 @@ class DTUService:
         logger.info(f"DOT shape: {dot.shape}, {n_time} time steps")
         
         # 4. Build KD-tree for grid matching
-        lon2d, lat2d = np.meshgrid(lons, lats)
-        grid_xy = np.column_stack([lon2d.ravel(), lat2d.ravel()])
-        tree = cKDTree(grid_xy)
-        
-        # Store for reuse
+        # Optimization: reuse the KD-tree if the same NetCDF grid is already loaded.
+        lon2d = lat2d = grid_xy = None
+        tree = None
+        if (
+            self._tree is not None
+            and self._lats is not None
+            and self._lons is not None
+            and np.array_equal(self._lats, lats)
+            and np.array_equal(self._lons, lons)
+        ):
+            tree = self._tree
+            grid_xy = self._grid_xy
+            logger.info("Reusing cached KD-tree for DTU grid")
+        else:
+            lon2d, lat2d = np.meshgrid(lons, lats)
+            grid_xy = np.column_stack([lon2d.ravel(), lat2d.ravel()])
+            tree = cKDTree(grid_xy)
+
+            # Store for reuse
+            self._tree = tree
+            self._grid_xy = grid_xy
+            self._lats = lats
+            self._lons = lons
+            logger.info("Built new KD-tree for DTU grid")
+
+        # Store selected dataset for possible reuse
         self._ds = ds_sel
-        self._tree = tree
-        self._grid_xy = grid_xy
-        self._lats = lats
-        self._lons = lons
         
         # 5. Load gate
         gate_gdf = _load_gate_gdf(gate_path)
@@ -395,22 +492,14 @@ class DTUService:
         )
         
         # 11. Create synthetic DataFrame for compatibility
-        # This creates a "fake" observation-style DataFrame
-        df_rows = []
-        for ig in range(n_gate_pts):
-            for it in range(n_time):
-                df_rows.append({
-                    "lon": gate_lon[ig],
-                    "lat": gate_lat[ig],
-                    "time": pd.Timestamp(time_array[it]),
-                    "dot": dot_matrix[ig, it],
-                    "x_km": x_km[ig]
-                })
-        
-        df = pd.DataFrame(df_rows)
-        df["month"] = df["time"].dt.month
-        df["year"] = df["time"].dt.year
-        
+        df = _build_synthetic_df(
+            gate_lon=gate_lon,
+            gate_lat=gate_lat,
+            x_km=x_km,
+            time_array=time_array,
+            dot_matrix=dot_matrix,
+        )
+
         # 12. Build result
         dataset_name = Path(nc_path).stem.replace("_", " ")
         

@@ -1,7 +1,47 @@
 # 📚 Feature Inventory - Cross-Branch Documentation
 
 > **Purpose**: Documentare tutte le feature implementate nei vari branch/layer per evitare duplicazioni e perdita di informazioni.
-> **Last Updated**: 2026-01-06
+> **Last Updated**: 2026-01-10
+
+---
+
+## 🆕 Volume Transport + GEBCO Bathymetry (2026-01-10)
+
+### Location: `app/components/tabs.py`, `src/services/gebco_service.py`
+
+**Status**: ✅ Implemented | **Used by**: CMEMS L4
+
+New Volume Transport calculation using CMEMS L4 velocities + GEBCO bathymetry:
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `_render_volume_transport_tab_cmems_l4()` | tabs.py | UI for transport calculation |
+| `BathymetryCache` | gebco_service.py | Cache GEBCO profiles per gate |
+| `get_bathymetry_cache()` | gebco_service.py | Global cache instance |
+
+**Features**:
+- **Depth Method Selection**: Fixed 250m OR GEBCO bathymetry
+- **Configurable Depth Cap**: 50-1000m slider
+- **Transport Statistics**: Mean, Std, Min, Max in Sverdrup
+- **Time Series Plot**: Transport vs time with mean line
+- **Monthly Climatology**: 12-month bar chart with error bars
+- **Bathymetry Profile**: Gate cross-section visualization
+- **Export CSV**: Download all results
+- **Bathymetry Caching**: ~KB cache vs 830MB GEBCO file
+
+**Formula**:
+```
+Q(t) = ∫ v_perp(x,t) × h(x) × dx   [Sverdrup]
+
+v_perp = perpendicular velocity from ugos/vgos
+h(x) = depth (fixed or GEBCO with cap)
+1 Sv = 10⁶ m³/s
+```
+
+**Files**:
+- `src/services/gebco_service.py` (450 lines) - GEBCOService + BathymetryCache
+- `src/services/transport_service.py` (244 lines) - calculate_volume_transport()
+- `app/components/tabs.py` (+260 lines) - Volume Transport tab
 
 ---
 

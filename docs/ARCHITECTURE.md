@@ -1,8 +1,26 @@
 # 🏗️ NICO Unified Architecture
 
-> **Version**: 2.2 - Unified Rendering Functions  
-> **Updated**: 2026-01-06  
-> **Status**: ✅ IMPLEMENTED + Unified Tabs
+> **Version**: 2.3 - Volume Transport + GEBCO Bathymetry  
+> **Updated**: 2026-01-10  
+> **Status**: ✅ IMPLEMENTED + Volume Transport
+
+---
+
+## 🆕 Volume Transport System (2026-01-10)
+
+New tab in CMEMS L4 for calculating ocean volume transport:
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| 🚢 Volume Transport Tab | tabs.py | UI for transport calculation |
+| BathymetryCache | gebco_service.py | Cache GEBCO bathymetry per gate |
+| transport_service.py | services/ | Transport calculation (Q = ∫v×h×dx) |
+
+**Depth Options**:
+- **Fixed 250m**: Uniform depth across gate
+- **GEBCO Bathymetry**: Real bathymetry with configurable cap
+
+**Output**: Transport time series in Sverdrup (1 Sv = 10⁶ m³/s)
 
 ---
 
