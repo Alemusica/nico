@@ -45,6 +45,312 @@ DATASET_COLORS = {
     "dtu": COLOR_DTU
 }
 
+# Month names for timelapse
+MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+
+def _create_velocity_timelapse(monthly_v_perp: dict, x_km: np.ndarray, gate_lon: np.ndarray, 
+                                title_prefix: str = "Velocity Profile") -> go.Figure:
+    """
+    Create animated timelapse for velocity profile across all 12 months.
+    
+    Args:
+        monthly_v_perp: Dict with month (1-12) as key, (bin_centers, bin_means, bin_stds) as value
+        x_km: Distance array along gate (km)
+        gate_lon: Longitude array along gate
+        title_prefix: Title prefix for the animation
+    
+    Returns:
+        Plotly Figure with animation frames
+    """
+    # Collect all months data
+    frames = []
+    all_y_values = []
+    
+    for month in range(1, 13):
+        bin_centers, bin_means, bin_stds = monthly_v_perp.get(month, (np.array([]), np.array([]), np.array([])))
+        if len(bin_centers) > 0:
+            all_y_values.extend(bin_means * 100)  # cm/s
+    
+    # Calculate y-axis range for consistent scaling
+    if all_y_values:
+        y_min = min(all_y_values) * 1.1
+        y_max = max(all_y_values) * 1.1
+        # Ensure zero is visible
+        y_min = min(y_min, -abs(y_max) * 0.1)
+        y_max = max(y_max, abs(y_min) * 0.1)
+    else:
+        y_min, y_max = -10, 10
+    
+    # Create frames for each month
+    for month in range(1, 13):
+        bin_centers, bin_means, bin_stds = monthly_v_perp.get(month, (np.array([]), np.array([]), np.array([])))
+        
+        if len(bin_centers) > 0:
+            bin_lon = np.interp(bin_centers, x_km, gate_lon)
+            frame_data = go.Scatter(
+                x=bin_centers,
+                y=bin_means * 100,
+                mode='lines+markers',
+                name='v_perp',
+                line=dict(color='#1E3A5F', width=2.5),
+                marker=dict(size=7, color='#1E3A5F'),
+                error_y=dict(type='data', array=bin_stds * 100, visible=True, color='rgba(30,58,95,0.3)')
+            )
+        else:
+            frame_data = go.Scatter(x=[], y=[], mode='lines+markers', name='v_perp')
+        
+        frames.append(go.Frame(
+            data=[frame_data],
+            name=MONTH_NAMES[month-1],
+            layout=go.Layout(title=dict(text=f"{title_prefix} — {MONTH_NAMES[month-1]}"))
+        ))
+    
+    # Initial frame (January)
+    bin_centers, bin_means, bin_stds = monthly_v_perp.get(1, (np.array([]), np.array([]), np.array([])))
+    if len(bin_centers) > 0:
+        initial_trace = go.Scatter(
+            x=bin_centers,
+            y=bin_means * 100,
+            mode='lines+markers',
+            name='v_perp (ugos/vgos)',
+            line=dict(color='#1E3A5F', width=2.5),
+            marker=dict(size=7, color='#1E3A5F'),
+            error_y=dict(type='data', array=bin_stds * 100, visible=True, color='rgba(30,58,95,0.3)')
+        )
+    else:
+        initial_trace = go.Scatter(x=[], y=[], mode='lines+markers', name='v_perp')
+    
+    fig = go.Figure(data=[initial_trace], frames=frames)
+    
+    # Add zero line
+    fig.add_hline(y=0, line_color="#7F8C8D", line_width=1, line_dash="dash")
+    
+    # Animation controls
+    fig.update_layout(
+        title=dict(text=f"{title_prefix} — Jan", font=dict(size=16)),
+        yaxis_title="Velocity (cm/s)",
+        xaxis_title="Distance along gate (km)",
+        height=480,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Inter, sans-serif", size=12),
+        xaxis=dict(gridcolor='#E8E8E8', gridwidth=1),
+        yaxis=dict(gridcolor='#E8E8E8', gridwidth=1, range=[y_min, y_max]),
+        margin=dict(l=60, r=40, t=80, b=100),
+        updatemenus=[
+            dict(
+                type="buttons",
+                showactive=False,
+                y=-0.15,
+                x=0.1,
+                xanchor="right",
+                buttons=[
+                    dict(
+                        label="▶️ Play",
+                        method="animate",
+                        args=[None, {
+                            "frame": {"duration": 800, "redraw": True},
+                            "fromcurrent": True,
+                            "transition": {"duration": 300, "easing": "cubic-in-out"}
+                        }]
+                    ),
+                    dict(
+                        label="⏸️ Pause",
+                        method="animate",
+                        args=[[None], {
+                            "frame": {"duration": 0, "redraw": False},
+                            "mode": "immediate",
+                            "transition": {"duration": 0}
+                        }]
+                    )
+                ]
+            )
+        ],
+        sliders=[{
+            "active": 0,
+            "yanchor": "top",
+            "xanchor": "left",
+            "currentvalue": {
+                "font": {"size": 14, "color": "#1E3A5F"},
+                "prefix": "Month: ",
+                "visible": True,
+                "xanchor": "right"
+            },
+            "transition": {"duration": 300, "easing": "cubic-in-out"},
+            "pad": {"b": 10, "t": 50},
+            "len": 0.8,
+            "x": 0.15,
+            "y": -0.05,
+            "steps": [
+                {
+                    "args": [[MONTH_NAMES[i]], {
+                        "frame": {"duration": 300, "redraw": True},
+                        "mode": "immediate",
+                        "transition": {"duration": 300}
+                    }],
+                    "label": MONTH_NAMES[i],
+                    "method": "animate"
+                }
+                for i in range(12)
+            ]
+        }]
+    )
+    
+    return fig
+
+
+def _create_transport_timelapse(monthly_profiles: dict, x_km: np.ndarray, gate_lon: np.ndarray,
+                                 title_prefix: str = "Volume Transport") -> go.Figure:
+    """
+    Create animated timelapse for volume transport profile across all 12 months.
+    
+    Args:
+        monthly_profiles: Dict with month (1-12) as key, (bin_centers, bin_means, bin_stds) as value
+        x_km: Distance array along gate (km)
+        gate_lon: Longitude array along gate
+        title_prefix: Title prefix for the animation
+    
+    Returns:
+        Plotly Figure with animation frames
+    """
+    # Collect all months data for consistent y-axis
+    all_y_values = []
+    
+    for month in range(1, 13):
+        bin_centers, bin_means, bin_stds = monthly_profiles.get(month, (np.array([]), np.array([]), np.array([])))
+        if len(bin_means) > 0:
+            all_y_values.extend(bin_means)
+    
+    # Calculate y-axis range
+    if all_y_values:
+        y_min = min(all_y_values) * 1.2
+        y_max = max(all_y_values) * 1.2
+        # Ensure zero is visible
+        y_min = min(y_min, -abs(y_max) * 0.1)
+        y_max = max(y_max, abs(y_min) * 0.1)
+    else:
+        y_min, y_max = -1, 1
+    
+    # Create frames for each month
+    frames = []
+    for month in range(1, 13):
+        bin_centers, bin_means, bin_stds = monthly_profiles.get(month, (np.array([]), np.array([]), np.array([])))
+        
+        if len(bin_centers) > 0:
+            colors = ['#3498DB' if v >= 0 else '#E74C3C' for v in bin_means]
+            frame_data = go.Bar(
+                x=bin_centers,
+                y=bin_means,
+                marker_color=colors,
+                name=f'{MONTH_NAMES[month-1]} Mean',
+                error_y=dict(type='data', array=bin_stds, visible=True, color='rgba(0,0,0,0.3)'),
+                hovertemplate='%{x:.1f} km<br>Transport: %{y:.4f} ×10⁶ m³/s<extra></extra>'
+            )
+        else:
+            frame_data = go.Bar(x=[], y=[], name=MONTH_NAMES[month-1])
+        
+        frames.append(go.Frame(
+            data=[frame_data],
+            name=MONTH_NAMES[month-1],
+            layout=go.Layout(title=dict(text=f"{title_prefix} — {MONTH_NAMES[month-1]}"))
+        ))
+    
+    # Initial frame (January)
+    bin_centers, bin_means, bin_stds = monthly_profiles.get(1, (np.array([]), np.array([]), np.array([])))
+    if len(bin_centers) > 0:
+        colors = ['#3498DB' if v >= 0 else '#E74C3C' for v in bin_means]
+        initial_trace = go.Bar(
+            x=bin_centers,
+            y=bin_means,
+            marker_color=colors,
+            name='Jan Mean',
+            error_y=dict(type='data', array=bin_stds, visible=True, color='rgba(0,0,0,0.3)'),
+            hovertemplate='%{x:.1f} km<br>Transport: %{y:.4f} ×10⁶ m³/s<extra></extra>'
+        )
+    else:
+        initial_trace = go.Bar(x=[], y=[], name='Jan')
+    
+    fig = go.Figure(data=[initial_trace], frames=frames)
+    
+    # Add zero line
+    fig.add_hline(y=0, line_color="#7F8C8D", line_width=1)
+    
+    # Animation controls
+    fig.update_layout(
+        title=dict(text=f"{title_prefix} — Jan", font=dict(size=16)),
+        yaxis_title="Transport (×10⁶ m³/s)",
+        xaxis_title="Distance along gate (km)",
+        height=480,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Inter, sans-serif", size=12),
+        xaxis=dict(gridcolor='#E8E8E8', gridwidth=1),
+        yaxis=dict(gridcolor='#E8E8E8', gridwidth=1, range=[y_min, y_max]),
+        bargap=0.15,
+        margin=dict(l=60, r=40, t=80, b=100),
+        updatemenus=[
+            dict(
+                type="buttons",
+                showactive=False,
+                y=-0.15,
+                x=0.1,
+                xanchor="right",
+                buttons=[
+                    dict(
+                        label="▶️ Play",
+                        method="animate",
+                        args=[None, {
+                            "frame": {"duration": 800, "redraw": True},
+                            "fromcurrent": True,
+                            "transition": {"duration": 300, "easing": "cubic-in-out"}
+                        }]
+                    ),
+                    dict(
+                        label="⏸️ Pause",
+                        method="animate",
+                        args=[[None], {
+                            "frame": {"duration": 0, "redraw": False},
+                            "mode": "immediate",
+                            "transition": {"duration": 0}
+                        }]
+                    )
+                ]
+            )
+        ],
+        sliders=[{
+            "active": 0,
+            "yanchor": "top",
+            "xanchor": "left",
+            "currentvalue": {
+                "font": {"size": 14, "color": "#1E3A5F"},
+                "prefix": "Month: ",
+                "visible": True,
+                "xanchor": "right"
+            },
+            "transition": {"duration": 300, "easing": "cubic-in-out"},
+            "pad": {"b": 10, "t": 50},
+            "len": 0.8,
+            "x": 0.15,
+            "y": -0.05,
+            "steps": [
+                {
+                    "args": [[MONTH_NAMES[i]], {
+                        "frame": {"duration": 300, "redraw": True},
+                        "mode": "immediate",
+                        "transition": {"duration": 300}
+                    }],
+                    "label": MONTH_NAMES[i],
+                    "method": "animate"
+                }
+                for i in range(12)
+            ]
+        }]
+    )
+    
+    return fig
+
 
 def _get_all_loaded_datasets() -> dict:
     """Get all currently loaded datasets from session state."""
@@ -4041,6 +4347,45 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
         # Mean velocity for this month
         mean_v = np.nanmean(bin_means) * 100
         st.info(f"**{month_names[selected_month-1]} Mean v_perp**: {mean_v:.2f} cm/s")
+        
+        # =====================================================================
+        # TIMELAPSE ANIMATION
+        # =====================================================================
+        st.markdown("---")
+        enable_timelapse = st.checkbox(
+            "🎬 Enable Monthly Timelapse Animation",
+            value=False,
+            key=f"{key_prefix}_velocity_timelapse",
+            help="Animate through all 12 months to see seasonal evolution"
+        )
+        
+        if enable_timelapse:
+            st.markdown("#### 🎬 Velocity Profile Timelapse")
+            st.caption("Press ▶️ Play to animate through all months, or use the slider to select a specific month")
+            
+            fig_timelapse = _create_velocity_timelapse(
+                monthly_v_perp, 
+                stored_x_km, 
+                stored_gate_lon,
+                title_prefix="Perpendicular Velocity Along Gate"
+            )
+            st.plotly_chart(fig_timelapse, width='stretch')
+            
+            # Show monthly summary stats
+            with st.expander("📊 Monthly Statistics Summary"):
+                monthly_stats = []
+                for m in range(1, 13):
+                    bc, bm, bs = monthly_v_perp.get(m, (np.array([]), np.array([]), np.array([])))
+                    if len(bm) > 0:
+                        monthly_stats.append({
+                            'Month': month_names[m-1],
+                            'Mean v_perp (cm/s)': f"{np.nanmean(bm)*100:.2f}",
+                            'Max (cm/s)': f"{np.nanmax(bm)*100:.2f}",
+                            'Min (cm/s)': f"{np.nanmin(bm)*100:.2f}",
+                            'Std (cm/s)': f"{np.nanmean(bs)*100:.2f}"
+                        })
+                if monthly_stats:
+                    st.dataframe(pd.DataFrame(monthly_stats), width='stretch', hide_index=True)
     else:
         st.warning(f"No data available for {month_names[selected_month-1]}")
     
@@ -4474,6 +4819,46 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
         total_month = np.nansum(bin_means)
         total_m3s = total_month * 1e6
         st.info(f"**{month_names[selected_month-1]} Total Transport**: {total_m3s:.2e} m³/s ({total_month:.3f} ×10⁶ m³/s)")
+        
+        # =====================================================================
+        # TIMELAPSE ANIMATION
+        # =====================================================================
+        st.markdown("---")
+        enable_transport_timelapse = st.checkbox(
+            "🎬 Enable Monthly Timelapse Animation",
+            value=False,
+            key="vt_transport_timelapse",
+            help="Animate through all 12 months to see seasonal transport evolution"
+        )
+        
+        if enable_transport_timelapse:
+            st.markdown("#### 🎬 Volume Transport Timelapse")
+            st.caption("Press ▶️ Play to animate through all months, or use the slider to select a specific month")
+            
+            fig_transport_timelapse = _create_transport_timelapse(
+                monthly_profiles,
+                x_km,
+                gate_lon,
+                title_prefix="Volume Transport Along Gate"
+            )
+            st.plotly_chart(fig_transport_timelapse, width='stretch')
+            
+            # Show monthly summary stats
+            with st.expander("📊 Monthly Transport Summary"):
+                transport_stats = []
+                for m in range(1, 13):
+                    bc, bm, bs = monthly_profiles.get(m, (np.array([]), np.array([]), np.array([])))
+                    if len(bm) > 0:
+                        total_sv = np.nansum(bm)
+                        transport_stats.append({
+                            'Month': month_names[m-1],
+                            'Total (×10⁶ m³/s)': f"{total_sv:.4f}",
+                            'Total (m³/s)': f"{total_sv*1e6:.2e}",
+                            'Max bin': f"{np.nanmax(bm):.4f}",
+                            'Min bin': f"{np.nanmin(bm):.4f}"
+                        })
+                if transport_stats:
+                    st.dataframe(pd.DataFrame(transport_stats), width='stretch', hide_index=True)
     else:
         st.warning(f"No data available for {month_names[selected_month-1]}")
     
