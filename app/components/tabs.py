@@ -463,7 +463,7 @@ def _render_unified_slope_timeline(data, config: AppConfig, ds_info: dict):
         template="plotly_white"
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Statistics
     with st.expander("📊 Statistics"):
@@ -626,7 +626,7 @@ def _render_unified_dot_profile(data, config: AppConfig, ds_info: dict):
         template="plotly_white"
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Stats
     with st.expander("📊 Profile Statistics"):
@@ -756,7 +756,7 @@ def _render_unified_spatial_map(data, config: AppConfig, ds_info: dict):
         yaxis=dict(scaleanchor="x", scaleratio=1) if dot_mean_grid is not None else {}
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Stats
     with st.expander("📊 Spatial Statistics"):
@@ -908,6 +908,23 @@ def _render_unified_monthly_analysis(data, config: AppConfig, ds_info: dict):
                     ),
                     row=row, col=col
                 )
+                
+                # Add annotation with slope and R² on each subplot
+                fig.add_annotation(
+                    text=f"R²={r_squared:.3f}<br>slope={slope_m_100km:.3f} m/100km",
+                    xref=f"x{month}" if month > 1 else "x",
+                    yref=f"y{month}" if month > 1 else "y",
+                    x=x_valid.max(),
+                    y=y_valid.max(),
+                    xanchor="right",
+                    yanchor="top",
+                    showarrow=False,
+                    font=dict(size=9, color="#2C3E50"),
+                    bgcolor="rgba(255,255,255,0.8)",
+                    bordercolor="#E8E8E8",
+                    borderwidth=1,
+                    borderpad=3
+                )
             except Exception:
                 pass
     
@@ -928,7 +945,7 @@ def _render_unified_monthly_analysis(data, config: AppConfig, ds_info: dict):
         if col == 1:
             fig.update_yaxes(title_text=f"DOT ({y_units})", row=row, col=col)
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Summary table with R² and slope
     if slopes_info:
@@ -944,7 +961,7 @@ def _render_unified_monthly_analysis(data, config: AppConfig, ds_info: dict):
                 'N points': slopes_df['n_points']
             })
             
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            st.dataframe(display_df, width='stretch', hide_index=True)
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -1082,7 +1099,7 @@ def _render_monthly_from_df(df: pd.DataFrame, strait_name: str, ds_info: dict, c
         if col == 1:
             fig.update_yaxes(title_text=f"DOT ({y_units})", row=row, col=col)
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     if slopes_info:
         with st.expander("📊 Monthly Slopes & R² Summary"):
@@ -1094,7 +1111,7 @@ def _render_monthly_from_df(df: pd.DataFrame, strait_name: str, ds_info: dict, c
                 'R²': slopes_df['r_squared'].apply(lambda x: f"{x:.3f}"),
                 'N Points': slopes_df['n_points']
             })
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            st.dataframe(display_df, width='stretch', hide_index=True)
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -1210,7 +1227,7 @@ def _render_unified_geostrophic_velocity(data, config: AppConfig, ds_info: dict)
         template="plotly_white"
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Monthly climatology
     with st.expander("📊 Monthly Climatology"):
@@ -1238,7 +1255,7 @@ def _render_unified_geostrophic_velocity(data, config: AppConfig, ds_info: dict)
             height=400,
             template="plotly_white"
         )
-        st.plotly_chart(fig_clim, use_container_width=True)
+        st.plotly_chart(fig_clim, width='stretch')
     
     # Statistics
     with st.expander("📈 Statistics"):
@@ -1321,7 +1338,7 @@ def _render_unified_export_tab(data, config: AppConfig, ds_info: dict):
                     'slope_m_100km': slope_series
                 })
             
-            st.dataframe(df_export.head(20), use_container_width=True)
+            st.dataframe(df_export.head(20), width='stretch')
             csv = df_export.to_csv(index=False)
             st.download_button(
                 "📥 Download Slope CSV",
@@ -1331,7 +1348,7 @@ def _render_unified_export_tab(data, config: AppConfig, ds_info: dict):
             )
         
         elif export_type == "DOT Observations (DataFrame)":
-            st.dataframe(df.head(50), use_container_width=True)
+            st.dataframe(df.head(50), width='stretch')
             csv = df.to_csv(index=False)
             st.download_button(
                 "📥 Download DOT CSV",
@@ -1354,7 +1371,7 @@ def _render_unified_export_tab(data, config: AppConfig, ds_info: dict):
                 idx = np.arange(dot_matrix.shape[0])
             
             df_matrix = pd.DataFrame(dot_matrix, index=idx, columns=cols)
-            st.dataframe(df_matrix.head(20), use_container_width=True)
+            st.dataframe(df_matrix.head(20), width='stretch')
             csv = df_matrix.to_csv()
             st.download_button(
                 "📥 Download DOT Matrix CSV",
@@ -1376,7 +1393,7 @@ def _render_unified_export_tab(data, config: AppConfig, ds_info: dict):
                     'v_geostrophic_m_s': v_geo
                 })
             
-            st.dataframe(df_export.head(20), use_container_width=True)
+            st.dataframe(df_export.head(20), width='stretch')
             csv = df_export.to_csv(index=False)
             st.download_button(
                 "📥 Download Geostrophic CSV",
@@ -1535,7 +1552,7 @@ def _render_spatial_map(slcci_data, config: AppConfig):
         margin=dict(l=0, r=0, t=40, b=0)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 # ==============================================================================
@@ -1686,7 +1703,7 @@ def _render_slcci_monthly_analysis(slcci_data, config: AppConfig):
         if col == 1:
             fig.update_yaxes(title_text=f"DOT ({y_units})", row=row, col=col)
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Summary table with R²
     if slopes_info:
@@ -1702,7 +1719,7 @@ def _render_slcci_monthly_analysis(slcci_data, config: AppConfig):
                 'N Points': slopes_df['n_points']
             })
             
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            st.dataframe(display_df, width='stretch', hide_index=True)
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -1778,7 +1795,7 @@ def _render_geostrophic_velocity(slcci_data, config):
             template="plotly_white"
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
         # Monthly climatology
         st.subheader("Monthly Climatology")
@@ -1808,7 +1825,7 @@ def _render_geostrophic_velocity(slcci_data, config):
             template="plotly_white"
         )
         
-        st.plotly_chart(fig_clim, use_container_width=True)
+        st.plotly_chart(fig_clim, width='stretch')
         
         # Statistics
         with st.expander("Geostrophic Velocity Statistics"):
@@ -1926,7 +1943,7 @@ def _render_geostrophic_velocity(slcci_data, config):
         template="plotly_white"
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Statistics
     with st.expander("Geostrophic Velocity Statistics"):
@@ -1944,7 +1961,7 @@ def _render_geostrophic_velocity(slcci_data, config):
         st.subheader("Detailed Results")
         display_df = results_df.copy()
         display_df.columns = ['Period', 'Slope (m/m)', 'v_geo (m/s)', 'v_geo (cm/s)', 'N Points']
-        st.dataframe(display_df, use_container_width=True)
+        st.dataframe(display_df, width='stretch')
     
     # Physical interpretation
     with st.expander("Physical Interpretation"):
@@ -2115,7 +2132,7 @@ def _render_slope_comparison(slcci_data, cmems_data, config: AppConfig):
         legend=dict(x=0.02, y=0.98)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Statistics comparison
     _render_comparison_stats(slcci_slope, cmems_slope, "Slope", unit)
@@ -2171,7 +2188,7 @@ def _render_dot_profile_comparison(slcci_data, cmems_data, config: AppConfig):
         legend=dict(x=0.02, y=0.98)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     _render_comparison_stats(slcci_profile, cmems_profile, "DOT", "m")
 
 
@@ -2237,7 +2254,7 @@ def _render_spatial_map_comparison(slcci_data, cmems_data, config: AppConfig):
         height=600, margin=dict(l=0, r=0, t=40, b=0)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def _render_geostrophic_comparison(slcci_data, cmems_data, config: AppConfig):
@@ -2281,7 +2298,7 @@ def _render_geostrophic_comparison(slcci_data, cmems_data, config: AppConfig):
         height=500, template="plotly_white", legend=dict(x=0.02, y=0.98)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Monthly climatology
     st.subheader("Monthly Climatology Comparison")
@@ -2312,7 +2329,7 @@ def _render_geostrophic_comparison(slcci_data, cmems_data, config: AppConfig):
         height=400, template="plotly_white", barmode="group"
     )
     
-    st.plotly_chart(fig_clim, use_container_width=True)
+    st.plotly_chart(fig_clim, width='stretch')
 
 
 def _render_export_tab(slcci_data, cmems_data, config: AppConfig):
@@ -2423,7 +2440,7 @@ def _render_export_tab(slcci_data, cmems_data, config: AppConfig):
             ts_df = pd.DataFrame(ts_data)
             ts_df = ts_df.sort_values(['source', 'time'])
             
-            st.dataframe(ts_df.head(20), use_container_width=True)
+            st.dataframe(ts_df.head(20), width='stretch')
             st.caption(f"Showing first 20 of {len(ts_df)} rows")
             
             # Download buttons
@@ -2541,7 +2558,7 @@ def _render_export_tab(slcci_data, cmems_data, config: AppConfig):
         
         if stats_data:
             stats_df = pd.DataFrame(stats_data)
-            st.dataframe(stats_df, use_container_width=True)
+            st.dataframe(stats_df, width='stretch')
             
             csv_stats = stats_df.to_csv(index=False)
             st.download_button(
@@ -2756,7 +2773,7 @@ def _render_export_tab(slcci_data, cmems_data, config: AppConfig):
             
             if fig is not None and len(fig.data) > 0:
                 # Show the plot
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 
                 # Generate PNG bytes
                 try:
@@ -2930,7 +2947,7 @@ def _render_correlation_analysis(slcci_data, cmems_data, config: AppConfig):
         legend=dict(x=0.02, y=0.98)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Metrics
     st.markdown("### Correlation Metrics")
@@ -2975,7 +2992,7 @@ def _render_correlation_analysis(slcci_data, cmems_data, config: AppConfig):
             'CMEMS Slope': cmems_clean,
             'Difference': diff
         })
-        st.dataframe(comparison_df, use_container_width=True)
+        st.dataframe(comparison_df, width='stretch')
 
 
 # ==============================================================================
@@ -3082,7 +3099,7 @@ def _render_difference_plot(slcci_data, cmems_data, config: AppConfig):
         template="plotly_white"
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Monthly climatology of differences
     st.subheader("Monthly Climatology of Difference")
@@ -3114,7 +3131,7 @@ def _render_difference_plot(slcci_data, cmems_data, config: AppConfig):
         template="plotly_white"
     )
     
-    st.plotly_chart(fig_clim, use_container_width=True)
+    st.plotly_chart(fig_clim, width='stretch')
     
     # Statistics
     st.markdown("### Difference Statistics")
@@ -3267,7 +3284,7 @@ def _render_multi_slope_comparison(loaded_datasets: dict, config: AppConfig):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Statistics table
     st.markdown("### 📊 Summary Statistics")
@@ -3290,7 +3307,7 @@ def _render_multi_slope_comparison(loaded_datasets: dict, config: AppConfig):
         })
     
     if stats_data:
-        st.dataframe(pd.DataFrame(stats_data), use_container_width=True)
+        st.dataframe(pd.DataFrame(stats_data), width='stretch')
 
 
 def _render_multi_dot_comparison(loaded_datasets: dict, config: AppConfig):
@@ -3331,7 +3348,7 @@ def _render_multi_dot_comparison(loaded_datasets: dict, config: AppConfig):
         hovermode="x unified"
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Profile statistics
     with st.expander("📈 Profile Statistics"):
@@ -3394,7 +3411,7 @@ def _render_multi_spatial_overview(loaded_datasets: dict, config: AppConfig):
                 line=dict(width=3, color="red")
             ))
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     else:
         st.info(f"No spatial data available for {DATASET_NAMES.get(selected, selected)}")
     
@@ -3449,7 +3466,7 @@ def _render_multi_geostrophic_comparison(loaded_datasets: dict, config: AppConfi
         hovermode="x unified"
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Convert to Sv
     st.markdown("### 🌊 Transport Estimation")
@@ -3525,7 +3542,7 @@ def _render_multi_monthly_comparison(loaded_datasets: dict, config: AppConfig):
         template="plotly_white"
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Summary statistics table
     st.markdown("### 📊 Monthly Statistics by Dataset")
@@ -3543,7 +3560,7 @@ def _render_multi_monthly_comparison(loaded_datasets: dict, config: AppConfig):
         })
     
     summary_df = pd.DataFrame(summary_rows)
-    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+    st.dataframe(summary_df, width='stretch', hide_index=True)
 
 
 def _render_multi_correlation(loaded_datasets: dict, config: AppConfig):
@@ -3590,7 +3607,7 @@ def _render_multi_correlation(loaded_datasets: dict, config: AppConfig):
         title="Slope Correlation Matrix",
         height=400
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Pairwise scatter plots
     st.markdown("### Pairwise Scatter Plots")
@@ -3622,7 +3639,7 @@ def _render_multi_correlation(loaded_datasets: dict, config: AppConfig):
                 title=f"{x_dataset} vs {y_dataset} (N={len(common_idx)})",
                 height=400
             )
-            st.plotly_chart(fig_scatter, use_container_width=True)
+            st.plotly_chart(fig_scatter, width='stretch')
             
             # Statistics
             from scipy import stats as scipy_stats
@@ -3815,7 +3832,7 @@ def _render_cmems_l4_spatial(cmems_l4_data, config: AppConfig):
             title=f"CMEMS L4 Gate: {strait_name}"
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     else:
         st.warning("No gate coordinates available")
 
@@ -3897,7 +3914,7 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
     # =========================================================================
     # COMPUTE DATA
     # =========================================================================
-    if st.button("🧮 Compute Velocities", type="primary", use_container_width=True, key=f"{key_prefix}_compute"):
+    if st.button("🧮 Compute Velocities", type="primary", width='stretch', key=f"{key_prefix}_compute"):
         with st.spinner("Computing perpendicular velocity..."):
             try:
                 from src.services.transport_service import (
@@ -3978,7 +3995,8 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
         # Calculate longitude for bin centers (interpolate)
         bin_lon = np.interp(bin_centers, stored_x_km, stored_gate_lon)
         
-        fig_profile = make_subplots(specs=[[{"secondary_x": True}]])
+        # Create figure with manual dual x-axis (Plotly doesn't support secondary_x in make_subplots)
+        fig_profile = go.Figure()
         
         # v_perp profile (cm/s) on primary x-axis (km)
         fig_profile.add_trace(go.Scatter(
@@ -3988,18 +4006,9 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
             name='v_perp (ugos/vgos)',
             line=dict(color='#1E3A5F', width=2.5),
             marker=dict(size=7, color='#1E3A5F'),
-            error_y=dict(type='data', array=bin_stds * 100, visible=True, color='rgba(30,58,95,0.3)')
-        ), secondary_x=False)
-        
-        # Invisible trace for secondary x-axis (degrees)
-        fig_profile.add_trace(go.Scatter(
-            x=bin_lon,
-            y=bin_means * 100,
-            mode='markers',
-            marker=dict(size=0.1, opacity=0),
-            showlegend=False,
-            hoverinfo='skip'
-        ), secondary_x=True)
+            error_y=dict(type='data', array=bin_stds * 100, visible=True, color='rgba(30,58,95,0.3)'),
+            xaxis='x'
+        ))
         
         fig_profile.add_hline(y=0, line_color="#7F8C8D", line_width=1, line_dash="dash")
         
@@ -4010,14 +4019,24 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
             plot_bgcolor='white',
             paper_bgcolor='white',
             font=dict(family="Inter, sans-serif", size=12),
-            xaxis=dict(gridcolor='#E8E8E8', gridwidth=1),
+            xaxis=dict(
+                title="Distance along gate (km)",
+                gridcolor='#E8E8E8', 
+                gridwidth=1,
+                side='bottom'
+            ),
+            xaxis2=dict(
+                title="Longitude (°)",
+                overlaying='x',
+                side='top',
+                range=[bin_lon.min(), bin_lon.max()] if len(bin_lon) > 0 else None,
+                showgrid=False
+            ),
             yaxis=dict(gridcolor='#E8E8E8', gridwidth=1),
-            margin=dict(l=60, r=40, t=60, b=50),
+            margin=dict(l=60, r=40, t=80, b=50),
         )
-        fig_profile.update_xaxes(title_text="Distance along gate (km)", secondary_x=False)
-        fig_profile.update_xaxes(title_text="Longitude (°)", secondary_x=True)
         
-        st.plotly_chart(fig_profile, use_container_width=True)
+        st.plotly_chart(fig_profile, width='stretch')
         
         # Mean velocity for this month
         mean_v = np.nanmean(bin_means) * 100
@@ -4074,7 +4093,7 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
         margin=dict(l=60, r=40, t=60, b=50),
     )
     
-    st.plotly_chart(fig_ts, use_container_width=True)
+    st.plotly_chart(fig_ts, width='stretch')
     
     # Statistics comparison
     if show_v_geo and v_geo_ts is not None:
@@ -4151,7 +4170,7 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
         legend=dict(bgcolor='rgba(255,255,255,0.9)', bordercolor='#E8E8E8', borderwidth=1),
     )
     
-    st.plotly_chart(fig_clim, use_container_width=True)
+    st.plotly_chart(fig_clim, width='stretch')
 
 
 # ==============================================================================
@@ -4234,7 +4253,7 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
     # =========================================================================
     # LOAD/COMPUTE DATA
     # =========================================================================
-    if st.button("🧮 Compute Transport", type="primary", use_container_width=True):
+    if st.button("🧮 Compute Transport", type="primary", width='stretch'):
         with st.spinner("Loading bathymetry and computing transport..."):
             try:
                 # 1. Load GEBCO bathymetry (with caching, NO cap for display)
@@ -4322,7 +4341,8 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
     st.markdown("### 🌊 Bathymetry Profile")
     st.caption(f"GEBCO bathymetry along gate. Red line = {stored_depth_cap}m depth cap for transport.")
     
-    fig_bathy = make_subplots(specs=[[{"secondary_x": True}]])
+    # Create figure with manual dual x-axis
+    fig_bathy = go.Figure()
     
     # Fill area for bathymetry (real depth) - primary x-axis (km)
     fig_bathy.add_trace(go.Scatter(
@@ -4332,18 +4352,9 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
         fillcolor='rgba(30, 58, 95, 0.4)',
         line=dict(color='#1E3A5F', width=2),
         name='GEBCO Depth',
-        hovertemplate='%{x:.1f} km<br>Depth: %{y:.0f} m<extra></extra>'
-    ), secondary_x=False)
-    
-    # Invisible trace for secondary x-axis (degrees)
-    fig_bathy.add_trace(go.Scatter(
-        x=gate_lon,
-        y=-depth_full,
-        mode='markers',
-        marker=dict(size=0.1, opacity=0),
-        showlegend=False,
-        hoverinfo='skip'
-    ), secondary_x=True)
+        hovertemplate='%{x:.1f} km<br>Depth: %{y:.0f} m<extra></extra>',
+        xaxis='x'
+    ))
     
     # Sea level line
     fig_bathy.add_hline(y=0, line_color="#3498DB", line_width=2, 
@@ -4361,14 +4372,23 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(family="Inter, sans-serif", size=12),
-        xaxis=dict(gridcolor='#E8E8E8'),
+        xaxis=dict(
+            title="Distance along gate (km)",
+            gridcolor='#E8E8E8',
+            side='bottom'
+        ),
+        xaxis2=dict(
+            title="Longitude (°)",
+            overlaying='x',
+            side='top',
+            range=[gate_lon.min(), gate_lon.max()] if len(gate_lon) > 0 else None,
+            showgrid=False
+        ),
         yaxis=dict(gridcolor='#E8E8E8', range=[min(-depth_full.max() * 1.1, -stored_depth_cap * 1.5), 50]),
-        margin=dict(l=60, r=40, t=60, b=50),
+        margin=dict(l=60, r=40, t=80, b=50),
     )
-    fig_bathy.update_xaxes(title_text="Distance along gate (km)", secondary_x=False)
-    fig_bathy.update_xaxes(title_text="Longitude (°)", secondary_x=True)
     
-    st.plotly_chart(fig_bathy, use_container_width=True)
+    st.plotly_chart(fig_bathy, width='stretch')
     
     # Stats
     col1, col2, col3, col4 = st.columns(4)
@@ -4405,7 +4425,8 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
         # Calculate longitude for bin centers (interpolate)
         bin_lon = np.interp(bin_centers, x_km, gate_lon)
         
-        fig_profile = make_subplots(specs=[[{"secondary_x": True}]])
+        # Create figure with manual dual x-axis
+        fig_profile = go.Figure()
         
         # Bar chart with elegant colors
         colors = ['#3498DB' if v >= 0 else '#E74C3C' for v in bin_means]
@@ -4416,18 +4437,9 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
             marker_color=colors,
             name=f'{month_names[selected_month-1]} Mean',
             error_y=dict(type='data', array=bin_stds, visible=True, color='rgba(0,0,0,0.3)'),
-            hovertemplate='%{x:.1f} km<br>Transport: %{y:.4f} ×10⁶ m³/s<extra></extra>'
-        ), secondary_x=False)
-        
-        # Invisible trace for secondary x-axis (degrees)
-        fig_profile.add_trace(go.Scatter(
-            x=bin_lon,
-            y=bin_means,
-            mode='markers',
-            marker=dict(size=0.1, opacity=0),
-            showlegend=False,
-            hoverinfo='skip'
-        ), secondary_x=True)
+            hovertemplate='%{x:.1f} km<br>Transport: %{y:.4f} ×10⁶ m³/s<extra></extra>',
+            xaxis='x'
+        ))
         
         fig_profile.add_hline(y=0, line_color="#7F8C8D", line_width=1)
         
@@ -4438,15 +4450,24 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
             plot_bgcolor='white',
             paper_bgcolor='white',
             font=dict(family="Inter, sans-serif", size=12),
-            xaxis=dict(gridcolor='#E8E8E8'),
+            xaxis=dict(
+                title="Distance along gate (km)",
+                gridcolor='#E8E8E8',
+                side='bottom'
+            ),
+            xaxis2=dict(
+                title="Longitude (°)",
+                overlaying='x',
+                side='top',
+                range=[bin_lon.min(), bin_lon.max()] if len(bin_lon) > 0 else None,
+                showgrid=False
+            ),
             yaxis=dict(gridcolor='#E8E8E8'),
             bargap=0.15,
-            margin=dict(l=60, r=40, t=60, b=50),
+            margin=dict(l=60, r=40, t=80, b=50),
         )
-        fig_profile.update_xaxes(title_text="Distance along gate (km)", secondary_x=False)
-        fig_profile.update_xaxes(title_text="Longitude (°)", secondary_x=True)
         
-        st.plotly_chart(fig_profile, use_container_width=True)
+        st.plotly_chart(fig_profile, width='stretch')
         
         # Monthly total for this month
         total_month = np.nansum(bin_means)
@@ -4490,7 +4511,7 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
         margin=dict(l=60, r=40, t=60, b=50),
     )
     
-    st.plotly_chart(fig_ts, use_container_width=True)
+    st.plotly_chart(fig_ts, width='stretch')
     
     # =========================================================================
     # 4. STATISTICS + EXPORT
@@ -4543,7 +4564,7 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
         bargap=0.2,
     )
     
-    st.plotly_chart(fig_clim, use_container_width=True)
+    st.plotly_chart(fig_clim, width='stretch')
     
     # Export
     with st.expander("📥 Export Transport Data"):
@@ -4757,7 +4778,7 @@ def _render_dtu_slope_timeline(dtu_data, config: AppConfig):
         template="plotly_white"
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Statistics
     with st.expander("📊 Statistics"):
@@ -4935,7 +4956,7 @@ def _render_dtu_dot_profile(dtu_data, config: AppConfig):
         template="plotly_white"
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Stats
     with st.expander("📊 Profile Statistics"):
@@ -5028,7 +5049,7 @@ def _render_dtu_spatial_map(dtu_data, config: AppConfig):
         yaxis=dict(scaleanchor="x", scaleratio=1)  # Equal aspect ratio
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Stats
     with st.expander("📊 Grid Statistics"):
@@ -5194,7 +5215,7 @@ def _render_gridded_monthly_analysis(data, config: AppConfig):
         if col == 1:
             fig.update_yaxes(title_text=f"DOT ({y_units})", row=row, col=col)
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Summary table with R² and slope
     if slopes_info:
@@ -5211,7 +5232,7 @@ def _render_gridded_monthly_analysis(data, config: AppConfig):
                 'N points': slopes_df['n_points']
             })
             
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            st.dataframe(display_df, width='stretch', hide_index=True)
             
             # Summary metrics
             col1, col2, col3, col4 = st.columns(4)
@@ -5286,7 +5307,7 @@ def _render_dtu_geostrophic_velocity(dtu_data, config: AppConfig):
         template="plotly_white"
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Monthly climatology
     st.subheader("Monthly Climatology")
@@ -5314,7 +5335,7 @@ def _render_dtu_geostrophic_velocity(dtu_data, config: AppConfig):
         template="plotly_white"
     )
     
-    st.plotly_chart(fig_clim, use_container_width=True)
+    st.plotly_chart(fig_clim, width='stretch')
     
     # Statistics
     with st.expander("📊 Geostrophic Velocity Statistics"):
@@ -5382,7 +5403,7 @@ def _render_dtu_export_tab(dtu_data, config: AppConfig):
             st.caption(f"Columns: {', '.join(df.columns)}")
             
             # Preview
-            st.dataframe(df.head(20), use_container_width=True)
+            st.dataframe(df.head(20), width='stretch')
             
             # Download
             csv_data = df.to_csv(index=False)
@@ -5419,7 +5440,7 @@ def _render_dtu_export_tab(dtu_data, config: AppConfig):
             ts_df['source'] = 'DTUSpace'
             ts_df['strait'] = strait_name
             
-            st.dataframe(ts_df.head(20), use_container_width=True)
+            st.dataframe(ts_df.head(20), width='stretch')
             st.caption(f"Showing first 20 of {len(ts_df)} rows")
             
             csv_ts = ts_df.to_csv(index=False)
@@ -5481,7 +5502,7 @@ def _render_dtu_export_tab(dtu_data, config: AppConfig):
         
         if stats_data:
             stats_df = pd.DataFrame(stats_data)
-            st.dataframe(stats_df, use_container_width=True)
+            st.dataframe(stats_df, width='stretch')
             
             # Additional info
             if x_km is not None and len(x_km) > 0:
