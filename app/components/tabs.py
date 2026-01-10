@@ -4334,6 +4334,7 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
     transport_total_sv = st.session_state['vt_transport_total_sv']
     monthly_profiles = st.session_state['vt_monthly_profiles']
     stored_depth_cap = st.session_state['vt_depth_cap']
+    time_array = st.session_state.get('vt_time_array', None)  # FIX: retrieve time_array
     
     # =========================================================================
     # 1. BATHYMETRY PROFILE (IN CIMA) - with dual x-axis (km + deg)
@@ -4480,6 +4481,11 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
     # 3. TOTAL TRANSPORT TIME SERIES
     # =========================================================================
     st.markdown("### 📈 Total Transport Time Series")
+    
+    # Check time_array is available
+    if time_array is None:
+        st.warning("⚠️ Time array not available. Please re-compute transport.")
+        return
     
     time_pd = pd.to_datetime(time_array)
     
