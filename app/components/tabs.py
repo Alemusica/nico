@@ -3765,7 +3765,7 @@ def _render_cmems_l4_tabs(cmems_l4_data, config: AppConfig):
     with tab4:
         _render_gridded_monthly_analysis(cmems_l4_data, config)
     with tab5:
-        _render_dtu_geostrophic_velocity(cmems_l4_data, config)
+        _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config)  # NEW: v_perp vs v_geo comparison
     with tab6:
         _render_volume_transport_tab_cmems_l4(cmems_l4_data, config)
     with tab7:
@@ -3821,16 +3821,352 @@ def _render_cmems_l4_spatial(cmems_l4_data, config: AppConfig):
 
 
 # ==============================================================================
+# GEOSTROPHIC VELOCITY TAB (CMEMS L4) - CONFRONTO v_perp vs v_geo
+# ==============================================================================
+def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
+    """
+    Render Geostrophic Velocity tab for CMEMS L4.
+    
+    Shows comparison between:
+    1. v_perp: from ugos/vgos using formula v(θ) = v_N×cos(θ) + v_E×sin(θ)
+    2. v_geo: from DOT slope using formula v = -g/f × (dη/dx)
+    
+    Layout:
+    1. Spatial Profile Along Gate (monthly menu + bin slider, dual x-axis km/deg)
+    2. Time series comparison v_perp vs v_geo (SINGLE PLOT)
+    3. Monthly climatology
+    """
+    st.subheader("🌊 Geostrophic Velocity Comparison")
+    
+    strait_name = getattr(cmems_l4_data, 'strait_name', 'Unknown')
+    ugos_matrix = getattr(cmems_l4_data, 'ugos_matrix', None)
+    vgos_matrix = getattr(cmems_l4_data, 'vgos_matrix', None)
+    gate_lon = getattr(cmems_l4_data, 'gate_lon_pts', None)
+    gate_lat = getattr(cmems_l4_data, 'gate_lat_pts', None)
+    x_km = getattr(cmems_l4_data, 'x_km', None)
+    time_array = getattr(cmems_l4_data, 'time_array', None)
+    slope_series = getattr(cmems_l4_data, 'slope_series', None)
+    
+    # Check velocity data
+    if ugos_matrix is None or vgos_matrix is None:
+        st.warning("⚠️ Velocity data (ugos/vgos) not available.")
+        st.info("""
+        **To enable velocity comparison:**
+        1. Go to sidebar → CMEMS L4 Variables
+        2. Select **ugos** and **vgos** 
+        3. Reload the data
+        """)
+        return
+    
+    st.success(f"✅ Data: {ugos_matrix.shape[0]} gate points × {ugos_matrix.shape[1]} time steps")
+    
+    # =========================================================================
+    # CONTROLS - Use unique keys with strait name to avoid conflicts
+    # =========================================================================
+    st.markdown("### ⚙️ Settings")
+    
+    # Generate unique key prefix
+    key_prefix = f"geovel_{strait_name.replace(' ', '_')}"
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        bin_size_km = st.slider(
+            "Spatial averaging (km)",
+            min_value=1,
+            max_value=50,
+            value=st.session_state.get(f'{key_prefix}_bin', 5),
+            step=1,
+            key=f"{key_prefix}_bin_slider"
+        )
+    
+    with col2:
+        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        selected_month = st.selectbox(
+            "Month to display",
+            options=list(range(1, 13)),
+            format_func=lambda m: month_names[m-1],
+            index=0,
+            key=f"{key_prefix}_month"
+        )
+    
+    with col3:
+        show_v_geo = st.checkbox("Show v_geo (from slope)", value=True, key=f"{key_prefix}_show_vgeo")
+    
+    # =========================================================================
+    # COMPUTE DATA
+    # =========================================================================
+    if st.button("🧮 Compute Velocities", type="primary", use_container_width=True, key=f"{key_prefix}_compute"):
+        with st.spinner("Computing perpendicular velocity..."):
+            try:
+                from src.services.transport_service import (
+                    compute_perpendicular_velocity,
+                    compute_monthly_along_gate_profile
+                )
+                
+                # 1. Compute v_perp from ugos/vgos
+                v_perp = compute_perpendicular_velocity(ugos_matrix, vgos_matrix, gate_lon, gate_lat)
+                
+                # 2. Monthly along-gate profiles for v_perp
+                monthly_v_perp = compute_monthly_along_gate_profile(
+                    x_km, v_perp, time_array, bin_size_km
+                )
+                
+                # 3. If we have slope data, compute v_geo
+                if slope_series is not None:
+                    g = 9.81
+                    OMEGA = 7.2921e-5
+                    mean_lat = np.mean(gate_lat)
+                    f = 2 * OMEGA * np.sin(np.deg2rad(mean_lat))
+                    
+                    # slope is m/100km, convert to m/m
+                    slope_m_m = slope_series / 100000.0
+                    v_geo_ts = g / f * slope_m_m  # (n_time,) - sign corrected
+                    
+                    st.session_state[f'{key_prefix}_v_geo_ts'] = v_geo_ts
+                
+                # Store results
+                st.session_state[f'{key_prefix}_v_perp'] = v_perp
+                st.session_state[f'{key_prefix}_monthly_v_perp'] = monthly_v_perp
+                st.session_state[f'{key_prefix}_x_km'] = x_km
+                st.session_state[f'{key_prefix}_gate_lon'] = gate_lon
+                st.session_state[f'{key_prefix}_time_array'] = time_array
+                st.session_state[f'{key_prefix}_bin'] = bin_size_km
+                
+                st.success("✅ Velocities computed!")
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Error: {e}")
+                import traceback
+                with st.expander("Traceback"):
+                    st.code(traceback.format_exc())
+                return
+    
+    # =========================================================================
+    # CHECK IF DATA COMPUTED
+    # =========================================================================
+    if f'{key_prefix}_v_perp' not in st.session_state:
+        st.info("👆 Click 'Compute Velocities' to start")
+        return
+    
+    # Retrieve from session state
+    v_perp = st.session_state[f'{key_prefix}_v_perp']
+    monthly_v_perp = st.session_state[f'{key_prefix}_monthly_v_perp']
+    stored_x_km = st.session_state[f'{key_prefix}_x_km']
+    stored_gate_lon = st.session_state[f'{key_prefix}_gate_lon']
+    v_geo_ts = st.session_state.get(f'{key_prefix}_v_geo_ts', None)
+    
+    # Recompute if bin size changed
+    stored_bin = st.session_state.get(f'{key_prefix}_bin', 5)
+    if stored_bin != bin_size_km:
+        from src.services.transport_service import compute_monthly_along_gate_profile
+        monthly_v_perp = compute_monthly_along_gate_profile(stored_x_km, v_perp, time_array, bin_size_km)
+        st.session_state[f'{key_prefix}_monthly_v_perp'] = monthly_v_perp
+        st.session_state[f'{key_prefix}_bin'] = bin_size_km
+    
+    # =========================================================================
+    # 1. VELOCITY PROFILE ALONG GATE (with dual x-axis: km + deg)
+    # =========================================================================
+    st.markdown("### 📊 Velocity Profile Along Gate")
+    st.caption(f"v_perp from ugos/vgos for **{month_names[selected_month-1]}** (averaged over all years)")
+    
+    bin_centers, bin_means, bin_stds = monthly_v_perp.get(selected_month, (np.array([]), np.array([]), np.array([])))
+    
+    if len(bin_centers) > 0:
+        # Calculate longitude for bin centers (interpolate)
+        bin_lon = np.interp(bin_centers, stored_x_km, stored_gate_lon)
+        
+        fig_profile = make_subplots(specs=[[{"secondary_x": True}]])
+        
+        # v_perp profile (cm/s) on primary x-axis (km)
+        fig_profile.add_trace(go.Scatter(
+            x=bin_centers,
+            y=bin_means * 100,  # m/s to cm/s
+            mode='lines+markers',
+            name='v_perp (ugos/vgos)',
+            line=dict(color='#1E3A5F', width=2.5),
+            marker=dict(size=7, color='#1E3A5F'),
+            error_y=dict(type='data', array=bin_stds * 100, visible=True, color='rgba(30,58,95,0.3)')
+        ), secondary_x=False)
+        
+        # Invisible trace for secondary x-axis (degrees)
+        fig_profile.add_trace(go.Scatter(
+            x=bin_lon,
+            y=bin_means * 100,
+            mode='markers',
+            marker=dict(size=0.1, opacity=0),
+            showlegend=False,
+            hoverinfo='skip'
+        ), secondary_x=True)
+        
+        fig_profile.add_hline(y=0, line_color="#7F8C8D", line_width=1, line_dash="dash")
+        
+        fig_profile.update_layout(
+            title=dict(text=f"Perpendicular Velocity Along Gate — {month_names[selected_month-1]}", font=dict(size=16)),
+            yaxis_title="Velocity (cm/s)",
+            height=420,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            font=dict(family="Inter, sans-serif", size=12),
+            xaxis=dict(gridcolor='#E8E8E8', gridwidth=1),
+            yaxis=dict(gridcolor='#E8E8E8', gridwidth=1),
+            margin=dict(l=60, r=40, t=60, b=50),
+        )
+        fig_profile.update_xaxes(title_text="Distance along gate (km)", secondary_x=False)
+        fig_profile.update_xaxes(title_text="Longitude (°)", secondary_x=True)
+        
+        st.plotly_chart(fig_profile, use_container_width=True)
+        
+        # Mean velocity for this month
+        mean_v = np.nanmean(bin_means) * 100
+        st.info(f"**{month_names[selected_month-1]} Mean v_perp**: {mean_v:.2f} cm/s")
+    else:
+        st.warning(f"No data available for {month_names[selected_month-1]}")
+    
+    # =========================================================================
+    # 2. COMPARISON: v_perp vs v_geo (SINGLE PLOT - both on same axes)
+    # =========================================================================
+    st.markdown("### 📈 Time Series: v_perp vs v_geo")
+    
+    time_pd = pd.to_datetime(time_array)
+    
+    # Compute mean v_perp per time step (average along gate)
+    v_perp_mean_ts = np.nanmean(v_perp, axis=0) * 100  # cm/s
+    
+    fig_ts = go.Figure()
+    
+    # v_perp line
+    fig_ts.add_trace(go.Scatter(
+        x=time_pd, y=v_perp_mean_ts,
+        mode='lines', name='v_perp (ugos/vgos)',
+        line=dict(color='#1E3A5F', width=2),
+        hovertemplate='%{x|%Y-%m-%d}<br>v_perp: %{y:.2f} cm/s<extra></extra>'
+    ))
+    
+    # v_geo line (if enabled and available)
+    if show_v_geo and v_geo_ts is not None:
+        fig_ts.add_trace(go.Scatter(
+            x=time_pd, y=v_geo_ts * 100,  # m/s to cm/s
+            mode='lines', name='v_geo (DOT slope)',
+            line=dict(color='#E07B53', width=2),
+            hovertemplate='%{x|%Y-%m-%d}<br>v_geo: %{y:.2f} cm/s<extra></extra>'
+        ))
+    
+    fig_ts.add_hline(y=0, line_dash="dash", line_color="#7F8C8D", line_width=1)
+    
+    title = "Geostrophic Velocity Comparison" if (show_v_geo and v_geo_ts is not None) else "Geostrophic Velocity: v_perp"
+    fig_ts.update_layout(
+        title=dict(text=title, font=dict(size=16)),
+        xaxis_title="Time",
+        yaxis_title="Velocity (cm/s)",
+        height=450,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Inter, sans-serif", size=12),
+        xaxis=dict(gridcolor='#E8E8E8', gridwidth=1),
+        yaxis=dict(gridcolor='#E8E8E8', gridwidth=1),
+        legend=dict(
+            yanchor="top", y=0.99, xanchor="right", x=0.99,
+            bgcolor='rgba(255,255,255,0.9)', bordercolor='#E8E8E8', borderwidth=1
+        ),
+        margin=dict(l=60, r=40, t=60, b=50),
+    )
+    
+    st.plotly_chart(fig_ts, use_container_width=True)
+    
+    # Statistics comparison
+    if show_v_geo and v_geo_ts is not None:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown("**v_perp (ugos/vgos)**")
+            st.metric("Mean", f"{np.nanmean(v_perp_mean_ts):.2f} cm/s")
+            st.metric("Std", f"{np.nanstd(v_perp_mean_ts):.2f} cm/s")
+        with col2:
+            st.markdown("**v_geo (DOT slope)**")
+            st.metric("Mean", f"{np.nanmean(v_geo_ts)*100:.2f} cm/s")
+            st.metric("Std", f"{np.nanstd(v_geo_ts)*100:.2f} cm/s")
+        with col3:
+            diff = v_perp_mean_ts - v_geo_ts * 100
+            st.markdown("**Difference**")
+            st.metric("Mean diff", f"{np.nanmean(diff):.2f} cm/s")
+            st.metric("RMSE", f"{np.sqrt(np.nanmean(diff**2)):.2f} cm/s")
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Mean v_perp", f"{np.nanmean(v_perp_mean_ts):.2f} cm/s")
+        with col2:
+            st.metric("Std v_perp", f"{np.nanstd(v_perp_mean_ts):.2f} cm/s")
+    
+    # =========================================================================
+    # 3. MONTHLY CLIMATOLOGY
+    # =========================================================================
+    st.markdown("### 📅 Monthly Climatology")
+    
+    # Compute monthly means
+    df_vel = pd.DataFrame({
+        'time': time_pd,
+        'v_perp': v_perp_mean_ts
+    })
+    if v_geo_ts is not None:
+        df_vel['v_geo'] = v_geo_ts * 100
+    
+    df_vel['month'] = df_vel['time'].dt.month
+    
+    monthly_v_perp_clim = df_vel.groupby('month')['v_perp'].mean()
+    
+    fig_clim = go.Figure()
+    
+    fig_clim.add_trace(go.Bar(
+        x=month_names,
+        y=[monthly_v_perp_clim.get(m, np.nan) for m in range(1, 13)],
+        name='v_perp',
+        marker_color='#1E3A5F'
+    ))
+    
+    if show_v_geo and v_geo_ts is not None:
+        monthly_v_geo_clim = df_vel.groupby('month')['v_geo'].mean()
+        fig_clim.add_trace(go.Bar(
+            x=month_names,
+            y=[monthly_v_geo_clim.get(m, np.nan) for m in range(1, 13)],
+            name='v_geo (slope)',
+            marker_color='#E07B53'
+        ))
+    
+    fig_clim.add_hline(y=0, line_color="#7F8C8D", line_width=1)
+    
+    fig_clim.update_layout(
+        title=dict(text="Monthly Mean Geostrophic Velocity", font=dict(size=16)),
+        xaxis_title="Month",
+        yaxis_title="Velocity (cm/s)",
+        barmode='group',
+        height=400,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Inter, sans-serif", size=12),
+        xaxis=dict(gridcolor='#E8E8E8'),
+        yaxis=dict(gridcolor='#E8E8E8'),
+        bargap=0.2,
+        legend=dict(bgcolor='rgba(255,255,255,0.9)', bordercolor='#E8E8E8', borderwidth=1),
+    )
+    
+    st.plotly_chart(fig_clim, use_container_width=True)
+
+
+# ==============================================================================
 # VOLUME TRANSPORT TAB (CMEMS L4)
 # ==============================================================================
 def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
     """
-    Render Volume Transport tab for CMEMS L4 with depth method selection.
+    Render Volume Transport tab for CMEMS L4.
     
-    Uses:
-    - CMEMS L4 ugos/vgos for velocity
-    - Fixed depth (250m) or GEBCO bathymetry
-    - transport_service.py for calculations
+    Layout:
+    1. Bathymetry Profile (IN CIMA) - con linea rossa a 250m
+    2. Volume Transport Along-Gate - menu mese + slider km
+    3. Statistics + Export
+    
+    Uses GEBCO bathymetry with 250m cap for transport calculation.
     """
     st.subheader("🚢 Volume Transport Calculation")
     
@@ -3853,227 +4189,367 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
         """)
         return
     
-    st.success(f"✅ Velocity data loaded: {ugos_matrix.shape[1]} time steps")
+    st.success(f"✅ Velocity data loaded: {ugos_matrix.shape[0]} gate points × {ugos_matrix.shape[1]} time steps")
     
-    # === DEPTH METHOD SELECTION ===
-    st.markdown("### 📏 Depth Method")
+    # =========================================================================
+    # CONTROLS
+    # =========================================================================
+    st.markdown("### ⚙️ Settings")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        depth_method = st.radio(
-            "Select depth source:",
-            ["fixed", "gebco"],
-            format_func=lambda x: "🔢 Fixed Depth (250m)" if x == "fixed" else "🌊 GEBCO Bathymetry",
-            key="transport_depth_method",
-            horizontal=False
+        depth_cap = st.number_input(
+            "Depth Cap (m)",
+            min_value=50,
+            max_value=1000,
+            value=250,
+            step=50,
+            key="transport_depth_cap_v2",
+            help="Maximum depth for transport calculation (GEBCO capped at this value)"
         )
     
     with col2:
-        if depth_method == "fixed":
-            fixed_depth = st.number_input(
-                "Fixed Depth (m)",
-                min_value=50,
-                max_value=1000,
-                value=250,
-                step=50,
-                key="transport_fixed_depth"
-            )
-            st.caption("Assumes uniform depth across gate")
-        else:
-            gebco_path = config.gebco_nc_path
-            st.caption(f"Using: `{gebco_path.split('/')[-1]}`")
-            fixed_depth = st.number_input(
-                "Depth Cap (m)",
-                min_value=50,
-                max_value=1000,
-                value=250,
-                step=50,
-                key="transport_depth_cap",
-                help="Maximum depth to consider (for shallow analysis)"
-            )
-            
-            # Show cache status
-            try:
-                from src.services.gebco_service import get_bathymetry_cache
-                cache = get_bathymetry_cache()
-                if cache.exists(strait_name):
-                    st.success(f"📦 Bathymetry cached for {strait_name}")
-                    if st.button("🗑️ Clear Cache", key="clear_bathy_cache"):
-                        cache.clear(strait_name)
-                        st.info("Cache cleared. Will reload from GEBCO on next compute.")
-                        st.rerun()
-                else:
-                    st.info("No cache yet. Will be created on first compute.")
-            except Exception:
-                pass
+        bin_size_km = st.slider(
+            "Spatial averaging (km)",
+            min_value=1,
+            max_value=50,
+            value=5,
+            step=1,
+            key="transport_bin_size",
+            help="Average transport over bins of this width"
+        )
     
-    # === COMPUTE TRANSPORT ===
-    if st.button("🧮 Compute Volume Transport", type="primary", use_container_width=True):
-        with st.spinner("Computing transport..."):
+    with col3:
+        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        selected_month = st.selectbox(
+            "Month to display",
+            options=list(range(1, 13)),
+            format_func=lambda m: month_names[m-1],
+            index=0,
+            key="transport_month_select"
+        )
+    
+    # =========================================================================
+    # LOAD/COMPUTE DATA
+    # =========================================================================
+    if st.button("🧮 Compute Transport", type="primary", use_container_width=True):
+        with st.spinner("Loading bathymetry and computing transport..."):
             try:
-                # Get depths
-                if depth_method == "fixed":
-                    depth_profile = np.full(len(gate_lon), fixed_depth)
-                    st.info(f"Using fixed depth: {fixed_depth}m across entire gate")
-                else:
-                    # Use GEBCO with caching
-                    try:
-                        from src.services.gebco_service import get_bathymetry_cache
-                        
-                        cache = get_bathymetry_cache()
-                        depth_profile = cache.get_or_compute(
-                            gate_name=strait_name,
-                            gate_lons=gate_lon,
-                            gate_lats=gate_lat,
-                            gebco_path=config.gebco_nc_path,
-                            depth_cap=fixed_depth
-                        )
-                        
-                        # Show cache status
-                        if cache.exists(strait_name):
-                            st.success(f"📦 Loaded from cache: {strait_name}")
-                        
-                        st.info(f"GEBCO depths: min={depth_profile.min():.0f}m, max={depth_profile.max():.0f}m, mean={depth_profile.mean():.0f}m")
-                    except Exception as e:
-                        st.error(f"Failed to load GEBCO: {e}")
-                        st.warning("Falling back to fixed depth")
-                        depth_profile = np.full(len(gate_lon), fixed_depth)
+                # 1. Load GEBCO bathymetry (with caching, NO cap for display)
+                from src.services.gebco_service import get_bathymetry_cache
                 
-                # Compute transport using transport_service
-                from src.services.transport_service import calculate_volume_transport
-                
-                result = calculate_volume_transport(
-                    ugos_matrix=ugos_matrix,
-                    vgos_matrix=vgos_matrix,
-                    depth_profile=depth_profile,
-                    gate_lon=gate_lon,
-                    gate_lat=gate_lat,
-                    x_km=x_km,
-                    time_array=time_array,
-                    gate_name=strait_name
+                cache = get_bathymetry_cache()
+                depth_profile_full = cache.get_or_compute(
+                    gate_name=strait_name,
+                    gate_lons=gate_lon,
+                    gate_lats=gate_lat,
+                    gebco_path=config.gebco_nc_path,
+                    depth_cap=None  # Full bathymetry for display
                 )
                 
-                if result is None:
-                    st.error("Transport calculation failed")
-                    return
+                # 2. Apply cap for transport calculation
+                depth_profile_capped = np.minimum(depth_profile_full, depth_cap)
                 
-                # Store in session state for persistence
-                st.session_state['volume_transport_result'] = result
-                st.session_state['depth_profile'] = depth_profile
-                st.success("✅ Transport computed successfully!")
+                # 3. Compute perpendicular velocity
+                from src.services.transport_service import (
+                    compute_perpendicular_velocity,
+                    compute_segment_widths,
+                    bin_along_gate,
+                    compute_monthly_along_gate_profile,
+                    SVERDRUP
+                )
+                
+                v_perp = compute_perpendicular_velocity(ugos_matrix, vgos_matrix, gate_lon, gate_lat)
+                
+                # 4. Compute segment widths
+                widths = compute_segment_widths(gate_lon, gate_lat, x_km)
+                
+                # 5. Compute transport per point per time step
+                # Q(x, t) = v_perp(x, t) × h(x) × Δx
+                # Shape: (n_pts, n_time)
+                transport_per_point = v_perp * depth_profile_capped[:, np.newaxis] * widths[:, np.newaxis]
+                transport_per_point_sv = transport_per_point / SVERDRUP
+                
+                # 6. Total transport time series
+                transport_total_sv = np.nansum(transport_per_point_sv, axis=0)
+                
+                # 7. Monthly along-gate profiles
+                monthly_profiles = compute_monthly_along_gate_profile(
+                    x_km, transport_per_point_sv, time_array, bin_size_km
+                )
+                
+                # Store in session state
+                st.session_state['vt_depth_full'] = depth_profile_full
+                st.session_state['vt_depth_capped'] = depth_profile_capped
+                st.session_state['vt_v_perp'] = v_perp
+                st.session_state['vt_transport_per_point_sv'] = transport_per_point_sv
+                st.session_state['vt_transport_total_sv'] = transport_total_sv
+                st.session_state['vt_monthly_profiles'] = monthly_profiles
+                st.session_state['vt_x_km'] = x_km
+                st.session_state['vt_time_array'] = time_array
+                st.session_state['vt_depth_cap'] = depth_cap
+                st.session_state['vt_bin_size'] = bin_size_km
+                
+                st.success("✅ Transport computed!")
                 
             except Exception as e:
-                st.error(f"Error computing transport: {e}")
+                st.error(f"Error: {e}")
                 import traceback
                 with st.expander("Traceback"):
                     st.code(traceback.format_exc())
                 return
     
-    # === DISPLAY RESULTS ===
-    result = st.session_state.get('volume_transport_result')
-    depth_profile = st.session_state.get('depth_profile')
-    
-    if result is None:
-        st.info("👆 Click 'Compute Volume Transport' to calculate")
+    # =========================================================================
+    # CHECK IF DATA COMPUTED
+    # =========================================================================
+    if 'vt_depth_full' not in st.session_state:
+        st.info("👆 Click 'Compute Transport' to start")
         return
     
-    # Statistics
-    st.markdown("### 📊 Transport Statistics")
+    # Retrieve from session state
+    depth_full = st.session_state['vt_depth_full']
+    depth_capped = st.session_state['vt_depth_capped']
+    transport_per_point_sv = st.session_state['vt_transport_per_point_sv']
+    transport_total_sv = st.session_state['vt_transport_total_sv']
+    monthly_profiles = st.session_state['vt_monthly_profiles']
+    stored_depth_cap = st.session_state['vt_depth_cap']
+    
+    # =========================================================================
+    # 1. BATHYMETRY PROFILE (IN CIMA) - with dual x-axis (km + deg)
+    # =========================================================================
+    st.markdown("### 🌊 Bathymetry Profile")
+    st.caption(f"GEBCO bathymetry along gate. Red line = {stored_depth_cap}m depth cap for transport.")
+    
+    fig_bathy = make_subplots(specs=[[{"secondary_x": True}]])
+    
+    # Fill area for bathymetry (real depth) - primary x-axis (km)
+    fig_bathy.add_trace(go.Scatter(
+        x=x_km,
+        y=-depth_full,  # Negative to show below sea level
+        fill='tozeroy',
+        fillcolor='rgba(30, 58, 95, 0.4)',
+        line=dict(color='#1E3A5F', width=2),
+        name='GEBCO Depth',
+        hovertemplate='%{x:.1f} km<br>Depth: %{y:.0f} m<extra></extra>'
+    ), secondary_x=False)
+    
+    # Invisible trace for secondary x-axis (degrees)
+    fig_bathy.add_trace(go.Scatter(
+        x=gate_lon,
+        y=-depth_full,
+        mode='markers',
+        marker=dict(size=0.1, opacity=0),
+        showlegend=False,
+        hoverinfo='skip'
+    ), secondary_x=True)
+    
+    # Sea level line
+    fig_bathy.add_hline(y=0, line_color="#3498DB", line_width=2, 
+                        annotation_text="Sea Level", annotation_position="top left")
+    
+    # Depth cap line (RED)
+    fig_bathy.add_hline(y=-stored_depth_cap, line_color="#E74C3C", line_width=2, line_dash="dash",
+                        annotation_text=f"Cap: {stored_depth_cap}m", 
+                        annotation_position="bottom right")
+    
+    fig_bathy.update_layout(
+        title=dict(text=f"{strait_name} — Cross-Section Bathymetry", font=dict(size=16)),
+        yaxis_title="Depth (m)",
+        height=380,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Inter, sans-serif", size=12),
+        xaxis=dict(gridcolor='#E8E8E8'),
+        yaxis=dict(gridcolor='#E8E8E8', range=[min(-depth_full.max() * 1.1, -stored_depth_cap * 1.5), 50]),
+        margin=dict(l=60, r=40, t=60, b=50),
+    )
+    fig_bathy.update_xaxes(title_text="Distance along gate (km)", secondary_x=False)
+    fig_bathy.update_xaxes(title_text="Longitude (°)", secondary_x=True)
+    
+    st.plotly_chart(fig_bathy, use_container_width=True)
+    
+    # Stats
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Mean Transport", f"{result.mean_transport_sv:.2f} Sv")
+        st.metric("Max Depth", f"{depth_full.max():.0f} m")
     with col2:
-        st.metric("Std Dev", f"{result.std_transport_sv:.2f} Sv")
+        st.metric("Mean Depth", f"{depth_full.mean():.0f} m")
     with col3:
-        st.metric("Min", f"{result.min_transport_sv:.2f} Sv")
+        st.metric("Depth Cap", f"{stored_depth_cap} m")
     with col4:
-        st.metric("Max", f"{result.max_transport_sv:.2f} Sv")
+        pct_capped = (depth_full > stored_depth_cap).sum() / len(depth_full) * 100
+        st.metric("% Capped", f"{pct_capped:.1f}%")
     
-    st.caption("1 Sv (Sverdrup) = 10⁶ m³/s")
+    # =========================================================================
+    # 2. VOLUME TRANSPORT ALONG-GATE (Monthly Profile) - with dual x-axis
+    # =========================================================================
+    st.markdown("### 📊 Volume Transport Along Gate")
+    st.caption(f"Monthly mean transport profile for **{month_names[selected_month-1]}** (averaged over all years)")
     
-    # Time series plot
-    st.markdown("### 📈 Transport Time Series")
+    # Recompute if bin size changed
+    current_bin = st.session_state.get('vt_bin_size', 5)
+    if current_bin != bin_size_km:
+        from src.services.transport_service import compute_monthly_along_gate_profile
+        monthly_profiles = compute_monthly_along_gate_profile(
+            x_km, transport_per_point_sv, time_array, bin_size_km
+        )
+        st.session_state['vt_monthly_profiles'] = monthly_profiles
+        st.session_state['vt_bin_size'] = bin_size_km
+    
+    # Get profile for selected month
+    bin_centers, bin_means, bin_stds = monthly_profiles.get(selected_month, (np.array([]), np.array([]), np.array([])))
+    
+    if len(bin_centers) > 0:
+        # Calculate longitude for bin centers (interpolate)
+        bin_lon = np.interp(bin_centers, x_km, gate_lon)
+        
+        fig_profile = make_subplots(specs=[[{"secondary_x": True}]])
+        
+        # Bar chart with elegant colors
+        colors = ['#3498DB' if v >= 0 else '#E74C3C' for v in bin_means]
+        
+        fig_profile.add_trace(go.Bar(
+            x=bin_centers,
+            y=bin_means,
+            marker_color=colors,
+            name=f'{month_names[selected_month-1]} Mean',
+            error_y=dict(type='data', array=bin_stds, visible=True, color='rgba(0,0,0,0.3)'),
+            hovertemplate='%{x:.1f} km<br>Transport: %{y:.4f} ×10⁶ m³/s<extra></extra>'
+        ), secondary_x=False)
+        
+        # Invisible trace for secondary x-axis (degrees)
+        fig_profile.add_trace(go.Scatter(
+            x=bin_lon,
+            y=bin_means,
+            mode='markers',
+            marker=dict(size=0.1, opacity=0),
+            showlegend=False,
+            hoverinfo='skip'
+        ), secondary_x=True)
+        
+        fig_profile.add_hline(y=0, line_color="#7F8C8D", line_width=1)
+        
+        fig_profile.update_layout(
+            title=dict(text=f"Transport Along Gate — {month_names[selected_month-1]}", font=dict(size=16)),
+            yaxis_title="Transport (×10⁶ m³/s)",
+            height=420,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            font=dict(family="Inter, sans-serif", size=12),
+            xaxis=dict(gridcolor='#E8E8E8'),
+            yaxis=dict(gridcolor='#E8E8E8'),
+            bargap=0.15,
+            margin=dict(l=60, r=40, t=60, b=50),
+        )
+        fig_profile.update_xaxes(title_text="Distance along gate (km)", secondary_x=False)
+        fig_profile.update_xaxes(title_text="Longitude (°)", secondary_x=True)
+        
+        st.plotly_chart(fig_profile, use_container_width=True)
+        
+        # Monthly total for this month
+        total_month = np.nansum(bin_means)
+        total_m3s = total_month * 1e6
+        st.info(f"**{month_names[selected_month-1]} Total Transport**: {total_m3s:.2e} m³/s ({total_month:.3f} ×10⁶ m³/s)")
+    else:
+        st.warning(f"No data available for {month_names[selected_month-1]}")
+    
+    # =========================================================================
+    # 3. TOTAL TRANSPORT TIME SERIES
+    # =========================================================================
+    st.markdown("### 📈 Total Transport Time Series")
     
     time_pd = pd.to_datetime(time_array)
     
     fig_ts = go.Figure()
     fig_ts.add_trace(go.Scatter(
         x=time_pd,
-        y=result.transport_sv,
+        y=transport_total_sv,
         mode='lines',
-        name='Volume Transport',
-        line=dict(color='steelblue', width=2)
+        name='Total Transport',
+        line=dict(color='#1E3A5F', width=2),
+        hovertemplate='%{x|%Y-%m-%d}<br>Transport: %{y:.3f} ×10⁶ m³/s<extra></extra>'
     ))
-    fig_ts.add_hline(y=0, line_dash="dash", line_color="gray")
-    fig_ts.add_hline(y=result.mean_transport_sv, line_dash="dot", line_color="red",
-                     annotation_text=f"Mean: {result.mean_transport_sv:.2f} Sv")
+    
+    mean_transport = np.nanmean(transport_total_sv)
+    fig_ts.add_hline(y=0, line_dash="dash", line_color="#7F8C8D", line_width=1)
+    fig_ts.add_hline(y=mean_transport, line_dash="dot", line_color="#E74C3C", line_width=1.5,
+                     annotation_text=f"Mean: {mean_transport:.3f}")
     
     fig_ts.update_layout(
-        title=f"{strait_name} - Volume Transport Time Series",
+        title=dict(text=f"{strait_name} — Volume Transport Time Series", font=dict(size=16)),
         xaxis_title="Time",
-        yaxis_title="Transport (Sv)",
-        height=400,
-        template="plotly_white"
+        yaxis_title="Transport (×10⁶ m³/s)",
+        height=420,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Inter, sans-serif", size=12),
+        xaxis=dict(gridcolor='#E8E8E8'),
+        yaxis=dict(gridcolor='#E8E8E8'),
+        margin=dict(l=60, r=40, t=60, b=50),
     )
+    
     st.plotly_chart(fig_ts, use_container_width=True)
     
-    # Monthly climatology
+    # =========================================================================
+    # 4. STATISTICS + EXPORT
+    # =========================================================================
+    st.markdown("### 📊 Statistics")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Mean Transport", f"{np.nanmean(transport_total_sv):.3f} ×10⁶ m³/s")
+    with col2:
+        st.metric("Std Dev", f"{np.nanstd(transport_total_sv):.3f} ×10⁶ m³/s")
+    with col3:
+        st.metric("Min", f"{np.nanmin(transport_total_sv):.3f} ×10⁶ m³/s")
+    with col4:
+        st.metric("Max", f"{np.nanmax(transport_total_sv):.3f} ×10⁶ m³/s")
+    
+    st.caption("1 ×10⁶ m³/s = 1 Sv (Sverdrup) | Positive = flow perpendicular to gate (rightward)")
+    
+    # Monthly Climatology
     st.markdown("### 📅 Monthly Climatology")
     
-    month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    monthly_totals = []
+    for m in range(1, 13):
+        bin_c, bin_m, _ = monthly_profiles.get(m, (np.array([]), np.array([]), np.array([])))
+        if len(bin_m) > 0:
+            monthly_totals.append(np.nansum(bin_m))
+        else:
+            monthly_totals.append(np.nan)
     
-    fig_month = go.Figure()
-    fig_month.add_trace(go.Bar(
+    fig_clim = go.Figure()
+    fig_clim.add_trace(go.Bar(
         x=month_names,
-        y=result.monthly_mean,
-        error_y=dict(type='data', array=result.monthly_std),
-        marker_color=['steelblue' if v >= 0 else 'coral' for v in result.monthly_mean],
-        name='Monthly Mean'
+        y=monthly_totals,
+        marker_color=['#3498DB' if v >= 0 else '#E74C3C' for v in monthly_totals],
+        name='Monthly Mean',
+        hovertemplate='%{x}<br>Transport: %{y:.3f} ×10⁶ m³/s<extra></extra>'
     ))
-    fig_month.add_hline(y=0, line_color="black", line_width=1)
+    fig_clim.add_hline(y=0, line_color="#7F8C8D", line_width=1)
     
-    fig_month.update_layout(
-        title="Monthly Mean Volume Transport",
+    fig_clim.update_layout(
+        title=dict(text="Monthly Mean Volume Transport", font=dict(size=16)),
         xaxis_title="Month",
-        yaxis_title="Transport (Sv)",
-        height=400,
-        template="plotly_white"
+        yaxis_title="Transport (×10⁶ m³/s)",
+        height=380,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Inter, sans-serif", size=12),
+        xaxis=dict(gridcolor='#E8E8E8'),
+        yaxis=dict(gridcolor='#E8E8E8'),
+        bargap=0.2,
     )
-    st.plotly_chart(fig_month, use_container_width=True)
     
-    # Bathymetry profile
-    if depth_profile is not None and x_km is not None:
-        st.markdown("### 🌊 Bathymetry Profile")
-        
-        fig_bathy = go.Figure()
-        fig_bathy.add_trace(go.Scatter(
-            x=x_km,
-            y=-depth_profile,  # Negative to show depth below surface
-            fill='tozeroy',
-            fillcolor='rgba(139, 90, 43, 0.5)',
-            line=dict(color='saddlebrown', width=2),
-            name='Depth'
-        ))
-        fig_bathy.add_hline(y=0, line_color="blue", line_width=2)  # Sea level
-        
-        fig_bathy.update_layout(
-            title=f"{strait_name} - Cross-Section Depth Profile",
-            xaxis_title="Distance along gate (km)",
-            yaxis_title="Depth (m)",
-            height=300,
-            template="plotly_white"
-        )
-        st.plotly_chart(fig_bathy, use_container_width=True)
+    st.plotly_chart(fig_clim, use_container_width=True)
     
     # Export
     with st.expander("📥 Export Transport Data"):
-        # Create DataFrame
         export_df = pd.DataFrame({
             'time': time_pd,
-            'transport_sv': result.transport_sv,
-            'v_perp_mean_ms': np.nanmean(result.v_perp_profile) if result.v_perp_profile is not None else np.nan
+            'transport_sv': transport_total_sv,
         })
         
         csv_data = export_df.to_csv(index=False)

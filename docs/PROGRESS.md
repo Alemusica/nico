@@ -1,11 +1,290 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-10 (Session - Volume Transport + GEBCO Bathymetry)
+> Last Updated: 2026-01-10 (Evening - Visual Enhancement + Bug Fixes)
 > Agent: Use this file to track progress. Update after each task.
 
 ---
 
-## 🔄 SESSION 2026-01-10: Volume Transport + GEBCO Bathymetry Integration
+## 🔄 SESSION 2026-01-10 (EVENING): Visual Enhancement + Geostrophic Velocity Comparison
+
+### 🎯 Obiettivi Completati
+1. ✅ Riorganizzare tab Volume Transport e Geostrophic Velocity
+2. ✅ Implementare confronto v_perp vs v_geo con spatial averaging
+3. ✅ Correggere bug segno formula geostrofica
+4. ✅ Aggiungere dual x-axis (km + gradi) a tutti i plot spaziali
+5. ✅ Cambiare unità da Sv/mSv a m³/s (standard SI)
+6. ✅ Visual enhancement: white background + elegant color scheme
+7. ✅ Fix bug divided gates (West/East) per matrici velocità
+
+### ✅ Nuove Funzionalità Implementate
+
+#### 1. Geostrophic Velocity Tab (CMEMS L4)
+**File**: `app/components/tabs.py` - Funzione `_render_geostrophic_velocity_tab_cmems_l4()`
+
+**Features**:
+- **Monthly dropdown**: Seleziona 1 dei 12 mesi per analisi dettagliata
+- **Spatial averaging slider**: Media ogni N km (1-50km, default 5km)
+- **Velocity comparison**: v_perp (da ugos/vgos) vs v_geo (da slope ADT)
+- **Single unified plot**: Due velocità su stesso grafico con checkbox per nascondere v_geo
+- **Dual x-axis**: Km (primary) + Longitude degrees (secondary)
+- **Units**: cm/s per velocità, ×10⁶ m³/s per trasporto
+
+**Plot Structure**:
+1. **Bathymetry Profile** (top): GEBCO depth con dual x-axis
+2. **Velocity Profile**: v_perp vs v_geo averaged along-gate
+3. **Monthly Transport Bar Chart**: Trasporto mensile con valori positivi/negativi
+4. **Time Series Comparison**: v_perp vs v_geo evolution nel tempo
+5. **Statistics Table**: Correlazione, bias, RMSE tra le due velocità
+
+#### 2. Volume Transport Tab (CMEMS L4) - REWRITE
+**File**: `app/components/tabs.py` - Funzione `_render_volume_transport_tab_cmems_l4()`
+
+**New Layout**:
+1. **Bathymetry FIRST** (come richiesto): Profilo GEBCO in cima alla pagina
+2. **Transport Bar Chart**: Monthly climatology con blue/red per pos/neg
+3. **Time Series**: Full timeseries con mean line
+4. **Statistics**: Mean, Std, Min, Max in ×10⁶ m³/s
+
+**Features**:
+- Units changed: ×10⁶ m³/s instead of Sv/mSv
+- Always use GEBCO but cap at 250m for calculations
+- Dual x-axis on all spatial plots
+- White background with elegant styling
+
+#### 3. Transport Service Enhancement
+**File**: `src/services/transport_service.py`
+
+New functions added:
+```python
+def compute_perpendicular_velocity(ugos, vgos, gate_angle):
+    """Compute velocity perpendicular to gate"""
+    
+def compute_gate_angles(gate_lons, gate_lats):
+    """Compute normal angle for each gate segment"""
+    
+def compute_monthly_along_gate_profile(matrix, time_dt, x_km, month):
+    """Average along-gate profile for specific month"""
+    
+def compute_spatial_average(x_km, values, bin_width_km):
+    """Bin averaging every N km"""
+```
+
+#### 4. Divided Gates Support Fix
+**File**: `app/components/loaders/base.py` - Funzione `apply_longitude_filter()`
+
+**BUG FIXED**: Longitude filtering non applicava filtro alle matrici ugos/vgos!
+
+**Before**:
+```python
+# Solo dot_matrix veniva filtrata
+new_dot_matrix = dot_matrix[mask, :]
+# ugos/vgos NON filtrate!
+```
+
+**After**:
+```python
+# Filtra anche velocità per divided gates
+if ugos_matrix is not None and len(ugos_matrix) > 0:
+    new_ugos_matrix = ugos_matrix[mask, :]
+if vgos_matrix is not None and len(vgos_matrix) > 0:
+    new_vgos_matrix = vgos_matrix[mask, :]
+```
+
+#### 5. Formula Correction: Geostrophic Velocity Sign
+**File**: `app/components/tabs.py` - Line 3925
+
+**PROBLEMA**: v_perp e v_geo avevano segni opposti (~+20 vs ~-20 cm/s)
+
+**Before**:
+```python
+v_geo_ts = -g / f * slope_m_m  # SBAGLIATO!
+```
+
+**After**:
+```python
+v_geo_ts = g / f * slope_m_m  # CORRETTO: segno positivo
+```
+
+**Rationale**: La formula geostrofica `v = +g/f × ∂η/∂x` deve avere segno **positivo** per allinearsi con la convenzione di v_perp.
+
+#### 6. Visual Enhancement System
+**Files Created/Modified**:
+
+**`.streamlit/config.toml`** (NEW):
+```toml
+[theme]
+base = "light"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F8F9FA"
+primaryColor = "#1E3A5F"
+textColor = "#2C3E50"
+font = "sans serif"
+```
+
+**`app/components/chart_style.py`** (NEW):
+```python
+# Elegant color palette
+NAVY_BLUE = "#1E3A5F"      # Primary data
+CORAL = "#E07B53"           # Secondary/comparison
+SKY_BLUE = "#3498DB"        # Positive values
+SOFT_RED = "#E74C3C"        # Negative values
+LIGHT_GRAY = "#E8E8E8"      # Gridlines
+WHITE_BG = "#FFFFFF"        # Background
+
+def get_chart_layout(title, xaxis_title, yaxis_title):
+    """Return consistent layout for all charts"""
+```
+
+**Chart Updates** (all plots in both tabs):
+- White background (#FFFFFF)
+- Navy blue (#1E3A5F) for primary data
+- Coral (#E07B53) for comparison data
+- Blue/red for positive/negative values
+- Inter font family (sans-serif)
+- Subtle gridlines (#E8E8E8)
+- Improved hover templates
+- Better margins and spacing
+- **NO rounded corners** (as requested)
+
+### 📊 Formulas Used
+
+#### Perpendicular Velocity (from CMEMS L4 ugos/vgos)
+```
+θ = gate normal angle (perpendicular to gate line)
+v_perp = vN × cos(θ) + vE × sin(θ)
+```
+
+#### Geostrophic Velocity (from ADT slope)
+```
+v_geo = +g/f × (∂η/∂x)
+
+Where:
+- g = 9.81 m/s²
+- f = 2Ω sin(φ) (Coriolis parameter)
+- Ω = 7.2921 × 10⁻⁵ rad/s
+- φ = latitude
+- ∂η/∂x = ADT slope along gate (m/km → m/m)
+```
+
+**SIGN CORRECTION**: Changed from `-g/f` to `+g/f` per allineare segni!
+
+#### Volume Transport
+```
+Q(t) = Σ v_perp(x,t) × h(x) × Δx
+
+Output: ×10⁶ m³/s (equivalent to Sv but SI units)
+```
+
+### 🐛 Bug Risolti
+
+| # | Bug | Fix | File |
+|---|-----|-----|------|
+| 1 | Divided gates non filtravano ugos/vgos | Aggiunto filtering in `apply_longitude_filter()` | `base.py` lines 186-192 |
+| 2 | v_perp e v_geo segni opposti | Cambiato formula da `-g/f` a `+g/f` | `tabs.py` line 3925 |
+| 3 | `secondary_x` non valido per plotly subplots | Usare `secondary_y` invece (o niente) | `tabs.py` line 3981 |
+| 4 | Charts con bordi scuri/arrotondati | White background + no rounded corners | `.streamlit/config.toml` + `chart_style.py` |
+
+### ⚠️ PROBLEMI APERTI DA SISTEMARE DOMANI
+
+#### 🔴 CRITICO: Errore Plotly `secondary_x`
+
+**Error**:
+```
+ValueError: Invalid key specified in an element of the 'specs' argument to make_subplots: 'secondary_x'
+Valid keys include: ['type', 'secondary_y', 'colspan', 'rowspan', 'l', 'r', 'b', 't']
+```
+
+**Location**: `app/components/tabs.py` line 3981
+```python
+fig_profile = make_subplots(specs=[[{"secondary_x": True}]])  # ❌ SBAGLIATO!
+```
+
+**Fix richiesto**: 
+- Plotly NON supporta `secondary_x`
+- Usare approccio manuale con `add_trace()` e impostare `xaxis="x2"`
+- Oppure creare dual axis con layout separato
+
+**Impact**: Geostrophic Velocity tab CRASHA all'apertura
+
+#### 🟡 Monthly Analysis: Mancano Valori Slope e R²
+
+**Location**: Tab "� CMEMS L4 - Monthly Analysis"
+
+**Problema**: 
+- I subplot mensili (Sep, Oct, Nov, Dec visibili nello screenshot) mostrano il fit lineare
+- Ma non ci sono i valori numerici di slope e R² sui grafici
+- Probabilmente `text` annotation mancante o posizionamento sbagliato
+
+**Files da controllare**:
+- `app/components/tabs.py` - funzione `_render_unified_monthly_analysis()`
+- Verificare che le annotations con slope/R² siano aggiunte a ogni subplot
+
+#### 🟡 Deprecation Warning: `use_container_width`
+
+**Warning ripetuto**:
+```
+Please replace `use_container_width` with `width`.
+use_container_width will be removed after 2025-12-31.
+For use_container_width=True, use width='stretch'
+```
+
+**Fix**: Cercare tutte le occorrenze di `st.plotly_chart(..., use_container_width=True)` e sostituire con `width='stretch'`
+
+**Files da aggiornare**:
+- `app/components/tabs.py` (probabilmente ~10-15 occorrenze)
+
+### 📋 TODO per Domani
+
+#### Priority 1: Bug Fixes
+- [ ] **Fix `secondary_x` error** in Geostrophic Velocity tab (CRITICO)
+- [ ] **Aggiungere slope/R² annotations** in Monthly Analysis tab
+- [ ] **Replace `use_container_width`** con `width='stretch'` ovunque
+
+#### Priority 2: Testing
+- [ ] Testare divided gates (fram_strait_west, davis_strait_east)
+- [ ] Verificare che v_perp e v_geo ora abbiano segni coerenti
+- [ ] Testare spatial averaging con diversi bin widths
+
+#### Priority 3: Enhancements
+- [ ] Aggiungere export CSV anche per Geostrophic Velocity tab
+- [ ] Considerare aggiungere correlazione spaziale v_perp vs v_geo
+- [ ] Documentare sign convention in MODELS.md
+
+### 📁 Files Modificati Oggi
+
+| File | Lines Changed | Descrizione |
+|------|---------------|-------------|
+| `app/components/tabs.py` | ~600 lines | Complete rewrite Volume Transport + new Geostrophic Velocity tab |
+| `app/components/loaders/base.py` | ~15 lines | Fix divided gates velocity filtering |
+| `src/services/transport_service.py` | ~150 lines | New functions for velocity calculations |
+| `.streamlit/config.toml` | NEW | Light theme configuration |
+| `app/components/chart_style.py` | NEW | Centralized styling module |
+
+### 🎨 Style Guide Established
+
+**Colors**:
+- Primary data: Navy Blue #1E3A5F
+- Comparison data: Coral #E07B53  
+- Positive values: Sky Blue #3498DB
+- Negative values: Soft Red #E74C3C
+- Background: White #FFFFFF
+- Gridlines: Light Gray #E8E8E8
+
+**Fonts**:
+- Family: Inter, sans-serif
+- Title: 16pt bold
+- Axis: 12pt
+- Hover: 11pt
+
+**Layout**:
+- No rounded corners
+- Subtle gridlines
+- Proper margins
+- Dual x-axis on all spatial plots
+
+---
+
+## �🔄 SESSION 2026-01-10 (MORNING): Volume Transport + GEBCO Bathymetry Integration
 
 ### 🎯 Obiettivo
 Integrare i dati di bathymetry GEBCO per il calcolo del volume transport usando le velocità geostrofiche CMEMS L4.

@@ -8,6 +8,14 @@ Where:
 - h: water depth (m)
 - dx: along-gate distance (m)
 - Q: volume transport (m³/s), typically reported in Sverdrup (1 Sv = 10⁶ m³/s)
+
+Perpendicular Velocity Formula:
+    v(θ) = v_N × cos(θ) + v_E × sin(θ)
+    
+Where:
+- v_N = vgos (northward velocity)
+- v_E = ugos (eastward velocity)
+- θ = angle of gate normal with respect to North
 """
 
 import numpy as np
@@ -48,6 +56,57 @@ class VolumeTransportResult:
     positive_direction: str  # e.g., "into Arctic" or "northward"
 
 
+def compute_gate_angles(
+    gate_lon: np.ndarray,
+    gate_lat: np.ndarray
+) -> np.ndarray:
+    """
+    Compute the angle θ of the gate normal (perpendicular) at each point.
+    
+    The angle is measured from North (0°) clockwise.
+    For a gate going West to East, the normal points North (θ=0).
+    For a gate going South to North, the normal points East (θ=90°).
+    
+    Args:
+        gate_lon: Longitude of gate points
+        gate_lat: Latitude of gate points
+        
+    Returns:
+        theta: Angle of gate normal from North (radians), shape (n_pts,)
+    """
+    n_pts = len(gate_lon)
+    theta = np.zeros(n_pts)
+    
+    for i in range(n_pts):
+        # Use central difference for interior, forward/backward at edges
+        if i == 0:
+            dx = gate_lon[1] - gate_lon[0]
+            dy = gate_lat[1] - gate_lat[0]
+            lat_mid = gate_lat[0]
+        elif i == n_pts - 1:
+            dx = gate_lon[i] - gate_lon[i - 1]
+            dy = gate_lat[i] - gate_lat[i - 1]
+            lat_mid = gate_lat[i]
+        else:
+            dx = gate_lon[i + 1] - gate_lon[i - 1]
+            dy = gate_lat[i + 1] - gate_lat[i - 1]
+            lat_mid = gate_lat[i]
+        
+        # Correct dx for latitude (degrees to approximate meters ratio)
+        cos_lat = np.cos(np.deg2rad(lat_mid))
+        dx_corrected = dx * cos_lat
+        
+        # Gate tangent angle from East (standard atan2 convention)
+        gate_angle = np.arctan2(dy, dx_corrected)
+        
+        # Normal angle = tangent + 90° (perpendicular, to the right of gate direction)
+        # Convert to angle from North: θ_from_north = π/2 - angle_from_east
+        normal_from_east = gate_angle + np.pi / 2
+        theta[i] = np.pi / 2 - normal_from_east
+    
+    return theta
+
+
 def compute_perpendicular_velocity(
     ugos: np.ndarray,
     vgos: np.ndarray,
@@ -57,58 +116,179 @@ def compute_perpendicular_velocity(
     """
     Compute velocity component perpendicular to the gate.
     
-    For each gate segment, calculates the angle of the gate line
-    and projects the velocity onto the perpendicular direction.
+    Formula: v(θ) = v_N × cos(θ) + v_E × sin(θ)
+    
+    Where:
+    - v_N = vgos (northward velocity)
+    - v_E = ugos (eastward velocity)
+    - θ = angle of gate normal from North
     
     Args:
-        ugos: Eastward velocity (m/s), shape (n_pts, n_time)
-        vgos: Northward velocity (m/s), shape (n_pts, n_time)
+        ugos: Eastward velocity (m/s), shape (n_pts, n_time) or (n_pts,)
+        vgos: Northward velocity (m/s), shape (n_pts, n_time) or (n_pts,)
         gate_lon: Longitude of gate points
         gate_lat: Latitude of gate points
         
     Returns:
-        v_perp: Perpendicular velocity (m/s), shape (n_pts, n_time)
+        v_perp: Perpendicular velocity (m/s), same shape as ugos
         Positive = flow to the "right" of the gate direction
     """
-    n_pts = len(gate_lon)
-    n_time = ugos.shape[1] if ugos.ndim > 1 else 1
+    # Compute gate normal angles
+    theta = compute_gate_angles(gate_lon, gate_lat)
     
-    # Compute gate segment angles
-    # For each point, use forward difference (or backward at end)
-    angles = np.zeros(n_pts)
-    
-    for i in range(n_pts):
-        if i < n_pts - 1:
-            dx = gate_lon[i + 1] - gate_lon[i]
-            dy = gate_lat[i + 1] - gate_lat[i]
-        else:
-            dx = gate_lon[i] - gate_lon[i - 1]
-            dy = gate_lat[i] - gate_lat[i - 1]
-        
-        # Account for latitude in dx (approximate)
-        cos_lat = np.cos(np.deg2rad(gate_lat[i]))
-        dx_corrected = dx * cos_lat
-        
-        # Angle of gate segment (radians)
-        gate_angle = np.arctan2(dy, dx_corrected)
-        
-        # Perpendicular angle (90° to the right)
-        angles[i] = gate_angle + np.pi / 2
-    
-    # Project velocity onto perpendicular direction
-    # v_perp = u * cos(perp_angle) + v * sin(perp_angle)
-    cos_perp = np.cos(angles)
-    sin_perp = np.sin(angles)
+    cos_theta = np.cos(theta)
+    sin_theta = np.sin(theta)
     
     if ugos.ndim == 1:
-        v_perp = ugos * cos_perp + vgos * sin_perp
+        # Single time step
+        v_perp = vgos * cos_theta + ugos * sin_theta
     else:
-        # Broadcast angles to (n_pts, n_time)
-        cos_perp = cos_perp[:, np.newaxis]
-        sin_perp = sin_perp[:, np.newaxis]
-        v_perp = ugos * cos_perp + vgos * sin_perp
+        # Multiple time steps: broadcast angles to (n_pts, n_time)
+        cos_theta = cos_theta[:, np.newaxis]
+        sin_theta = sin_theta[:, np.newaxis]
+        v_perp = vgos * cos_theta + ugos * sin_theta
     
     return v_perp
+
+
+def compute_perpendicular_velocity_with_angles(
+    ugos: np.ndarray,
+    vgos: np.ndarray,
+    theta: np.ndarray
+) -> np.ndarray:
+    """
+    Compute perpendicular velocity using pre-computed angles.
+    
+    Args:
+        ugos: Eastward velocity (m/s)
+        vgos: Northward velocity (m/s)
+        theta: Gate normal angles from North (radians)
+        
+    Returns:
+        v_perp: Perpendicular velocity (m/s)
+    """
+    cos_theta = np.cos(theta)
+    sin_theta = np.sin(theta)
+    
+    if ugos.ndim == 1:
+        v_perp = vgos * cos_theta + ugos * sin_theta
+    else:
+        cos_theta = cos_theta[:, np.newaxis]
+        sin_theta = sin_theta[:, np.newaxis]
+        v_perp = vgos * cos_theta + ugos * sin_theta
+    
+    return v_perp
+
+
+def bin_along_gate(
+    x_km: np.ndarray,
+    values: np.ndarray,
+    bin_size_km: float = 5.0
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Bin values along gate into spatial averages.
+    
+    Args:
+        x_km: Distance along gate (km), shape (n_pts,)
+        values: Values to bin, shape (n_pts,) or (n_pts, n_time)
+        bin_size_km: Size of bins in km (default 5km)
+        
+    Returns:
+        bin_centers: Center of each bin (km)
+        bin_means: Mean value in each bin
+        bin_stds: Std dev in each bin
+    """
+    x_min, x_max = x_km.min(), x_km.max()
+    n_bins = max(1, int(np.ceil((x_max - x_min) / bin_size_km)))
+    
+    bin_edges = np.linspace(x_min, x_max, n_bins + 1)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    
+    # Digitize: which bin each point belongs to
+    bin_idx = np.digitize(x_km, bin_edges) - 1
+    bin_idx = np.clip(bin_idx, 0, n_bins - 1)
+    
+    if values.ndim == 1:
+        # Single array
+        bin_means = np.zeros(n_bins)
+        bin_stds = np.zeros(n_bins)
+        
+        for i in range(n_bins):
+            mask = bin_idx == i
+            if np.any(mask):
+                vals = values[mask]
+                valid = vals[np.isfinite(vals)]
+                if len(valid) > 0:
+                    bin_means[i] = np.mean(valid)
+                    bin_stds[i] = np.std(valid) if len(valid) > 1 else 0
+                else:
+                    bin_means[i] = np.nan
+                    bin_stds[i] = np.nan
+            else:
+                bin_means[i] = np.nan
+                bin_stds[i] = np.nan
+    else:
+        # 2D array (n_pts, n_time)
+        n_time = values.shape[1]
+        bin_means = np.zeros((n_bins, n_time))
+        bin_stds = np.zeros((n_bins, n_time))
+        
+        for i in range(n_bins):
+            mask = bin_idx == i
+            if np.any(mask):
+                vals = values[mask, :]  # (n_pts_in_bin, n_time)
+                bin_means[i, :] = np.nanmean(vals, axis=0)
+                bin_stds[i, :] = np.nanstd(vals, axis=0)
+            else:
+                bin_means[i, :] = np.nan
+                bin_stds[i, :] = np.nan
+    
+    return bin_centers, bin_means, bin_stds
+
+
+def compute_monthly_along_gate_profile(
+    x_km: np.ndarray,
+    values: np.ndarray,
+    time_array: np.ndarray,
+    bin_size_km: float = 5.0
+) -> Dict[int, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """
+    Compute monthly climatology of along-gate profiles.
+    
+    For each month (1-12), averages all values from that month
+    across all years, then bins spatially.
+    
+    Args:
+        x_km: Distance along gate (km)
+        values: Values array, shape (n_pts, n_time)
+        time_array: Time values
+        bin_size_km: Spatial bin size
+        
+    Returns:
+        Dict mapping month (1-12) to (bin_centers, bin_means, bin_stds)
+    """
+    import pandas as pd
+    
+    time_pd = pd.to_datetime(time_array)
+    months = time_pd.month
+    
+    result = {}
+    
+    for month in range(1, 13):
+        month_mask = months == month
+        if not np.any(month_mask):
+            result[month] = (np.array([]), np.array([]), np.array([]))
+            continue
+        
+        # Average over all time steps in this month (across years)
+        values_month = values[:, month_mask]  # (n_pts, n_time_month)
+        values_mean = np.nanmean(values_month, axis=1)  # (n_pts,)
+        
+        # Bin spatially
+        bin_centers, bin_means, bin_stds = bin_along_gate(x_km, values_mean, bin_size_km)
+        result[month] = (bin_centers, bin_means, bin_stds)
+    
+    return result
 
 
 def compute_segment_widths(

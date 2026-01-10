@@ -179,6 +179,17 @@ def apply_longitude_filter(pass_data, lon_min: float = None, lon_max: float = No
                 except:
                     pass
     
+    # Filter velocity matrices (ugos, vgos) for divided gates
+    ugos_matrix = getattr(pass_data, 'ugos_matrix', None)
+    vgos_matrix = getattr(pass_data, 'vgos_matrix', None)
+    new_ugos_matrix = None
+    new_vgos_matrix = None
+    
+    if ugos_matrix is not None and len(ugos_matrix) > 0:
+        new_ugos_matrix = ugos_matrix[mask, :]
+    if vgos_matrix is not None and len(vgos_matrix) > 0:
+        new_vgos_matrix = vgos_matrix[mask, :]
+    
     # Update strait_name suffix
     suffix = ""
     if lon_max is not None and lon_min is None:
@@ -201,6 +212,8 @@ def apply_longitude_filter(pass_data, lon_min: float = None, lon_max: float = No
             dot_matrix=new_dot_matrix if new_dot_matrix is not None else dot_matrix,
             profile_mean=new_profile_mean if new_profile_mean is not None else getattr(pass_data, 'profile_mean', None),
             slope_series=new_slope_series if new_slope_series is not None else getattr(pass_data, 'slope_series', None),
+            ugos_matrix=new_ugos_matrix if new_ugos_matrix is not None else ugos_matrix,
+            vgos_matrix=new_vgos_matrix if new_vgos_matrix is not None else vgos_matrix,
             strait_name=new_strait_name,
         )
     except TypeError:
@@ -216,5 +229,9 @@ def apply_longitude_filter(pass_data, lon_min: float = None, lon_max: float = No
             pass_data.profile_mean = new_profile_mean
         if new_slope_series is not None:
             pass_data.slope_series = new_slope_series
+        if new_ugos_matrix is not None:
+            pass_data.ugos_matrix = new_ugos_matrix
+        if new_vgos_matrix is not None:
+            pass_data.vgos_matrix = new_vgos_matrix
         pass_data.strait_name = new_strait_name
         return pass_data

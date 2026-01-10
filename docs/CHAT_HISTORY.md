@@ -1,11 +1,56 @@
 # 📜 Chat History & Session Context
 
 > **Purpose**: Preserve context between AI agent sessions to prevent duplication and confusion.
-> **Last Updated**: 2026-01-04 22:15
+> **Last Updated**: 2026-01-10 22:00
 
 ---
 
-## 🔥 SESSIONE CORRENTE: 2026-01-04 (CMEMS L3/L4 Strategy)
+## 🔥 SESSIONE CORRENTE: 2026-01-10 (Visual Enhancement + Geostrophic Velocity)
+
+### ✅ Ultimo Commit
+```
+(DA FARE - vedi sotto)
+```
+
+### 🎯 Obiettivi della Sessione
+1. ✅ Riorganizzare Volume Transport e Geostrophic Velocity tabs
+2. ✅ Implementare confronto v_perp vs v_geo con spatial averaging
+3. ✅ Correggere segno formula geostrofica (+g/f invece di -g/f)
+4. ✅ Aggiungere dual x-axis (km + gradi) a tutti i plot spaziali
+5. ✅ Cambiare unità da Sv/mSv a m³/s standard SI
+6. ✅ Visual enhancement: white background + elegant color scheme
+7. ✅ Fix bug divided gates velocity filtering
+8. ❌ **BLOCCO**: Plotly `secondary_x` error - tab Geostrophic Velocity crasha
+
+### 🔴 PROBLEMA CRITICO APERTO
+**Error**: `ValueError: Invalid key 'secondary_x' in make_subplots specs`
+- **Location**: `app/components/tabs.py` line ~3981
+- **Impact**: Geostrophic Velocity tab NON si apre
+- **Fix**: Vedere `docs/ISSUES/ISSUE_2026-01-10_CRITICAL_FIXES.md`
+
+### 🟡 ALTRI PROBLEMI DA SISTEMARE DOMANI
+1. Monthly Analysis tab: mancano valori slope e R² sui grafici
+2. Deprecation warning: `use_container_width` → sostituire con `width='stretch'`
+3. Dual x-axis: standardizzare su tutti i plot spaziali
+
+### 📁 Files Modificati
+- `app/components/tabs.py` - ~600 lines changed (rewrite Volume Transport + new Geostrophic Velocity)
+- `app/components/loaders/base.py` - Fix divided gates velocity filtering
+- `src/services/transport_service.py` - New velocity calculation functions
+- `.streamlit/config.toml` - NEW: Light theme configuration
+- `app/components/chart_style.py` - NEW: Centralized styling module
+
+### 🎨 Style Changes
+- Background: White (#FFFFFF)
+- Primary color: Navy Blue (#1E3A5F)
+- Secondary color: Coral (#E07B53)
+- Font: Inter, sans-serif
+- No rounded corners
+- Subtle gridlines
+
+---
+
+## 📖 SESSIONE PRECEDENTE: 2026-01-04 (CMEMS L3/L4 Strategy)
 
 ### ✅ Ultimo Commit
 ```
