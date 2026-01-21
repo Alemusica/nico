@@ -704,10 +704,22 @@ class SLCCIService:
         lon_min = df["lon"].min()
         lon_max = df["lon"].max()
         
-        # Create longitude bins
+        # Handle dateline crossing: if lon range suggests crossing, unwrap
+        if lon_max - lon_min > 180:
+            # Data crosses dateline - unwrap by shifting negative lons
+            logger.warning(f"Dateline crossing detected: lon range [{lon_min:.2f}, {lon_max:.2f}]")
+            df = df.copy()
+            df.loc[df["lon"] < 0, "lon"] += 360
+            lon_min = df["lon"].min()
+            lon_max = df["lon"].max()
+        
+        # Create longitude bins (GUARANTEED monotonic increasing)
         lon_bins = np.arange(lon_min, lon_max + lon_bin_size, lon_bin_size)
         lon_centers = (lon_bins[:-1] + lon_bins[1:]) / 2
         n_lon_bins = len(lon_centers)
+        
+        # Verify monotonicity (defensive check)
+        assert np.all(np.diff(lon_centers) > 0), "lon_centers must be monotonically increasing"
         
         logger.info(f"Longitude binning: {lon_min:.3f}° to {lon_max:.3f}°, "
                     f"{n_lon_bins} bins of {lon_bin_size}°")
@@ -739,12 +751,14 @@ class SLCCIService:
                     dot_matrix[int(bin_idx), it] = binned[bin_idx]
         
         # Calculate distance in km from first bin (for slope calculation)
+        # lon_centers is GUARANTEED monotonic increasing (see binning above)
+        # so dlon is always >= 0, no abs() needed
         R_earth = 6371.0
         mean_lat = df["lat"].mean()
         lat_rad = np.deg2rad(mean_lat)
         lon_rad = np.deg2rad(lon_centers)
-        dlon = lon_rad - lon_rad[0]
-        x_km = R_earth * np.abs(dlon) * np.cos(lat_rad)
+        dlon = lon_rad - lon_rad[0]  # Always >= 0 since lon_centers is ascending
+        x_km = R_earth * dlon * np.cos(lat_rad)
         
         valid_count = np.sum(np.isfinite(dot_matrix))
         total_count = dot_matrix.size
@@ -789,10 +803,23 @@ class SLCCIService:
         lon_min = df["lon"].min()
         lon_max = df["lon"].max()
         
-        # Create fixed longitude bins
+        # Handle dateline crossing: if lon range suggests crossing, unwrap
+        if lon_max - lon_min > 180:
+            # Data crosses dateline - unwrap by shifting negative lons
+            logger.warning(f"[_build_mean_profile_pooled] Dateline crossing detected: "
+                          f"lon range [{lon_min:.2f}, {lon_max:.2f}]")
+            df = df.copy()
+            df.loc[df["lon"] < 0, "lon"] += 360
+            lon_min = df["lon"].min()
+            lon_max = df["lon"].max()
+        
+        # Create fixed longitude bins (GUARANTEED monotonic increasing)
         lon_bins = np.arange(lon_min, lon_max + lon_bin_size, lon_bin_size)
         lon_centers = (lon_bins[:-1] + lon_bins[1:]) / 2
         n_lon_bins = len(lon_centers)
+        
+        # Verify monotonicity (defensive check)
+        assert np.all(np.diff(lon_centers) > 0), "lon_centers must be monotonically increasing"
         
         # Assign each observation to a bin
         df_copy = df.copy()
@@ -817,12 +844,14 @@ class SLCCIService:
                 obs_count[int(bin_idx)] = int(binned_stats.loc[bin_idx, "count"])
         
         # Calculate distance in km from first bin
+        # lon_centers is GUARANTEED monotonic increasing (see binning above)
+        # so dlon is always >= 0, no abs() needed
         R_earth = 6371.0
         mean_lat = df["lat"].mean()
         lat_rad = np.deg2rad(mean_lat)
         lon_rad = np.deg2rad(lon_centers)
-        dlon = lon_rad - lon_rad[0]
-        x_km = R_earth * np.abs(dlon) * np.cos(lat_rad)
+        dlon = lon_rad - lon_rad[0]  # Always >= 0 since lon_centers is ascending
+        x_km = R_earth * dlon * np.cos(lat_rad)
         
         total_obs = df_copy["dot"].notna().sum()
         valid_bins = np.sum(np.isfinite(profile_mean))
