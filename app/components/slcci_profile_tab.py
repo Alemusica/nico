@@ -135,10 +135,16 @@ def _create_dot_profile_plot(pass_data: PassData) -> go.Figure:
         xanchor='right',
     )
     
+    # Calculate methodology info
+    n_obs = len(pass_data.df) if hasattr(pass_data, 'df') and pass_data.df is not None else 0
+    n_months = len(pass_data.time_periods) if hasattr(pass_data, 'time_periods') else 0
+    
     # Layout
     fig.update_layout(
         title=dict(
-            text=f"Mean DOT Profile - {pass_data.strait_name} - Pass {pass_data.pass_number}",
+            text=(f"Mean DOT Profile - {pass_data.strait_name} - Pass {pass_data.pass_number}"
+                  f"<br><sup style='color:gray;font-style:italic'>"
+                  f"Spatial mean of {n_obs:,} along-track observations pooled across {n_months} months</sup>"),
             font=dict(size=16),
         ),
         xaxis=dict(

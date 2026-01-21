@@ -4279,13 +4279,14 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
     monthly_v_perp = st.session_state[f'{key_prefix}_monthly_v_perp']
     stored_x_km = st.session_state[f'{key_prefix}_x_km']
     stored_gate_lon = st.session_state[f'{key_prefix}_gate_lon']
+    stored_time_array = st.session_state.get(f'{key_prefix}_time_array', time_array)  # FIX: retrieve time_array
     v_geo_ts = st.session_state.get(f'{key_prefix}_v_geo_ts', None)
     
     # Recompute if bin size changed
     stored_bin = st.session_state.get(f'{key_prefix}_bin', 5)
     if stored_bin != bin_size_km:
         from src.services.transport_service import compute_monthly_along_gate_profile
-        monthly_v_perp = compute_monthly_along_gate_profile(stored_x_km, v_perp, time_array, bin_size_km)
+        monthly_v_perp = compute_monthly_along_gate_profile(stored_x_km, v_perp, stored_time_array, bin_size_km)
         st.session_state[f'{key_prefix}_monthly_v_perp'] = monthly_v_perp
         st.session_state[f'{key_prefix}_bin'] = bin_size_km
     
@@ -4394,7 +4395,7 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
     # =========================================================================
     st.markdown("### 📈 Time Series: v_perp vs v_geo")
     
-    time_pd = pd.to_datetime(time_array)
+    time_pd = pd.to_datetime(stored_time_array)  # FIX: use stored_time_array
     
     # Compute mean v_perp per time step (average along gate)
     v_perp_mean_ts = np.nanmean(v_perp, axis=0) * 100  # cm/s
@@ -4653,6 +4654,7 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
                 st.session_state['vt_monthly_profiles'] = monthly_profiles
                 st.session_state['vt_x_km'] = x_km
                 st.session_state['vt_time_array'] = time_array
+                st.session_state['vt_gate_lon'] = gate_lon  # FIX: save gate_lon
                 st.session_state['vt_depth_cap'] = depth_cap
                 st.session_state['vt_bin_size'] = bin_size_km
                 
@@ -4680,6 +4682,8 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
     monthly_profiles = st.session_state['vt_monthly_profiles']
     stored_depth_cap = st.session_state['vt_depth_cap']
     time_array = st.session_state.get('vt_time_array', None)  # FIX: retrieve time_array
+    x_km = st.session_state.get('vt_x_km', x_km)  # FIX: retrieve x_km from session state
+    gate_lon = st.session_state.get('vt_gate_lon', gate_lon)  # FIX: retrieve gate_lon from session state
     
     # =========================================================================
     # 1. BATHYMETRY PROFILE (IN CIMA) - with dual x-axis (km + deg)

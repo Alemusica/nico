@@ -124,10 +124,15 @@ def _create_slope_timeline_plot(pass_data: PassData) -> go.Figure:
         except Exception:
             pass
     
+    # Calculate methodology info
+    n_months = len(pass_data.time_periods) if hasattr(pass_data, 'time_periods') else len(pass_data.time_array)
+    
     # Layout
     fig.update_layout(
         title=dict(
-            text=f"DOT Slope Timeline - {pass_data.strait_name} - {pass_data.satellite} Pass {pass_data.pass_number}",
+            text=(f"DOT Slope Timeline - {pass_data.strait_name} - {pass_data.satellite} Pass {pass_data.pass_number}"
+                  f"<br><sup style='color:gray;font-style:italic'>"
+                  f"Linear fit slope per month from spatially-binned DOT observations</sup>"),
             font=dict(size=16),
         ),
         xaxis=dict(

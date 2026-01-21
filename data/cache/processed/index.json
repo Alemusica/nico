@@ -43,5 +43,113 @@
     "size_bytes": 7314261,
     "n_observations": 0,
     "date_range": "unknown"
+  },
+  "cmems_l4/bering_strait/years_2000_2020": {
+    "dataset": "cmems_l4",
+    "gate_name": "bering_strait",
+    "pass_number": null,
+    "track_number": null,
+    "time_range_key": "2000_2020",
+    "file_path": "cmems_l4/bering_strait_years_2000_2020.pkl",
+    "created_at": "2026-01-10T16:17:10.901815",
+    "size_bytes": 74018104,
+    "n_observations": 0,
+    "date_range": "unknown"
+  },
+  "cmems_l4/bering_strait/years_2010_2020": {
+    "dataset": "cmems_l4",
+    "gate_name": "bering_strait",
+    "pass_number": null,
+    "track_number": null,
+    "time_range_key": "2010_2020",
+    "file_path": "cmems_l4/bering_strait_years_2010_2020.pkl",
+    "created_at": "2026-01-10T17:06:27.158765",
+    "size_bytes": 38826240,
+    "n_observations": 0,
+    "date_range": "unknown"
+  },
+  "cmems_l4/davis_strait/years_2010_2020": {
+    "dataset": "cmems_l4",
+    "gate_name": "davis_strait",
+    "pass_number": null,
+    "track_number": null,
+    "time_range_key": "2010_2020",
+    "file_path": "cmems_l4/davis_strait_years_2010_2020.pkl",
+    "created_at": "2026-01-11T23:52:44.970506",
+    "size_bytes": 38853368,
+    "n_observations": 0,
+    "date_range": "unknown"
+  },
+  "cmems_l4/davis_strait/years_2005_2020": {
+    "dataset": "cmems_l4",
+    "gate_name": "davis_strait",
+    "pass_number": null,
+    "track_number": null,
+    "time_range_key": "2005_2020",
+    "file_path": "cmems_l4/davis_strait_years_2005_2020.pkl",
+    "created_at": "2026-01-12T00:11:55.433102",
+    "size_bytes": 56378099,
+    "n_observations": 0,
+    "date_range": "unknown"
+  },
+  "cmems_l4/fram_strait/years_2005_2020": {
+    "dataset": "cmems_l4",
+    "gate_name": "fram_strait",
+    "pass_number": null,
+    "track_number": null,
+    "time_range_key": "2005_2020",
+    "file_path": "cmems_l4/fram_strait_years_2005_2020.pkl",
+    "created_at": "2026-01-12T00:24:39.523353",
+    "size_bytes": 56401464,
+    "n_observations": 0,
+    "date_range": "unknown"
+  },
+  "cmems_l4/fram_strait/years_2010_2020": {
+    "dataset": "cmems_l4",
+    "gate_name": "fram_strait",
+    "pass_number": null,
+    "track_number": null,
+    "time_range_key": "2010_2020",
+    "file_path": "cmems_l4/fram_strait_years_2010_2020.pkl",
+    "created_at": "2026-01-12T00:39:44.921596",
+    "size_bytes": 38806592,
+    "n_observations": 0,
+    "date_range": "unknown"
+  },
+  "slcci/bering_strait/pass_2/years_1_281": {
+    "dataset": "slcci",
+    "gate_name": "bering_strait",
+    "pass_number": 2,
+    "track_number": null,
+    "time_range_key": "1_281",
+    "file_path": "slcci/bering_strait_pass_2_years_1_281.pkl",
+    "created_at": "2026-01-12T10:33:02.784769",
+    "size_bytes": 246896,
+    "n_observations": 1791,
+    "date_range": "2008-07 to 2015-11"
+  },
+  "slcci/davis_strait/pass_248/years_1_281": {
+    "dataset": "slcci",
+    "gate_name": "davis_strait",
+    "pass_number": 248,
+    "track_number": null,
+    "time_range_key": "1_281",
+    "file_path": "slcci/davis_strait_pass_248_years_1_281.pkl",
+    "created_at": "2026-01-12T10:39:13.831671",
+    "size_bytes": 1441876,
+    "n_observations": 9932,
+    "date_range": "2008-07 to 2016-02"
+  },
+  "dtuspace/davis_strait/years_2006_2017": {
+    "dataset": "dtuspace",
+    "gate_name": "davis_strait",
+    "pass_number": null,
+    "track_number": null,
+    "time_range_key": "2006_2017",
+    "file_path": "dtuspace/davis_strait_years_2006_2017.pkl",
+    "created_at": "2026-01-12T10:43:00.362083",
+    "size_bytes": 3261444,
+    "n_observations": 57600,
+    "date_range": "2006-01 to 2017-12"
   }
 }

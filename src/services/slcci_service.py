@@ -211,7 +211,7 @@ class SLCCIService:
         # 5. Build gate profile points (for reference)
         gate_lon_pts, gate_lat_pts, _ = self._get_gate_profile_points(gate_gdf)
         
-        # 6. Build DOT matrix using LONGITUDE BINNING (like SLCCI PLOTTER)
+        # 6. Build DOT matrix using LONGITUDE BINNING (for slope time series)
         dot_matrix, time_periods, lon_centers, x_km = self._build_dot_matrix(
             df, gate_lon_pts, gate_lat_pts, 
             lon_bin_size=self.config.lon_bin_size
@@ -224,8 +224,11 @@ class SLCCIService:
         # 7. Compute slope series using x_km from longitude bins
         slope_series = self._compute_slope_series(dot_matrix, x_km)
         
-        # 7. Compute profile mean
-        profile_mean = np.nanmean(dot_matrix, axis=1)
+        # 8. Compute profile mean using POOLED method (all observations, not mean-of-means)
+        # This gives equal weight to each observation, not each time period
+        profile_mean, _, _ = self._build_mean_profile_pooled(
+            df, lon_bin_size=self.config.lon_bin_size
+        )
         time_array = np.array([pd.Timestamp(str(p)) for p in time_periods])
         
         satellite = ds.attrs.get("satellite_type", "J2")
@@ -749,6 +752,84 @@ class SLCCIService:
                     f"({100*valid_count/total_count:.1f}%)")
         
         return dot_matrix, time_periods, lon_centers, x_km
+    
+    def _build_mean_profile_pooled(
+        self,
+        df: pd.DataFrame,
+        lon_bin_size: float = 0.01,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Build mean DOT profile by pooling ALL observations across ALL times.
+        
+        This is the INTENDED methodology:
+        1. Define fixed spatial bins along longitude
+        2. Pool ALL observations (from all cycles/times) that fall in each bin
+        3. Compute mean DOT per bin (single value, time-collapsed)
+        
+        This differs from the matrix approach which computes per-month means
+        then averages those means (equal weight per month, not per observation).
+        
+        Parameters
+        ----------
+        df : pd.DataFrame
+            DataFrame with 'lon', 'lat', 'dot' columns (all times pooled)
+        lon_bin_size : float
+            Longitude bin size in degrees (default 0.01°)
+            
+        Returns
+        -------
+        profile_mean : np.ndarray
+            Mean DOT for each bin (pooled across all times)
+        lon_centers : np.ndarray
+            Center longitude of each bin
+        x_km : np.ndarray
+            Distance in km from first bin
+        """
+        # Determine longitude range from DATA
+        lon_min = df["lon"].min()
+        lon_max = df["lon"].max()
+        
+        # Create fixed longitude bins
+        lon_bins = np.arange(lon_min, lon_max + lon_bin_size, lon_bin_size)
+        lon_centers = (lon_bins[:-1] + lon_bins[1:]) / 2
+        n_lon_bins = len(lon_centers)
+        
+        # Assign each observation to a bin
+        df_copy = df.copy()
+        df_copy["lon_bin"] = pd.cut(
+            df_copy["lon"],
+            bins=lon_bins,
+            labels=False,
+            include_lowest=True
+        )
+        
+        # Pool ALL observations and compute mean per bin
+        # This gives equal weight to each observation, not each time period
+        binned_stats = df_copy.groupby("lon_bin")["dot"].agg(["mean", "count", "std"])
+        
+        # Build profile array
+        profile_mean = np.full(n_lon_bins, np.nan, dtype=float)
+        obs_count = np.zeros(n_lon_bins, dtype=int)
+        
+        for bin_idx in binned_stats.index:
+            if pd.notna(bin_idx) and int(bin_idx) < n_lon_bins:
+                profile_mean[int(bin_idx)] = binned_stats.loc[bin_idx, "mean"]
+                obs_count[int(bin_idx)] = int(binned_stats.loc[bin_idx, "count"])
+        
+        # Calculate distance in km from first bin
+        R_earth = 6371.0
+        mean_lat = df["lat"].mean()
+        lat_rad = np.deg2rad(mean_lat)
+        lon_rad = np.deg2rad(lon_centers)
+        dlon = lon_rad - lon_rad[0]
+        x_km = R_earth * np.abs(dlon) * np.cos(lat_rad)
+        
+        total_obs = df_copy["dot"].notna().sum()
+        valid_bins = np.sum(np.isfinite(profile_mean))
+        logger.info(f"Pooled profile: {total_obs} observations → {valid_bins}/{n_lon_bins} bins "
+                    f"(mean {obs_count[obs_count > 0].mean():.1f} obs/bin)")
+        
+        return profile_mean, lon_centers, x_km
     
     def _compute_slope_series(
         self,

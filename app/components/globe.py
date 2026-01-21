@@ -95,7 +95,7 @@ def render_globe_landing(on_gate_select: Optional[callable] = None):
                 # Note: sidebar will pick this up via its own sync mechanism
                 if on_gate_select:
                     on_gate_select(clicked_gate)
-                st.rerun()
+                # Don't call st.rerun() here - on_select="rerun" already handles it
     
     # Quick stats
     st.divider()
@@ -360,8 +360,137 @@ def _render_quick_stats(gates_data: List[Dict], selected_gate: Optional[str]):
             st.metric("Gate Name", "Click to select")
 
 
+def _render_bathymetry_profile(gate_name: str, gate_lons: np.ndarray, gate_lats: np.ndarray) -> Optional[go.Figure]:
+    """
+    Load and render bathymetry profile for a gate.
+    
+    Args:
+        gate_name: Name of the gate
+        gate_lons: Longitude array along gate
+        gate_lats: Latitude array along gate
+    
+    Returns:
+        Plotly Figure with bathymetry profile, or None if error
+    """
+    try:
+        from src.services.gebco_service import get_bathymetry_cache
+        
+        # Default GEBCO path
+        gebco_path = "/Users/nicolocaron/Desktop/ARCFRESH/GEBCO_05_Jan_2026_a8956c607108/gebco_2025_n80.0_s60.0_w-180.0_e180.0.nc"
+        
+        # Check if file exists
+        from pathlib import Path
+        if not Path(gebco_path).exists():
+            return None
+        
+        # Get bathymetry cache
+        cache = get_bathymetry_cache()
+        
+        # Get depth profile (no cap - show full bathymetry)
+        depth_profile = cache.get_or_compute(
+            gate_name=gate_name,
+            gate_lons=gate_lons,
+            gate_lats=gate_lats,
+            gebco_path=gebco_path,
+            depth_cap=None
+        )
+        
+        if depth_profile is None or len(depth_profile) == 0:
+            return None
+        
+        # Compute distance along gate (x_km)
+        R_earth = 6371.0  # km
+        lon_rad = np.deg2rad(gate_lons)
+        lat_rad = np.deg2rad(gate_lats)
+        
+        # Haversine distance
+        dlat = np.diff(lat_rad)
+        dlon = np.diff(lon_rad)
+        a = np.sin(dlat / 2)**2 + np.cos(lat_rad[:-1]) * np.cos(lat_rad[1:]) * np.sin(dlon / 2)**2
+        c = 2 * np.arcsin(np.sqrt(a))
+        d_km = R_earth * c
+        
+        x_km = np.zeros(len(gate_lons))
+        x_km[1:] = np.cumsum(d_km)
+        
+        # Create figure
+        fig = go.Figure()
+        
+        # Fill area (ocean depth as filled area)
+        fig.add_trace(go.Scatter(
+            x=x_km,
+            y=-depth_profile,  # Negative for depth below sea level
+            fill='tozeroy',
+            fillcolor='rgba(70, 130, 180, 0.4)',  # Steel blue with transparency
+            line=dict(color='#1E3A5F', width=2),
+            name='Bathymetry',
+            hovertemplate='Distance: %{x:.1f} km<br>Depth: %{customdata:.0f} m<extra></extra>',
+            customdata=depth_profile
+        ))
+        
+        # Add sea level line
+        fig.add_hline(y=0, line_color='#3498DB', line_width=2, 
+                      annotation_text="Sea Level", annotation_position="top right")
+        
+        # Add 250m reference line (common depth cap for transport)
+        fig.add_hline(y=-250, line_color='#E74C3C', line_width=1.5, line_dash='dash',
+                      annotation_text="250m (transport cap)", annotation_position="bottom right",
+                      annotation_font=dict(size=10, color='#E74C3C'))
+        
+        # Stats for title
+        max_depth = np.max(depth_profile)
+        mean_depth = np.mean(depth_profile)
+        sill_depth = np.min(depth_profile[depth_profile > 0]) if np.any(depth_profile > 0) else 0
+        gate_length = x_km[-1]
+        
+        fig.update_layout(
+            title=dict(
+                text=f"🌊 {gate_name.replace('_', ' ').title()} — Bathymetry Profile<br>"
+                     f"<sup>Length: {gate_length:.0f} km | Max: {max_depth:.0f} m | Mean: {mean_depth:.0f} m | Sill: {sill_depth:.0f} m</sup>",
+                font=dict(size=14)
+            ),
+            xaxis_title="Distance along gate (km)",
+            yaxis_title="Depth (m)",
+            height=350,
+            margin=dict(l=60, r=40, t=80, b=50),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            font=dict(family="Inter, sans-serif", size=11),
+            xaxis=dict(
+                gridcolor='#E8E8E8',
+                zeroline=True,
+                zerolinecolor='#3498DB',
+                zerolinewidth=1
+            ),
+            yaxis=dict(
+                gridcolor='#E8E8E8',
+                zeroline=True,
+                zerolinecolor='#3498DB',
+                zerolinewidth=2,
+                autorange='reversed',  # Flip so deeper is at bottom
+                range=[-(max_depth * 1.1), max_depth * 0.05]  # Add margins
+            ),
+            showlegend=False
+        )
+        
+        # Flip y-axis to show depth correctly (0 at top, max depth at bottom)
+        fig.update_yaxes(autorange=False, range=[-max_depth * 1.1, max_depth * 0.05])
+        
+        return fig
+        
+    except ImportError as e:
+        st.warning(f"GEBCO service not available: {e}")
+        return None
+    except FileNotFoundError as e:
+        st.warning(f"GEBCO file not found: {e}")
+        return None
+    except Exception as e:
+        st.warning(f"Error loading bathymetry: {e}")
+        return None
+
+
 def _render_selected_gate_info(gate_name: str):
-    """Render detailed info about the selected gate."""
+    """Render detailed info about the selected gate, including bathymetry profile."""
     
     if not GATE_SERVICE_AVAILABLE:
         return
@@ -372,27 +501,87 @@ def _render_selected_gate_info(gate_name: str):
     
     st.markdown(f"### 🎯 Selected: **{gate_name.replace('_', ' ').title()}**")
     
+    # =========================================================================
+    # BATHYMETRY PROFILE (shown first, automatically)
+    # =========================================================================
+    gate_lons = None
+    gate_lats = None
+    
+    # Try to load gate coordinates
+    try:
+        gate_path = gate_info.get("path") or _gate_service.get_gate_path(gate_name)
+        if gate_path:
+            import geopandas as gpd
+            import os
+            os.environ['SHAPE_RESTORE_SHX'] = 'YES'
+            gdf = gpd.read_file(gate_path)
+            if gdf.crs and not gdf.crs.is_geographic:
+                gdf = gdf.to_crs("EPSG:4326")
+            
+            # Extract line coordinates
+            geom = gdf.geometry.unary_union
+            if hasattr(geom, 'coords'):
+                coords = np.array(geom.coords)
+                gate_lons = coords[:, 0]
+                gate_lats = coords[:, 1]
+            elif hasattr(geom, 'geoms'):
+                # MultiLineString - take first
+                coords = np.array(geom.geoms[0].coords)
+                gate_lons = coords[:, 0]
+                gate_lats = coords[:, 1]
+            
+            # Interpolate to more points for smooth bathymetry
+            if gate_lons is not None and len(gate_lons) > 2:
+                from scipy.interpolate import interp1d
+                t = np.linspace(0, 1, len(gate_lons))
+                t_fine = np.linspace(0, 1, 200)  # 200 points
+                
+                f_lon = interp1d(t, gate_lons, kind='linear')
+                f_lat = interp1d(t, gate_lats, kind='linear')
+                
+                gate_lons = f_lon(t_fine)
+                gate_lats = f_lat(t_fine)
+    except Exception as e:
+        pass
+    
+    # Show bathymetry profile if we have coordinates
+    if gate_lons is not None and gate_lats is not None:
+        with st.spinner("Loading bathymetry..."):
+            bathy_fig = _render_bathymetry_profile(gate_name, gate_lons, gate_lats)
+            if bathy_fig is not None:
+                st.plotly_chart(bathy_fig, use_container_width=True, key=f"bathy_{gate_name}")
+            else:
+                st.info("ℹ️ Bathymetry data not available. Configure GEBCO path in settings.")
+    
+    # =========================================================================
+    # GATE INFO + ACTIONS
+    # =========================================================================
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("**Gate Info:**")
         st.markdown(f"- Region: `{gate_info.get('region', 'Unknown')}`")
         
-        # Try to get coordinates
-        try:
-            gate_path = gate_info.get("path") or _gate_service.get_gate_path(gate_name)
-            if gate_path:
-                import geopandas as gpd
-                import os
-                os.environ['SHAPE_RESTORE_SHX'] = 'YES'
-                gdf = gpd.read_file(gate_path)
-                if gdf.crs and not gdf.crs.is_geographic:
-                    gdf = gdf.to_crs("EPSG:4326")
-                bounds = gdf.total_bounds
-                st.markdown(f"- Lon: `{bounds[0]:.2f}°` to `{bounds[2]:.2f}°`")
-                st.markdown(f"- Lat: `{bounds[1]:.2f}°` to `{bounds[3]:.2f}°`")
-        except:
-            pass
+        # Show coordinates if available
+        if gate_lons is not None and gate_lats is not None:
+            st.markdown(f"- Lon: `{gate_lons.min():.2f}°` to `{gate_lons.max():.2f}°`")
+            st.markdown(f"- Lat: `{gate_lats.min():.2f}°` to `{gate_lats.max():.2f}°`")
+        else:
+            # Try to get from bounds
+            try:
+                gate_path = gate_info.get("path") or _gate_service.get_gate_path(gate_name)
+                if gate_path:
+                    import geopandas as gpd
+                    import os
+                    os.environ['SHAPE_RESTORE_SHX'] = 'YES'
+                    gdf = gpd.read_file(gate_path)
+                    if gdf.crs and not gdf.crs.is_geographic:
+                        gdf = gdf.to_crs("EPSG:4326")
+                    bounds = gdf.total_bounds
+                    st.markdown(f"- Lon: `{bounds[0]:.2f}°` to `{bounds[2]:.2f}°`")
+                    st.markdown(f"- Lat: `{bounds[1]:.2f}°` to `{bounds[3]:.2f}°`")
+            except:
+                pass
     
     with col2:
         st.markdown("**Next Steps:**")

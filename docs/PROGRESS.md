@@ -1,7 +1,57 @@
 # 📊 Surge Shazam - Progress Tracker
 
-> Last Updated: 2026-01-10 (Evening - Visual Enhancement + Bug Fixes)
+> Last Updated: 2026-01-21 (SLCCI Profile Methodology Fix)
 > Agent: Use this file to track progress. Update after each task.
+
+---
+
+## 🔄 SESSION 2026-01-21: SLCCI Profile Methodology Alignment
+
+### 🎯 Obiettivi Completati
+1. ✅ Audit metodologico DTU Space Plotter vs SLCCI service
+2. ✅ Identificate differenze critiche nell'aggregazione
+3. ✅ Implementato metodo POOLED per profilo medio SLCCI
+4. ✅ Aggiornato notebook SLCCI PLOTTER SINGLE STRAIT
+
+### 📋 Analisi Metodologica
+
+**Problema identificato**: Il profilo medio SLCCI usava "media di medie mensili" invece di "media di tutte le osservazioni".
+
+| Aspetto | Prima (ERRATO) | Dopo (CORRETTO) |
+|---------|----------------|-----------------|
+| Aggregazione | Media per mese → poi media temporale | Pool di TUTTE le osservazioni → media unica |
+| Peso osservazioni | Ogni mese pesa 1/M | Ogni osservazione pesa 1/N |
+| Risultato | Media non ponderata | Media ponderata per n_obs |
+
+**Esempio**:
+```
+Mese 1: 50 osservazioni, media = 0.5m
+Mese 2:  2 osservazioni, media = 0.6m
+
+PRIMA:   (0.5 + 0.6) / 2 = 0.55m  (equi-pesato per mese)
+DOPO:    (50×0.5 + 2×0.6) / 52 = 0.504m  (pesato per n_obs)
+```
+
+### ✅ Modifiche Implementate
+
+#### 1. Nuovo metodo `_build_mean_profile_pooled()` in `slcci_service.py`
+- Pool di TUTTE le osservazioni per bin (ignora la dimensione temporale)
+- Restituisce `profile_mean`, `lon_centers`, `x_km`
+- Log del numero di osservazioni per bin
+
+#### 2. Modificato `load_pass_data()` in `slcci_service.py`
+- Usa `_build_mean_profile_pooled()` per il profilo medio
+- Mantiene `_build_dot_matrix()` per la slope time series (matrice 2D necessaria)
+- La matrice DOT rimane disponibile per altri usi
+
+#### 3. Aggiornato notebook `SLCCI PLOTTER SINGLE STRAIT.ipynb`
+- Sostituito loop per-mese con groupby diretto su tutti i dati
+- Aggiunto logging del numero di osservazioni per bin
+
+### 📝 Note Tecniche
+- La slope time series continua a usare l'aggregazione mensile (corretta per quel caso)
+- Solo il profilo medio cambia metodologia
+- La matrice `dot_matrix` rimane 2D per compatibilità con altri plot
 
 ---
 
