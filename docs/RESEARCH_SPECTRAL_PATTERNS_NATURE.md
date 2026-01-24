@@ -635,9 +635,131 @@ This explains:
 - [Human-Like Modulation Sensitivity - PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC10219008/)
 - [Brain's 'Background Noise' - Quanta Magazine](https://www.quantamagazine.org/brains-background-noise-may-hold-clues-to-persistent-mysteries-20210208/)
 
-### Turbulence
+### Turbulence & Kolmogorov
 - Kolmogorov, A. N. (1941) - Turbulence theory
+- [Kolmogorov Theory - ScienceDirect](https://www.sciencedirect.com/topics/physics-and-astronomy/kolmogorov-theory)
+- [Energy Cascade - Wikipedia](https://en.wikipedia.org/wiki/Energy_cascade)
+- [Ocean-Atmosphere Deviations from -5/3 - AGU](https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2019GL085083)
 - Original intuition from tornado analysis with brother (2026)
+
+---
+
+## Deep Dive: Kolmogorov -5/3 Law
+
+### The Russian: Andrey Kolmogorov (1941)
+
+Kolmogorov postulò che la distribuzione dell'energia nella turbolenza segue una **legge di potenza universale -5/3**.
+
+```
+E(k) = C × ε^(2/3) × k^(-5/3)
+
+Dove:
+- E(k) = energia allo scala k
+- ε = tasso di dissipazione energetica
+- k = numero d'onda (1/lunghezza)
+- C = costante di Kolmogorov (~1.5)
+```
+
+### La Cascata Energetica
+
+```
+LARGE EDDIES                    SMALL EDDIES
+(energia dalla media)           (dissipazione in calore)
+     ┌────┐                          ┌──┐
+     │    │ → → → → → → → → → → → → │  │
+     │    │    CASCATA ENERGETICA    │  │
+     │    │         -5/3             │  │
+     └────┘                          └──┘
+   injection         inertial       dissipation
+     range            range           range
+
+"Big whirls have little whirls that feed on their velocity,
+ And little whirls have lesser whirls and so on to viscosity."
+                                        - L.F. Richardson (1922)
+```
+
+### Lo Spettro di Potenza
+
+```
+log E(k)
+    │
+    │●
+    │ ●
+    │  ●         ← Injection (energia entra)
+    │   ●
+    │    ●●●●●●  ← Inertial range: SLOPE = -5/3
+    │          ●
+    │           ●  ← Dissipation (energia esce)
+    │            ●
+    └─────────────────── log k
+     low freq        high freq
+     (grandi vortici)  (piccoli vortici)
+```
+
+### Confronto: Kolmogorov vs Noise Colors
+
+| Noise Type | β value | Slope | Kolmogorov |
+|------------|---------|-------|------------|
+| White | 0 | 0 dB/oct | ✗ |
+| **Pink** | **1** | -3 dB/oct | ≈ close |
+| **Kolmogorov** | **5/3 ≈ 1.67** | -5 dB/oct | ✓ **EXACT** |
+| Brown | 2 | -6 dB/oct | ✗ |
+
+**Kolmogorov -5/3 è tra pink (β=1) e brown (β=2)!**
+
+### Implicazione: L'Atmosfera È Kolmogorov
+
+La turbolenza atmosferica segue -5/3:
+- Vento verticale PSD → -5/3 slope
+- Fluttuazioni di pressione → -5/3 slope
+- Temperature fluctuations → -5/3 slope
+
+**Ma...** ricerca recente mostra deviazioni!
+
+### IMPORTANTE: Deviazioni all'Interfaccia Oceano-Atmosfera
+
+> [Naval Postgraduate School Research](https://nps.edu/-/nps-study-leads-to-turbulence-for-kolmogorov-s-power-constant):
+> "The finding that Kolmogorov's law doesn't hold in the marine atmospheric boundary layer was startling. Ocean waves are directly impacting the distribution of turbulence energy within the atmosphere."
+
+**Questo è CRITICO per storm surge!**
+
+```
+STANDARD ATMOSPHERE     vs     MARINE BOUNDARY LAYER
+    -5/3 slope                    DEVIATIONS!
+         │                             │
+         ↓                             ↓
+ Kolmogorov applies          Ocean waves modify turbulence
+                             Wave-atmosphere coupling
+                             Different energy transfer!
+```
+
+### Domande di Ricerca
+
+1. **Come varia β al confine oceano-atmosfera durante una tempesta?**
+   - β < 5/3 durante onde alte?
+   - Può essere un indicatore predittivo?
+
+2. **La deviazione da -5/3 correla con eventi estremi?**
+   - Storm Harry: β anomalo prima delle onde 12m?
+
+3. **Possiamo usare deviazioni da Kolmogorov come "early warning"?**
+   - Se β cambia → sistema si allontana da SOC → evento imminente?
+
+### Formula per Storm Surge Prediction
+
+Ipotesi: combinare Kolmogorov con transfer function:
+
+```
+Surge(f) = Storm(f) × H_basin(f) × K(f)
+
+Dove K(f) = (f/f₀)^(-β)  con β ≈ 5/3
+
+Ma β può variare dinamicamente:
+- β → 5/3: normal turbulence
+- β → 2 (brown): system accumulating energy
+- β → 1 (pink): energy dissipating faster
+- β anomaly → ALERT!
+```
 
 ---
 
