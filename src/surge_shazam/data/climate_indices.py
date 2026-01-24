@@ -4,6 +4,8 @@
 
 Download and process teleconnection indices from NOAA.
 
+Implements the DataClient interface ("parking spot" contract).
+
 Indices available:
 - NAO: North Atlantic Oscillation
 - ENSO/ONI: El Niño-Southern Oscillation
@@ -17,12 +19,28 @@ These indices affect precipitation patterns and flooding in Europe/Mediterranean
 import os
 import ssl
 import asyncio
+import time
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict, Optional, Tuple, Any, Union
 import json
 from urllib.parse import urljoin
+
+# Import base client interface
+from .base_client import (
+    DataClient,
+    DataFormat,
+    ClientStatus,
+    BoundingBox,
+    TimeRange,
+    HealthCheckResult,
+    DataClientError,
+    DataFrameClientMixin,
+)
+
+logger = logging.getLogger(__name__)
 
 try:
     import certifi
@@ -121,37 +139,211 @@ CLIMATE_INDICES = {
 }
 
 
-class ClimateIndicesClient:
+class ClimateIndicesClient(DataFrameClientMixin, DataClient):
     """
     Client for downloading climate indices.
-    
-    Usage:
+
+    Implements the DataClient interface for unified data access.
+
+    Usage (new interface):
         client = ClimateIndicesClient()
-        
+
+        df = await client.download(
+            variables=["nao", "ao"],
+            bbox=BoundingBox(lon_min=-180, lat_min=-90, lon_max=180, lat_max=90),  # Global
+            time_range=TimeRange.from_strings("1990-01-01", "2010-12-31"),
+        )
+
+    Usage (legacy):
         # Get NAO index
         nao_df = await client.get_index("nao")
-        
+
         # Get all indices for a time period
         indices = await client.get_all_indices(
             start_date="1990-01-01",
             end_date="2010-12-31"
         )
-        
-        # Get indices for flood analysis
-        flood_indices = await client.get_indices_for_flood(
-            event_date="2000-10-15",
-            region="italy"
-        )
     """
-    
+
+    # =========================================================================
+    # DataClient REQUIRED PROPERTIES
+    # =========================================================================
+
+    @property
+    def source_id(self) -> str:
+        """Unique identifier matching api_registry.py."""
+        return "noaa_indices"
+
+    # output_format is provided by DataFrameClientMixin
+
+    # =========================================================================
+    # INITIALIZATION
+    # =========================================================================
+
     def __init__(self, cache_dir: Path = None):
         self.cache_dir = cache_dir or Path(__file__).parent.parent.parent.parent.parent / "data" / "cache" / "climate_indices"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.cache_expiry = timedelta(days=1)  # Refresh daily
-        
-    def list_indices(self) -> Dict[str, str]:
-        """List available indices."""
+
+    # =========================================================================
+    # DataClient REQUIRED METHODS
+    # =========================================================================
+
+    def list_products(self) -> Dict[str, str]:
+        """List available climate indices (products)."""
         return {k: f"{v.name}: {v.influence}" for k, v in CLIMATE_INDICES.items()}
+
+    def list_indices(self) -> Dict[str, str]:
+        """List available indices (legacy alias)."""
+        return self.list_products()
+
+    async def health_check(self) -> HealthCheckResult:
+        """Check if NOAA climate index APIs are available."""
+        start_time = time.time()
+
+        if not HAS_AIOHTTP:
+            return HealthCheckResult(
+                status=ClientStatus.DEGRADED,
+                message="aiohttp not installed - cached/synthetic data only",
+                details={"install": "pip install aiohttp"}
+            )
+
+        # Try to fetch NAO (most commonly used)
+        try:
+            connector = aiohttp.TCPConnector(ssl=SSL_CONTEXT)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                url = CLIMATE_INDICES["nao"].url
+                async with session.get(url, timeout=10) as resp:
+                    latency_ms = (time.time() - start_time) * 1000
+                    if resp.status == 200:
+                        return HealthCheckResult(
+                            status=ClientStatus.HEALTHY,
+                            message="NOAA climate indices API ready",
+                            latency_ms=latency_ms,
+                            details={"indices_available": len(CLIMATE_INDICES)}
+                        )
+        except Exception as e:
+            logger.debug(f"NOAA health check failed: {e}")
+
+        return HealthCheckResult(
+            status=ClientStatus.DEGRADED,
+            message="NOAA API unavailable - cached/synthetic data available",
+            latency_ms=(time.time() - start_time) * 1000,
+        )
+
+    async def download(
+        self,
+        variables: List[str],
+        bbox: BoundingBox,
+        time_range: TimeRange,
+        **kwargs
+    ) -> Union[pd.DataFrame, Any]:
+        """
+        Download climate indices (DataClient interface).
+
+        Args:
+            variables: List of index names (e.g., ["nao", "ao"])
+            bbox: Geographic bounding box (ignored - indices are global)
+            time_range: Start and end time
+
+        Returns:
+            pd.DataFrame with climate indices
+
+        Raises:
+            DataClientError: If download fails
+        """
+        if not HAS_PANDAS:
+            raise DataClientError(
+                source_id=self.source_id,
+                operation="download",
+                message="pandas required for climate indices"
+            )
+
+        try:
+            start_str = time_range.start.strftime("%Y-%m-%d")
+            end_str = time_range.end.strftime("%Y-%m-%d")
+
+            # Download requested indices
+            indices = variables or list(CLIMATE_INDICES.keys())
+            results = await self.get_all_indices(start_str, end_str, indices=indices)
+
+            if not results:
+                raise DataClientError(
+                    source_id=self.source_id,
+                    operation="download",
+                    message="No indices retrieved",
+                    fallback_available=True
+                )
+
+            # Combine into single DataFrame
+            dfs = []
+            for idx_name, df in results.items():
+                if df is not None:
+                    df = df.copy()
+                    df['index_name'] = idx_name
+                    dfs.append(df)
+
+            if dfs:
+                combined = pd.concat(dfs, ignore_index=True)
+                combined.attrs["source"] = self.source_id
+                return combined
+
+            raise DataClientError(
+                source_id=self.source_id,
+                operation="download",
+                message="Failed to combine indices",
+                fallback_available=True
+            )
+
+        except DataClientError:
+            raise
+        except Exception as e:
+            logger.warning(f"[{self.source_id}] Download failed, trying synthetic: {e}")
+            try:
+                return await self.generate_synthetic(variables, bbox, time_range)
+            except Exception:
+                raise DataClientError(
+                    source_id=self.source_id,
+                    operation="download",
+                    original_error=e,
+                    message="Both real and synthetic download failed",
+                    fallback_available=False
+                )
+
+    async def generate_synthetic(
+        self,
+        variables: List[str],
+        bbox: BoundingBox,
+        time_range: TimeRange,
+        **kwargs
+    ) -> pd.DataFrame:
+        """Generate synthetic climate indices."""
+        logger.info("Generating synthetic climate indices")
+
+        start_str = time_range.start.strftime("%Y-%m-%d")
+        end_str = time_range.end.strftime("%Y-%m-%d")
+
+        indices = variables or ["nao", "ao", "oni"]
+        dfs = []
+
+        for idx_name in indices:
+            df = await self._download_fallback(idx_name)
+            if df is not None:
+                df = self._filter_dates(df, start_str, end_str)
+                df['index_name'] = idx_name
+                dfs.append(df)
+
+        if dfs:
+            combined = pd.concat(dfs, ignore_index=True)
+            combined.attrs["synthetic"] = True
+            combined.attrs["source"] = self.source_id
+            return combined
+
+        return pd.DataFrame()
+
+    # =========================================================================
+    # LEGACY METHODS
+    # =========================================================================
     
     async def get_index(
         self,

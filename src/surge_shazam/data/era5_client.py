@@ -4,6 +4,8 @@
 
 Download meteorological data from ECMWF's ERA5 via CDS API.
 
+Implements the DataClient interface ("parking spot" contract).
+
 ERA5 provides hourly data from 1940 to present:
 - Surface: temperature, precipitation, wind, pressure
 - Pressure levels: geopotential, temperature, humidity
@@ -13,25 +15,38 @@ Authentication:
     1. Register at: https://cds.climate.copernicus.eu
     2. Go to your profile to get your Personal Access Token
     3. Create ~/.cdsapirc with:
-    
+
        url: https://cds.climate.copernicus.eu/api
        key: <PERSONAL-ACCESS-TOKEN>
-    
+
     4. Install cdsapi: pip install "cdsapi>=0.7.7"
-    
+
     For advanced users, consider:
         pip install ecmwf-datastores-client
-        
+
     Documentation: https://cds.climate.copernicus.eu/how-to-api
 """
 
 import os
 import asyncio
+import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any, Union
-import json
+
+# Import base client interface
+from .base_client import (
+    DataClient,
+    DataFormat,
+    ClientStatus,
+    BoundingBox,
+    TimeRange,
+    HealthCheckResult,
+    DataClientError,
+    XArrayClientMixin,
+)
 
 try:
     import cdsapi
@@ -42,9 +57,12 @@ except ImportError:
 try:
     import xarray as xr
     import numpy as np
+    import pandas as pd
     HAS_XARRAY = True
 except ImportError:
     HAS_XARRAY = False
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -180,63 +198,218 @@ VARIABLE_SETS = {
 }
 
 
-class ERA5Client:
+class ERA5Client(XArrayClientMixin, DataClient):
     """
     Client for downloading ERA5 reanalysis data.
-    
-    Usage:
+
+    Implements the DataClient interface for unified data access.
+
+    Usage (new interface):
         client = ERA5Client()
-        
-        # Download precipitation for Lago Maggiore floods
+
+        # Download using standard interface
         ds = await client.download(
+            variables=["precipitation", "temperature_2m"],
+            bbox=BoundingBox(lon_min=7.0, lat_min=44.0, lon_max=11.0, lat_max=47.0),
+            time_range=TimeRange.from_strings("2000-10-01", "2000-10-31"),
+        )
+
+    Legacy usage (still supported):
+        ds = await client.download_legacy(
             variables=["precipitation", "temperature_2m"],
             lat_range=(44.0, 47.0),
             lon_range=(7.0, 11.0),
             time_range=("2000-10-01", "2000-10-31"),
         )
-        
-        # Use preset variable set
-        ds = await client.download_for_flood(
-            lat_range=(44.0, 47.0),
-            lon_range=(7.0, 11.0),
-            time_range=("2000-10-01", "2000-10-31"),
-        )
     """
-    
+
+    # =========================================================================
+    # DataClient REQUIRED PROPERTIES
+    # =========================================================================
+
+    @property
+    def source_id(self) -> str:
+        """Unique identifier matching api_registry.py."""
+        return "era5_surface"
+
+    # output_format is provided by XArrayClientMixin
+
+    # =========================================================================
+    # INITIALIZATION
+    # =========================================================================
+
     def __init__(
         self,
         cache_dir: Path = None,
     ):
         self.cache_dir = cache_dir or Path(__file__).parent.parent.parent.parent.parent / "data" / "cache" / "era5"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.client = None
         self._api_configured = False
         if HAS_CDS:
             try:
                 self.client = cdsapi.Client()
                 self._api_configured = True
-                print("✅ CDS API client initialized")
+                logger.info("CDS API client initialized")
             except Exception as e:
-                print(f"⚠️ CDS API not configured: {e}")
-                print("   To configure, create ~/.cdsapirc with:")
-                print("   url: https://cds.climate.copernicus.eu/api")
-                print("   key: <YOUR-PERSONAL-ACCESS-TOKEN>")
-    
+                logger.warning(f"CDS API not configured: {e}")
+
+    # =========================================================================
+    # DataClient REQUIRED METHODS
+    # =========================================================================
+
+    def list_products(self) -> Dict[str, str]:
+        """
+        List available products/variables from this data source.
+
+        Returns:
+            Dictionary mapping variable IDs to descriptions.
+        """
+        return {k: v.description for k, v in ERA5_VARIABLES.items()}
+
+    async def health_check(self) -> HealthCheckResult:
+        """
+        Check if ERA5/CDS API is available.
+
+        Performs a minimal check to verify connectivity.
+        """
+        start_time = time.time()
+
+        # Check if library is installed
+        if not HAS_CDS:
+            return HealthCheckResult(
+                status=ClientStatus.UNHEALTHY,
+                message="cdsapi library not installed",
+                details={"install": "pip install cdsapi>=0.7.7"}
+            )
+
+        # Check if API is configured
+        if not self._api_configured:
+            return HealthCheckResult(
+                status=ClientStatus.DEGRADED,
+                message="CDS API not configured",
+                details={
+                    "config_file": "~/.cdsapirc",
+                    "signup": "https://cds.climate.copernicus.eu"
+                }
+            )
+
+        latency_ms = (time.time() - start_time) * 1000
+        return HealthCheckResult(
+            status=ClientStatus.HEALTHY,
+            message="ERA5/CDS client ready",
+            latency_ms=latency_ms,
+            details={
+                "variables_available": len(ERA5_VARIABLES),
+                "variable_sets": list(VARIABLE_SETS.keys()),
+            }
+        )
+
+    async def download(
+        self,
+        variables: List[str],
+        bbox: BoundingBox,
+        time_range: TimeRange,
+        *,
+        hours: List[int] = None,
+        force_download: bool = False,
+        **kwargs
+    ) -> Union[xr.Dataset, pd.DataFrame]:
+        """
+        Download data from ERA5 (DataClient interface).
+
+        Args:
+            variables: List of variable names to download
+            bbox: Geographic bounding box
+            time_range: Start and end time
+            hours: Hours to download (default: all 24)
+            force_download: Re-download even if cached
+
+        Returns:
+            xr.Dataset with requested data
+
+        Raises:
+            DataClientError: If download fails and no fallback available
+        """
+        try:
+            result = await self._download_impl(
+                variables=variables,
+                lat_range=(bbox.lat_min, bbox.lat_max),
+                lon_range=(bbox.lon_min, bbox.lon_max),
+                time_range=(
+                    time_range.start.strftime("%Y-%m-%d"),
+                    time_range.end.strftime("%Y-%m-%d")
+                ),
+                hours=hours,
+                force_download=force_download,
+            )
+
+            if result is None:
+                raise DataClientError(
+                    source_id=self.source_id,
+                    operation="download",
+                    message="Failed to download ERA5 data",
+                    fallback_available=True
+                )
+
+            return self.standardize_output(result, variables, bbox, time_range)
+
+        except DataClientError:
+            raise
+        except Exception as e:
+            logger.warning(f"[{self.source_id}] Download failed, trying synthetic: {e}")
+            try:
+                return await self.generate_synthetic(variables, bbox, time_range)
+            except Exception as synth_error:
+                raise DataClientError(
+                    source_id=self.source_id,
+                    operation="download",
+                    original_error=e,
+                    message="Both real and synthetic download failed",
+                    fallback_available=False
+                )
+
+    async def generate_synthetic(
+        self,
+        variables: List[str],
+        bbox: BoundingBox,
+        time_range: TimeRange,
+        **kwargs
+    ) -> xr.Dataset:
+        """
+        Generate realistic synthetic ERA5 data.
+
+        Called automatically when download() fails.
+        """
+        return await self._download_fallback(
+            variables=variables,
+            lat_range=(bbox.lat_min, bbox.lat_max),
+            lon_range=(bbox.lon_min, bbox.lon_max),
+            time_range=(
+                time_range.start.strftime("%Y-%m-%d"),
+                time_range.end.strftime("%Y-%m-%d")
+            ),
+        )
+
+    # =========================================================================
+    # LEGACY & CONVENIENCE METHODS
+    # =========================================================================
+
     @property
     def is_configured(self) -> bool:
         """Check if CDS API is properly configured."""
         return self._api_configured and self.client is not None
-    
+
     def list_variables(self) -> Dict[str, str]:
-        """List available variables."""
-        return {k: v.description for k, v in ERA5_VARIABLES.items()}
-    
+        """List available variables (alias for list_products)."""
+        return self.list_products()
+
     def list_variable_sets(self) -> Dict[str, List[str]]:
         """List variable sets."""
         return VARIABLE_SETS.copy()
-    
-    async def download(
+
+    async def download_legacy(
         self,
         variables: List[str],
         lat_range: Tuple[float, float],
@@ -244,11 +417,36 @@ class ERA5Client:
         time_range: Tuple[str, str],
         output_file: Path = None,
         force_download: bool = False,
-        hours: List[int] = None,  # [0, 6, 12, 18] for 6-hourly
-    ) -> Optional[Any]:
+        hours: List[int] = None,
+    ) -> Optional[xr.Dataset]:
         """
-        Download ERA5 data.
-        
+        Legacy download method (backward compatibility).
+
+        Prefer using download() with BoundingBox and TimeRange.
+        """
+        return await self._download_impl(
+            variables=variables,
+            lat_range=lat_range,
+            lon_range=lon_range,
+            time_range=time_range,
+            output_file=output_file,
+            force_download=force_download,
+            hours=hours,
+        )
+
+    async def _download_impl(
+        self,
+        variables: List[str],
+        lat_range: Tuple[float, float],
+        lon_range: Tuple[float, float],
+        time_range: Tuple[str, str],
+        output_file: Path = None,
+        force_download: bool = False,
+        hours: List[int] = None,
+    ) -> Optional[xr.Dataset]:
+        """
+        Internal download implementation.
+
         Args:
             variables: List of variable keys
             lat_range: (min, max) latitude
@@ -257,28 +455,28 @@ class ERA5Client:
             output_file: Output NetCDF path
             force_download: Re-download even if cached
             hours: Hours to download (default: all 24)
-            
+
         Returns:
             xarray.Dataset with requested data
         """
-        # Default to daily data (00:00)
+        # Default to all 24 hours
         hours = hours or list(range(24))
-        
+
         # Generate cache key
         cache_key = self._cache_key(variables, lat_range, lon_range, time_range)
         cache_file = self.cache_dir / f"{cache_key}.nc"
-        
+
         if cache_file.exists() and not force_download:
-            print(f"📁 Loading from cache: {cache_file}")
+            logger.info(f"Loading from cache: {cache_file}")
             return xr.open_dataset(cache_file)
-        
+
         # Try CDS API
         if self.client:
             return await self._download_cds(
                 variables, lat_range, lon_range, time_range, hours, cache_file
             )
         else:
-            print("⚠️ CDS API not available, using fallback")
+            logger.warning("CDS API not available, using fallback")
             return await self._download_fallback(
                 variables, lat_range, lon_range, time_range
             )
@@ -291,34 +489,34 @@ class ERA5Client:
         time_range: Tuple[str, str],
         hours: List[int],
         output_file: Path,
-    ) -> Optional[Any]:
+    ) -> Optional[xr.Dataset]:
         """Download using CDS API."""
         # Parse time range
         start = datetime.strptime(time_range[0], "%Y-%m-%d")
         end = datetime.strptime(time_range[1], "%Y-%m-%d")
-        
+
         # Get years, months, days as lists (new API format)
         years = sorted(list(set([str(y) for y in range(start.year, end.year + 1)])))
-        
+
         # For the months/days, be more precise based on the actual date range
         if start.year == end.year:
             months = [f"{m:02d}" for m in range(start.month, end.month + 1)]
         else:
             months = [f"{m:02d}" for m in range(1, 13)]
-            
+
         days = [f"{d:02d}" for d in range(1, 32)]
-        
+
         # Map variable names
         cds_variables = []
         for var in variables:
             if var in ERA5_VARIABLES:
                 cds_variables.append(ERA5_VARIABLES[var].cds_name)
             else:
-                print(f"⚠️ Unknown variable: {var}")
-        
+                logger.warning(f"Unknown variable: {var}")
+
         if not cds_variables:
             return None
-        
+
         # Build request (new CDS API format - uses lists for all multi-value params)
         request = {
             "product_type": ["reanalysis"],
@@ -330,13 +528,11 @@ class ERA5Client:
             "time": [f"{h:02d}:00" for h in hours],
             "area": [lat_range[1], lon_range[0], lat_range[0], lon_range[1]],  # N, W, S, E
         }
-        
-        print(f"⬇️ Downloading ERA5 data...")
-        print(f"   Variables: {cds_variables}")
-        print(f"   Area: lat={lat_range}, lon={lon_range}")
-        print(f"   Time: {time_range[0]} to {time_range[1]}")
-        print(f"   Years: {years}, Months: {months[:3]}...")
-        
+
+        logger.info(f"Downloading ERA5 data...")
+        logger.debug(f"Variables: {cds_variables}, Area: lat={lat_range}, lon={lon_range}")
+        logger.debug(f"Time: {time_range[0]} to {time_range[1]}, Years: {years}")
+
         try:
             # Download (this blocks, hence in executor)
             loop = asyncio.get_event_loop()
@@ -348,16 +544,15 @@ class ERA5Client:
                     str(output_file),
                 )
             )
-            
+
             if output_file.exists():
-                print(f"✅ Downloaded: {output_file}")
+                logger.info(f"Downloaded: {output_file}")
                 return xr.open_dataset(output_file)
-            
+
         except Exception as e:
-            print(f"❌ CDS download error: {e}")
-            print("   Falling back to synthetic data...")
+            logger.error(f"CDS download error: {e}")
             return await self._download_fallback(variables, lat_range, lon_range, time_range)
-        
+
         return None
     
     async def _download_fallback(
@@ -366,13 +561,13 @@ class ERA5Client:
         lat_range: Tuple[float, float],
         lon_range: Tuple[float, float],
         time_range: Tuple[str, str],
-    ) -> Optional[Any]:
+    ) -> Optional[xr.Dataset]:
         """Generate synthetic ERA5-like data for testing."""
         if not HAS_XARRAY:
             return None
-        
-        print("🔧 Generating synthetic ERA5 data for testing...")
-        
+
+        logger.info("Generating synthetic ERA5 data for testing...")
+
         # Create coordinates
         resolution = 0.25  # ERA5 resolution
         lats = np.arange(lat_range[0], lat_range[1], resolution)
@@ -382,67 +577,81 @@ class ERA5Client:
             np.datetime64(time_range[1]) + np.timedelta64(1, 'D'),
             np.timedelta64(1, 'D')
         )
-        
-        # Create data arrays
+
+        # Ensure we have at least 1 point in each dimension
+        if len(lats) == 0:
+            lats = np.array([lat_range[0]])
+        if len(lons) == 0:
+            lons = np.array([lon_range[0]])
+
+        # Create data arrays with realistic physics-based patterns
         data_vars = {}
-        
+
         for var in variables:
             var_info = ERA5_VARIABLES.get(var)
             if not var_info:
                 continue
-            
+
             shape = (len(times), len(lats), len(lons))
-            
+
             if var == "precipitation":
                 # Precipitation: exponential distribution, mm/day
-                # Add rainy events
                 data = np.random.exponential(2, shape)
                 # Add random intense precipitation events
                 mask = np.random.random(shape) > 0.9
                 data[mask] += np.random.exponential(20, mask.sum())
                 data = np.clip(data, 0, 200) / 1000  # Convert to m
-                
+
             elif var == "temperature_2m":
                 # Temperature: depends on latitude and season
                 base = 288 - 0.5 * (lats - lat_range[0])[:, np.newaxis]  # ~15°C
                 seasonal = 5 * np.sin(2 * np.pi * np.arange(len(times)) / 365)[:, np.newaxis, np.newaxis]
                 noise = np.random.normal(0, 2, shape)
                 data = base + seasonal + noise
-                
+
             elif var == "pressure_msl":
                 # Pressure: typical range 980-1040 hPa
                 data = 101325 + np.random.normal(0, 1500, shape)
                 # Add pressure drops for storm events
                 storm_mask = np.random.random(shape) > 0.95
                 data[storm_mask] -= np.random.uniform(2000, 5000, storm_mask.sum())
-                
+
             elif var in ["u_wind_10m", "v_wind_10m"]:
                 # Wind: typical range -20 to 20 m/s
                 data = np.random.normal(0, 5, shape)
                 # Strong wind events
                 mask = np.random.random(shape) > 0.95
                 data[mask] = np.random.uniform(-20, 20, mask.sum())
-                
+
             elif var == "soil_moisture":
                 # Soil moisture: 0-0.5 m3/m3
                 data = np.random.uniform(0.1, 0.4, shape)
-                
+
             elif var == "runoff":
                 # Runoff: correlate with precipitation
-                if "precipitation" in data_vars:
-                    precip = data_vars["precipitation"][1]
+                if "tp" in data_vars:
+                    precip = data_vars["tp"][1]
                     data = precip * np.random.uniform(0.2, 0.6, shape)
                 else:
                     data = np.random.exponential(1, shape) / 1000
-                    
+
+            elif var == "wave_height":
+                # Wave height: 0.5-5m
+                data = 1.5 + np.random.exponential(0.5, shape)
+
+            elif var == "sst":
+                # SST: latitude-dependent
+                lat_base = 288 + 10 * np.cos(np.deg2rad(lats))
+                data = lat_base[np.newaxis, :, np.newaxis] + np.random.normal(0, 0.5, shape)
+
             else:
                 data = np.random.normal(0, 1, shape)
-            
+
             data_vars[var_info.short_name] = (
                 ['time', 'latitude', 'longitude'],
                 data.astype(np.float32)
             )
-        
+
         # Create dataset
         ds = xr.Dataset(
             data_vars=data_vars,
@@ -452,13 +661,15 @@ class ERA5Client:
                 'longitude': lons,
             },
             attrs={
-                'source': 'synthetic_era5_fallback',
+                'source': self.source_id,
+                'synthetic': True,
                 'description': 'Synthetic ERA5-like data for testing',
                 'warning': 'This is synthetic data, not real ERA5 data',
                 'conventions': 'CF-1.6',
+                'created': datetime.now().isoformat(),
             }
         )
-        
+
         return ds
     
     def _cache_key(
@@ -482,60 +693,66 @@ class ERA5Client:
         h = hashlib.md5(key_str.encode()).hexdigest()[:12]
         return f"era5_{h}"
     
-    # Convenience methods for specific analysis types
+    # =========================================================================
+    # CONVENIENCE METHODS FOR ANALYSIS TYPES
+    # =========================================================================
+
     async def download_for_flood(
         self,
-        lat_range: Tuple[float, float],
-        lon_range: Tuple[float, float],
-        time_range: Tuple[str, str],
-    ) -> Optional[Any]:
+        bbox: BoundingBox,
+        time_range: TimeRange,
+    ) -> xr.Dataset:
         """Download variables for flood analysis."""
         return await self.download(
             variables=VARIABLE_SETS["flood_analysis"],
-            lat_range=lat_range,
-            lon_range=lon_range,
+            bbox=bbox,
             time_range=time_range,
         )
-    
+
     async def download_for_storm_surge(
         self,
-        lat_range: Tuple[float, float],
-        lon_range: Tuple[float, float],
-        time_range: Tuple[str, str],
-    ) -> Optional[Any]:
+        bbox: BoundingBox,
+        time_range: TimeRange,
+    ) -> xr.Dataset:
         """Download variables for storm surge analysis."""
         return await self.download(
             variables=VARIABLE_SETS["storm_surge"],
-            lat_range=lat_range,
-            lon_range=lon_range,
+            bbox=bbox,
             time_range=time_range,
         )
-    
+
     async def download_for_drought(
         self,
-        lat_range: Tuple[float, float],
-        lon_range: Tuple[float, float],
-        time_range: Tuple[str, str],
-    ) -> Optional[Any]:
+        bbox: BoundingBox,
+        time_range: TimeRange,
+    ) -> xr.Dataset:
         """Download variables for drought analysis."""
         return await self.download(
             variables=VARIABLE_SETS["drought"],
-            lat_range=lat_range,
-            lon_range=lon_range,
+            bbox=bbox,
             time_range=time_range,
         )
 
 
-# Convenience function
+# =============================================================================
+# CONVENIENCE FUNCTIONS (module-level)
+# =============================================================================
+
 async def download_era5(
     variables: List[str],
     lat_range: Tuple[float, float],
     lon_range: Tuple[float, float],
     time_range: Tuple[str, str],
-) -> Optional[Any]:
-    """Quick ERA5 download."""
+) -> Optional[xr.Dataset]:
+    """
+    Quick ERA5 download (legacy interface).
+
+    For new code, prefer:
+        client = ERA5Client()
+        ds = await client.download(variables, bbox, time_range)
+    """
     client = ERA5Client()
-    return await client.download(
+    return await client.download_legacy(
         variables=variables,
         lat_range=lat_range,
         lon_range=lon_range,
@@ -543,28 +760,39 @@ async def download_era5(
     )
 
 
-# CLI test
+# =============================================================================
+# CLI TEST
+# =============================================================================
+
 if __name__ == "__main__":
     async def test():
         client = ERA5Client()
-        
-        print("=== Available Variables ===")
-        for key, desc in client.list_variables().items():
+
+        print("=== Health Check ===")
+        health = await client.health_check()
+        print(f"Status: {health.status.value}")
+        print(f"Message: {health.message}")
+
+        print("\n=== Available Variables ===")
+        for key, desc in list(client.list_products().items())[:5]:
             print(f"  {key}: {desc}")
-        
+
         print("\n=== Variable Sets ===")
         for name, vars in client.list_variable_sets().items():
             print(f"  {name}: {vars}")
-        
-        print("\n=== Downloading for Flood Analysis (Lago Maggiore 2000) ===")
-        ds = await client.download_for_flood(
-            lat_range=(44.0, 47.0),
-            lon_range=(7.0, 11.0),
-            time_range=("2000-10-01", "2000-10-31"),
-        )
-        
-        if ds is not None:
-            print(f"✅ Got dataset:")
-            print(ds)
-    
+
+        print("\n=== Download Test (Lago Maggiore 2000) ===")
+
+        # New interface
+        bbox = BoundingBox(lon_min=7.0, lat_min=44.0, lon_max=11.0, lat_max=47.0)
+        time_range = TimeRange.from_strings("2000-10-01", "2000-10-31")
+
+        try:
+            ds = await client.download_for_flood(bbox=bbox, time_range=time_range)
+            print(f"Got dataset with shape: {dict(ds.dims)}")
+            print(f"Variables: {list(ds.data_vars)}")
+            print(f"Synthetic: {ds.attrs.get('synthetic', False)}")
+        except DataClientError as e:
+            print(f"Error: {e}")
+
     asyncio.run(test())
