@@ -931,4 +931,78 @@ Sicily 12m waves = phase alignment of multiple systems?
 
 ---
 
+## Framework: SOC (1987) → Variabili Atmosferiche
+
+### Il Parallelismo Concettuale
+
+Il paper di Bak, Tang, Wiesenfeld (1987) usa un modello meccanico:
+
+| SOC (1987) | Atmosfera | Descrizione |
+|------------|-----------|-------------|
+| **Pendolo** | Oscillazioni di pressione | Ciò che oscilla |
+| **Molle** | Gradienti termici/barici | Il coupling tra elementi |
+| **Masse** | Masse d'aria | Gli elementi del sistema |
+| **Eccitazione** | Energia solare, temperatura | L'energia in ingresso |
+| **Auto-organizzazione** | Pattern 1/f^β emergenti | Il risultato |
+
+### Il Blocco Concettuale è Trasferibile
+
+> "È un blocco concettuale. Possiamo modellare e sostituire le variabili al dominio che stiamo guardando."
+
+La matematica della SOC si applica direttamente - dobbiamo solo mappare le variabili!
+
+### Integrazione Dati Multi-Sorgente
+
+```
+SORGENTI DATI → NICO → PATTERN DISCOVERY
+══════════════════════════════════════════
+
+    ✈️ Aerei (MODE-S EHS)      ──┐
+       → T, P, vento in quota    │
+                                 │
+    🛳️ Navi                     ──┼──→  REPOSITORY
+       → osservazioni marine     │        ↓
+                                 │      GPU + LLM
+    🛰️ Satelliti                ──┤        ↓
+       → campi globali           │    ┌─────────────┐
+                                 │    │  PATTERN    │
+    🌊 Boe / Tide Gauges        ──┤    │  NASCOSTI   │
+       → livello del mare        │    │             │
+                                 │    │  ALGORITMI  │
+    📡 Radar                    ──┤    │             │
+       → precipitazione, vento   │    │  RELAZIONI  │
+                                 │    └─────────────┘
+    🎈 Radiosonde               ──┘
+
+```
+
+### L'Approccio: Regole + Dati → Pattern
+
+```
+INPUT                              OUTPUT
+═════                              ══════
+
+📐 REGOLE (fisica)            ┐
+   - Kolmogorov -5/3          │
+   - SOC / 1/f^β              ├──→  GPU + LLM  ──→  🎯 FINGERPRINT
+   - Transfer functions       │                     📊 Pattern nascosti
+                              │                     🔗 Relazioni
+📊 DATI (osservazioni)        ┘                     🖼️ "Big Picture"
+   - Multi-source
+   - Multi-scale
+   - Sicily, history...
+```
+
+### NICO: Far "Parlare" i Dati
+
+L'obiettivo chiave:
+1. **Integrare** dati da aerei (spesso ignorati!)
+2. **Correlare** tutte le sorgenti
+3. **Scoprire** relazioni nascoste tra scale e fonti
+4. **Fingerprint** = pattern unico che emerge dalla fusione
+
+> "Quelli sono i dati. Quelle sono le regole. Trova il pattern. Trova l'interazione. La forma. Il big picture."
+
+---
+
 *"Sound is pressure waves. Weather is pressure waves. We evolved to perceive one; perhaps we can learn to perceive the other."*
