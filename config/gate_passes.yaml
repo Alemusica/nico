@@ -47,8 +47,14 @@ gates:
   bering_strait_TPJ_pass_076:
     display_name: "Bering Strait"
     suggested_pass: 76
-    slcci_passes: [76, 163, 248, 220, 246]
+    slcci_passes: [2, 76, 163, 248, 220, 246]
     cmems_tracks: [76, 163, 248, 220, 481]
+    
+  bering_strait:
+    display_name: "Bering Strait (Generic)"
+    suggested_pass: 2
+    slcci_passes: [2, 76, 163, 248]
+    cmems_tracks: [76, 163, 248]
 
   # === DAVIS STRAIT & CANADIAN ARCTIC ===
   davis_strait:

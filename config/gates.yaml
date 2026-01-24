@@ -127,6 +127,18 @@ gates:
     longitude_range: [168.0, -168.0]  # Crosses dateline
     datasets: ["SLCCI", "ERA5", "CMEMS L4", "DTUSpace"]
     default_buffer_km: 50.0
+    
+  bering_strait_pass2:
+    name: "Bering Strait Pass 2"
+    file: "bering strait gate.shp"
+    file_dir: "/Users/nicolocaron/Desktop/ARCFRESH/BERING STRAIT GATE"
+    description: "Pacific-Arctic gateway - Pass 2"
+    region: "Pacific Sector"
+    closest_passes: [2]
+    latitude_range: [65.8, 66.0]
+    longitude_range: [-170.0, -167.6]
+    datasets: ["SLCCI"]
+    default_buffer_km: 50.0
 
   # === CANADIAN ARCHIPELAGO ===
   nares_strait:

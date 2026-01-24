@@ -163,7 +163,31 @@ def apply_longitude_filter(pass_data, lon_min: float = None, lon_max: float = No
     
     if dot_matrix is not None and len(dot_matrix) > 0:
         new_dot_matrix = dot_matrix[mask, :]
-        new_profile_mean = np.nanmean(new_dot_matrix, axis=1)
+        
+        # Recompute profile_mean using POOLED method from filtered DataFrame
+        # This gives equal weight to each observation, not each time period
+        if new_df is not None and not new_df.empty and 'dot' in new_df.columns and 'lon' in new_df.columns:
+            lon_min_df = new_df['lon'].min()
+            lon_max_df = new_df['lon'].max()
+            lon_bin_size = 0.01  # Same as in slcci_service
+            lon_bins = np.arange(lon_min_df, lon_max_df + lon_bin_size, lon_bin_size)
+            
+            df_temp = new_df.copy()
+            df_temp['lon_bin'] = pd.cut(df_temp['lon'], bins=lon_bins, labels=False, include_lowest=True)
+            binned_stats = df_temp.groupby('lon_bin')['dot'].mean()
+            
+            # Match profile to new_gate_lon
+            new_profile_mean = np.full(len(new_gate_lon), np.nan, dtype=float)
+            lon_centers = (lon_bins[:-1] + lon_bins[1:]) / 2
+            
+            for i, lon in enumerate(new_gate_lon):
+                # Find closest bin
+                bin_idx = np.argmin(np.abs(lon_centers - lon))
+                if bin_idx in binned_stats.index:
+                    new_profile_mean[i] = binned_stats[bin_idx]
+        else:
+            # Fallback: mean-of-means (less accurate but works without df)
+            new_profile_mean = np.nanmean(new_dot_matrix, axis=1)
         
         # Recompute slope_series
         n_time = new_dot_matrix.shape[1]
