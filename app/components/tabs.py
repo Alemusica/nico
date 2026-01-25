@@ -352,6 +352,176 @@ def _create_transport_timelapse(monthly_profiles: dict, x_km: np.ndarray, gate_l
     return fig
 
 
+def _create_dot_monthly_timelapse(
+    monthly_profiles: dict,
+    lon_centers: np.ndarray,
+    x_km: np.ndarray,
+    title_prefix: str = "Mean DOT Profile",
+    y_units: str = "cm",
+    color: str = "#1E90FF"
+) -> go.Figure:
+    """
+    Create animated timelapse for monthly climatological DOT profiles.
+    
+    Shows how the DOT profile varies by month (January through December),
+    aggregating data from all years for each month.
+    
+    Args:
+        monthly_profiles: Dict with month (1-12) as key, DOT profile array as value
+        lon_centers: Longitude centers for each bin
+        x_km: Distance array along gate (km)
+        title_prefix: Title prefix for the animation
+        y_units: Units for Y axis ('m', 'cm', 'mm')
+        color: Line color for the profile
+    
+    Returns:
+        Plotly Figure with animation frames
+    """
+    # Y scaling factor
+    y_scale = {"m": 1.0, "cm": 100.0, "mm": 1000.0}.get(y_units, 100.0)
+    y_label = f"DOT ({y_units})"
+    
+    # Collect all months data for consistent y-axis
+    all_y_values = []
+    for month in range(1, 13):
+        profile = monthly_profiles.get(month, np.array([]))
+        if len(profile) > 0:
+            valid = profile[np.isfinite(profile)]
+            if len(valid) > 0:
+                all_y_values.extend(valid * y_scale)
+    
+    # Calculate y-axis range
+    if all_y_values:
+        y_min = min(all_y_values) * 1.1
+        y_max = max(all_y_values) * 1.1
+        y_range_diff = y_max - y_min
+        y_min -= y_range_diff * 0.05
+        y_max += y_range_diff * 0.05
+    else:
+        y_min, y_max = -10, 10
+    
+    # Create frames for each month
+    frames = []
+    for month in range(1, 13):
+        profile = monthly_profiles.get(month, np.array([]))
+        
+        if len(profile) > 0 and np.any(np.isfinite(profile)):
+            valid_mask = np.isfinite(profile)
+            frame_data = go.Scatter(
+                x=x_km[valid_mask] if len(x_km) == len(profile) else np.arange(np.sum(valid_mask)),
+                y=profile[valid_mask] * y_scale,
+                mode='lines',
+                name=f'{MONTH_NAMES[month-1]}',
+                line=dict(color=color, width=2.5),
+                fill='tozeroy',
+                fillcolor=f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.15)",
+                hovertemplate='%{x:.1f} km<br>DOT: %{y:.2f} ' + y_units + '<extra></extra>'
+            )
+        else:
+            frame_data = go.Scatter(x=[], y=[], mode='lines', name=MONTH_NAMES[month-1])
+        
+        frames.append(go.Frame(
+            data=[frame_data],
+            name=MONTH_NAMES[month-1],
+            layout=go.Layout(title=dict(text=f"{title_prefix} — {MONTH_NAMES[month-1]}"))
+        ))
+    
+    # Initial frame (January)
+    profile = monthly_profiles.get(1, np.array([]))
+    if len(profile) > 0 and np.any(np.isfinite(profile)):
+        valid_mask = np.isfinite(profile)
+        initial_trace = go.Scatter(
+            x=x_km[valid_mask] if len(x_km) == len(profile) else np.arange(np.sum(valid_mask)),
+            y=profile[valid_mask] * y_scale,
+            mode='lines',
+            name='DOT Profile',
+            line=dict(color=color, width=2.5),
+            fill='tozeroy',
+            fillcolor=f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.15)",
+            hovertemplate='%{x:.1f} km<br>DOT: %{y:.2f} ' + y_units + '<extra></extra>'
+        )
+    else:
+        initial_trace = go.Scatter(x=[], y=[], mode='lines', name='DOT')
+    
+    fig = go.Figure(data=[initial_trace], frames=frames)
+    
+    # Add zero line reference
+    fig.add_hline(y=0, line_color="#7F8C8D", line_width=1, line_dash="dash", opacity=0.5)
+    
+    # Animation controls with slider
+    fig.update_layout(
+        title=dict(text=f"{title_prefix} — Jan", font=dict(size=16)),
+        yaxis_title=y_label,
+        xaxis_title="Distance along gate (km)",
+        height=500,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Inter, sans-serif", size=12),
+        xaxis=dict(gridcolor='#E8E8E8', gridwidth=1),
+        yaxis=dict(gridcolor='#E8E8E8', gridwidth=1, range=[y_min, y_max]),
+        margin=dict(l=60, r=40, t=80, b=100),
+        updatemenus=[
+            dict(
+                type="buttons",
+                showactive=False,
+                y=-0.15,
+                x=0.1,
+                xanchor="right",
+                buttons=[
+                    dict(
+                        label="▶️ Play",
+                        method="animate",
+                        args=[None, {
+                            "frame": {"duration": 800, "redraw": True},
+                            "fromcurrent": True,
+                            "transition": {"duration": 300, "easing": "cubic-in-out"}
+                        }]
+                    ),
+                    dict(
+                        label="⏸️ Pause",
+                        method="animate",
+                        args=[[None], {
+                            "frame": {"duration": 0, "redraw": False},
+                            "mode": "immediate",
+                            "transition": {"duration": 0}
+                        }]
+                    )
+                ]
+            )
+        ],
+        sliders=[{
+            "active": 0,
+            "yanchor": "top",
+            "xanchor": "left",
+            "currentvalue": {
+                "font": {"size": 14, "color": color},
+                "prefix": "Month: ",
+                "visible": True,
+                "xanchor": "right"
+            },
+            "transition": {"duration": 300, "easing": "cubic-in-out"},
+            "pad": {"b": 10, "t": 50},
+            "len": 0.8,
+            "x": 0.15,
+            "y": -0.05,
+            "steps": [
+                {
+                    "args": [[MONTH_NAMES[i]], {
+                        "frame": {"duration": 300, "redraw": True},
+                        "mode": "immediate",
+                        "transition": {"duration": 300}
+                    }],
+                    "label": MONTH_NAMES[i],
+                    "method": "animate"
+                }
+                for i in range(12)
+            ]
+        }]
+    )
+    
+    return fig
+
+
 def _get_all_loaded_datasets() -> dict:
     """Get all currently loaded datasets from session state."""
     loaded = {}
@@ -795,6 +965,7 @@ def _render_unified_dot_profile(data, config: AppConfig, ds_info: dict):
     Unified DOT profile across gate for ALL datasets.
     X-axis can be distance (km) or longitude.
     Y-axis can be m, cm, or mm.
+    Supports monthly climatology view for datasets with monthly_profiles.
     """
     st.subheader(f"{ds_info['emoji']} {ds_info['name']} - Mean DOT Profile")
     
@@ -805,6 +976,11 @@ def _render_unified_dot_profile(data, config: AppConfig, ds_info: dict):
     dot_matrix = getattr(data, 'dot_matrix', None)
     df = getattr(data, 'df', None)
     strait_name = getattr(data, 'strait_name', 'Unknown')
+    
+    # Get monthly climatology data (if available, e.g., from SLCCI)
+    monthly_profiles = getattr(data, 'monthly_profiles', None)
+    monthly_lon_centers = getattr(data, 'monthly_lon_centers', None)
+    monthly_x_km = getattr(data, 'monthly_x_km', None)
     
     # For SLCCI (along-track), compute profile from df
     if profile_mean is None and df is not None and 'dot' in df.columns:
@@ -828,19 +1004,25 @@ def _render_unified_dot_profile(data, config: AppConfig, ds_info: dict):
         st.warning("⚠️ All DOT values are NaN")
         return
     
-    # Options
+    # Options - add Monthly Climatology if available
     col1, col2, col3 = st.columns(3)
+    
+    # Determine available view modes
+    view_modes = ["Mean Profile", "Individual Time Steps"]
+    if monthly_profiles is not None and len(monthly_profiles) > 0:
+        view_modes.append("Monthly Climatology")
+    
     with col1:
         view_mode = st.radio(
             "View mode",
-            ["Mean Profile", "Individual Time Steps"],
+            view_modes,
             horizontal=True,
             key=f"{ds_info['type']}_dot_view_mode"
         )
     with col2:
         x_axis_mode = st.selectbox("X-axis", ["Distance (km)", "Longitude (°)"], key=f"{ds_info['type']}_dot_xaxis")
     with col3:
-        y_units = st.selectbox("Y units", ["m", "cm", "mm"], key=f"{ds_info['type']}_dot_yunits")
+        y_units = st.selectbox("Y units", ["m", "cm", "mm"], index=1, key=f"{ds_info['type']}_dot_yunits")  # Default to cm
     
     show_std = st.checkbox("Show ±1 Std Dev", value=True, key=f"{ds_info['type']}_dot_std")
     
@@ -855,6 +1037,62 @@ def _render_unified_dot_profile(data, config: AppConfig, ds_info: dict):
         x_vals = gate_lon_pts if gate_lon_pts is not None else x_km
         x_label = "Longitude (°)"
     
+    # MONTHLY CLIMATOLOGY VIEW - with animated timelapse
+    if view_mode == "Monthly Climatology":
+        if monthly_profiles is None:
+            st.warning("Monthly climatology data not available for this dataset")
+            return
+        
+        st.markdown("### 📅 Monthly Climatological DOT Profiles")
+        st.markdown("*Aggregates all observations by month across all years*")
+        
+        # Use monthly x_km if available
+        m_x_km = monthly_x_km if monthly_x_km is not None else x_km
+        m_lon_centers = monthly_lon_centers if monthly_lon_centers is not None else gate_lon_pts
+        
+        # Create the animated timelapse
+        fig = _create_dot_monthly_timelapse(
+            monthly_profiles=monthly_profiles,
+            lon_centers=m_lon_centers if m_lon_centers is not None else np.array([]),
+            x_km=m_x_km,
+            title_prefix=f"{strait_name} — Monthly DOT Profile",
+            y_units=y_units,
+            color=ds_info['color']
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Monthly statistics
+        with st.expander("📊 Monthly Statistics"):
+            # Compute stats per month
+            month_stats = []
+            for month in range(1, 13):
+                profile = monthly_profiles.get(month, np.array([]))
+                if len(profile) > 0 and np.any(np.isfinite(profile)):
+                    valid = profile[np.isfinite(profile)]
+                    month_stats.append({
+                        "Month": MONTH_NAMES[month-1],
+                        "Mean DOT (cm)": f"{np.mean(valid) * 100:.2f}",
+                        "Min DOT (cm)": f"{np.min(valid) * 100:.2f}",
+                        "Max DOT (cm)": f"{np.max(valid) * 100:.2f}",
+                        "Range (cm)": f"{(np.max(valid) - np.min(valid)) * 100:.2f}",
+                        "Valid Points": f"{len(valid)}"
+                    })
+                else:
+                    month_stats.append({
+                        "Month": MONTH_NAMES[month-1],
+                        "Mean DOT (cm)": "N/A",
+                        "Min DOT (cm)": "N/A", 
+                        "Max DOT (cm)": "N/A",
+                        "Range (cm)": "N/A",
+                        "Valid Points": "0"
+                    })
+            
+            st.dataframe(pd.DataFrame(month_stats), use_container_width=True)
+        
+        return  # Exit early for monthly view
+    
+    # STANDARD VIEW MODES
     fig = go.Figure()
     
     if view_mode == "Mean Profile":

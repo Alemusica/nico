@@ -116,30 +116,6 @@
     "n_observations": 0,
     "date_range": "unknown"
   },
-  "slcci/bering_strait/pass_2/years_1_281": {
-    "dataset": "slcci",
-    "gate_name": "bering_strait",
-    "pass_number": 2,
-    "track_number": null,
-    "time_range_key": "1_281",
-    "file_path": "slcci/bering_strait_pass_2_years_1_281.pkl",
-    "created_at": "2026-01-12T10:33:02.784769",
-    "size_bytes": 246896,
-    "n_observations": 1791,
-    "date_range": "2008-07 to 2015-11"
-  },
-  "slcci/davis_strait/pass_248/years_1_281": {
-    "dataset": "slcci",
-    "gate_name": "davis_strait",
-    "pass_number": 248,
-    "track_number": null,
-    "time_range_key": "1_281",
-    "file_path": "slcci/davis_strait_pass_248_years_1_281.pkl",
-    "created_at": "2026-01-12T10:39:13.831671",
-    "size_bytes": 1441876,
-    "n_observations": 9932,
-    "date_range": "2008-07 to 2016-02"
-  },
   "dtuspace/davis_strait/years_2006_2017": {
     "dataset": "dtuspace",
     "gate_name": "davis_strait",
@@ -151,5 +127,65 @@
     "size_bytes": 3261444,
     "n_observations": 57600,
     "date_range": "2006-01 to 2017-12"
+  },
+  "slcci/bering_strait/pass_2/years_1_281": {
+    "dataset": "slcci",
+    "gate_name": "bering_strait",
+    "pass_number": 2,
+    "track_number": null,
+    "time_range_key": "1_281",
+    "file_path": "slcci/bering_strait_pass_2_years_1_281.pkl",
+    "created_at": "2026-01-21T11:10:23.140244",
+    "size_bytes": 246888,
+    "n_observations": 1791,
+    "date_range": "2008-07 to 2015-11"
+  },
+  "slcci/davis_strait/pass_248/years_1_281": {
+    "dataset": "slcci",
+    "gate_name": "davis_strait",
+    "pass_number": 248,
+    "track_number": null,
+    "time_range_key": "1_281",
+    "file_path": "slcci/davis_strait_pass_248_years_1_281.pkl",
+    "created_at": "2026-01-21T11:35:16.683957",
+    "size_bytes": 1441876,
+    "n_observations": 9932,
+    "date_range": "2008-07 to 2016-02"
+  },
+  "slcci/davis_strait/pass_70/years_1_281": {
+    "dataset": "slcci",
+    "gate_name": "davis_strait",
+    "pass_number": 70,
+    "track_number": null,
+    "time_range_key": "1_281",
+    "file_path": "slcci/davis_strait_pass_70_years_1_281.pkl",
+    "created_at": "2026-01-21T11:51:27.255123",
+    "size_bytes": 767272,
+    "n_observations": 8857,
+    "date_range": "2008-07 to 2015-12"
+  },
+  "slcci/davis_strait/pass_248/years_1_280": {
+    "dataset": "slcci",
+    "gate_name": "davis_strait",
+    "pass_number": 248,
+    "track_number": null,
+    "time_range_key": "1_280",
+    "file_path": "slcci/davis_strait_pass_248_years_1_280.pkl",
+    "created_at": "2026-01-21T17:02:21.609709",
+    "size_bytes": 2324730,
+    "n_observations": 19251,
+    "date_range": "2008-07 to 2016-02"
+  },
+  "slcci/denmark_strait/pass_248/years_1_281": {
+    "dataset": "slcci",
+    "gate_name": "denmark_strait",
+    "pass_number": 248,
+    "track_number": null,
+    "time_range_key": "1_281",
+    "file_path": "slcci/denmark_strait_pass_248_years_1_281.pkl",
+    "created_at": "2026-01-24T16:29:20.222403",
+    "size_bytes": 651438,
+    "n_observations": 5251,
+    "date_range": "2008-07 to 2016-02"
   }
 }

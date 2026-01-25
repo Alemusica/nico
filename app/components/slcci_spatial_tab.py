@@ -9,7 +9,7 @@ This tab shows:
 - Coastlines and geographic features
 - Interactive zoom and pan
 
-Uses Plotly for interactivity instead of Cartopy (which requires backend rendering).
+Uses Plotly Scattermapbox with OpenStreetMap tiles for best visibility.
 """
 
 import streamlit as st
@@ -55,37 +55,48 @@ def render_slcci_spatial_map_tab(pass_data: Optional[PassData] = None):
     
     st.divider()
     
-    # Map options
-    col1, col2 = st.columns(2)
+    # Map options in 3 columns
+    col1, col2, col3 = st.columns(3)
     with col1:
         color_var = st.selectbox(
-            "Color by",
+            "🎨 Color by",
             ["Mean DOT", "DOT Std Dev", "Observation Count"],
             index=0,
             key="slcci_map_color_var"
         )
     with col2:
         map_style = st.selectbox(
-            "Map Style",
-            ["open-street-map", "carto-positron", "carto-darkmatter"],
-            index=1,
+            "🗺️ Map Style",
+            ["carto-positron", "carto-darkmatter", "open-street-map", "stamen-terrain", "stamen-watercolor"],
+            index=0,
             key="slcci_map_style"
         )
+    with col3:
+        marker_size = st.slider("📍 Marker Size", 5, 20, 10, key="slcci_marker_size")
     
     # === MAIN MAP ===
-    fig = _create_spatial_map(pass_data, color_var, map_style)
+    fig = _create_mapbox_map(pass_data, color_var, map_style, marker_size)
     st.plotly_chart(fig, use_container_width=True, key="slcci_spatial_map")
     
     # === DATA SUMMARY TABLE ===
     _render_spatial_summary(pass_data)
 
 
-def _create_spatial_map(
+def _create_mapbox_map(
     pass_data: PassData,
     color_var: str = "Mean DOT",
     map_style: str = "carto-positron",
+    marker_size: int = 10,
 ) -> go.Figure:
-    """Create interactive spatial map with Plotly."""
+    """
+    Create interactive map with Mapbox tiles (no API key needed for open styles).
+    
+    Features:
+    - Clear visible coastlines from tile layer
+    - High-quality map tiles for Arctic regions
+    - Interactive zoom, pan, hover
+    - Gate line overlay
+    """
     
     df = pass_data.df.copy()
     
@@ -102,7 +113,7 @@ def _create_spatial_map(
     
     agg_df.columns = ["lat", "lon", "dot_mean", "dot_std", "obs_count", "corssh_mean", "geoid_mean"]
     
-    # Choose color variable
+    # Choose color variable and scale
     if color_var == "Mean DOT":
         color_col = "dot_mean"
         color_label = "DOT (m)"
@@ -116,32 +127,33 @@ def _create_spatial_map(
         color_label = "Count"
         colorscale = "Blues"
     
-    # Create map
+    # Create figure
     fig = go.Figure()
     
-    # Add satellite data points
+    # Add satellite data points with Scattermapbox
     fig.add_trace(go.Scattermapbox(
         lat=agg_df["lat"],
         lon=agg_df["lon"],
         mode='markers',
         marker=dict(
-            size=8,
+            size=marker_size,
             color=agg_df[color_col],
             colorscale=colorscale,
             showscale=True,
             colorbar=dict(
-                title=color_label,
+                title=dict(text=color_label, font=dict(size=12)),
                 thickness=15,
                 len=0.7,
+                x=1.02,
             ),
-            opacity=0.8,
+            opacity=0.85,
         ),
         text=[
-            f"DOT: {row['dot_mean']:.4f} m<br>"
-            f"Std: {row['dot_std']:.4f} m<br>"
-            f"Count: {row['obs_count']}<br>"
-            f"Lat: {row['lat']:.3f}°<br>"
-            f"Lon: {row['lon']:.3f}°"
+            f"<b>DOT:</b> {row['dot_mean']:.4f} m<br>"
+            f"<b>Std:</b> {row['dot_std']:.4f} m<br>"
+            f"<b>Count:</b> {row['obs_count']}<br>"
+            f"<b>Lat:</b> {row['lat']:.3f}°<br>"
+            f"<b>Lon:</b> {row['lon']:.3f}°"
             for _, row in agg_df.iterrows()
         ],
         hoverinfo='text',
@@ -152,8 +164,9 @@ def _create_spatial_map(
     fig.add_trace(go.Scattermapbox(
         lat=pass_data.gate_lat_pts,
         lon=pass_data.gate_lon_pts,
-        mode='lines',
+        mode='lines+markers',
         line=dict(color='red', width=4),
+        marker=dict(size=10, color='red', symbol='circle'),
         name='Gate',
         hoverinfo='name',
     ))
@@ -166,38 +179,45 @@ def _create_spatial_map(
     lon_range = agg_df["lon"].max() - agg_df["lon"].min()
     max_range = max(lat_range, lon_range)
     
-    # Estimate zoom level
-    if max_range > 20:
+    # Compute zoom level based on data extent
+    if max_range > 40:
         zoom = 2
-    elif max_range > 10:
+    elif max_range > 20:
         zoom = 3
-    elif max_range > 5:
+    elif max_range > 10:
         zoom = 4
-    elif max_range > 2:
+    elif max_range > 5:
         zoom = 5
-    else:
+    elif max_range > 2:
         zoom = 6
+    else:
+        zoom = 7
     
-    # Layout
+    # Layout with mapbox settings
     fig.update_layout(
         title=dict(
-            text=f"Spatial DOT Map - {pass_data.strait_name} - Pass {pass_data.pass_number}",
+            text=f"<b>Spatial DOT Map</b> - {pass_data.strait_name} - Pass {pass_data.pass_number}",
             font=dict(size=16),
+            x=0.5,
         ),
         mapbox=dict(
             style=map_style,
             center=dict(lat=lat_center, lon=lon_center),
             zoom=zoom,
         ),
-        margin=dict(l=0, r=0, t=50, b=0),
-        height=500,
+        margin=dict(l=10, r=10, t=60, b=10),
+        height=600,
         legend=dict(
             yanchor="top",
-            y=0.99,
+            y=0.98,
             xanchor="left",
             x=0.01,
-            bgcolor="rgba(255,255,255,0.8)",
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="gray",
+            borderwidth=1,
+            font=dict(size=11),
         ),
+        showlegend=True,
     )
     
     return fig
@@ -263,25 +283,50 @@ def _render_map_explainer():
     st.markdown("""
     ### What does the Spatial Map show?
     
-    The **Spatial Map** visualizes DOT values geographically:
+    The **Spatial Map** visualizes DOT (Dynamic Ocean Topography) values geographically:
     
-    - **Colored points**: Satellite altimetry measurements
-    - **Red line**: Gate geometry
-    - **Color scale**: DOT value (or other variable)
-    
-    ---
-    
-    **Interactive Features:**
-    
-    - 🔍 **Zoom**: Scroll or pinch
-    - 🖐️ **Pan**: Click and drag
-    - 📍 **Hover**: See point details
-    - 📏 **Measure**: Double-click to set marker
+    🔵 **Colored points**: Satellite altimetry measurements  
+    🔴 **Red line/diamonds**: Gate geometry defining the strait  
+    🌍 **Background**: Coastlines, continents, and ocean bathymetry  
     
     ---
     
-    **To get started:**
+    ### 🎨 Color Options
+    
+    | Variable | Description |
+    |----------|-------------|
+    | **Mean DOT** | Average sea surface height anomaly |
+    | **DOT Std Dev** | Variability in DOT measurements |
+    | **Observation Count** | Number of satellite passes per location |
+    
+    ---
+    
+    ### 🌍 Map Projections
+    
+    | Projection | Best For |
+    |------------|----------|
+    | **Natural Earth** | General overview, balanced view |
+    | **Orthographic** | 3D globe-like view |
+    | **Equirectangular** | Flat map, distortion at poles |
+    | **Mercator** | Navigation, web maps style |
+    | **Stereographic** | Polar regions (Arctic/Antarctic) |
+    
+    ---
+    
+    ### 🖱️ Interactive Features
+    
+    - **🔍 Zoom**: Scroll or pinch to zoom in/out
+    - **🖐️ Pan**: Click and drag to move the view
+    - **📍 Hover**: See detailed data for each point
+    - **📏 Rotate**: For orthographic/stereographic projections
+    - **📸 Download**: Use the camera icon to save as PNG
+    
+    ---
+    
+    ### 🚀 To get started
+    
     1. Select a gate from the sidebar
-    2. Load SLCCI data
-    3. The map will show all observations colored by DOT
+    2. Adjust the bin size if needed (smaller = more detail)
+    3. Click "Load SLCCI Data"
+    4. Explore the map with different color options and projections!
     """)

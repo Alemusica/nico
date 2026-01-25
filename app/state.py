@@ -46,9 +46,10 @@ class AppConfig:
     
     # Processing parameters (from SLCCI PLOTTER notebook)
     use_flag: bool = True           # Quality flag filter
-    lon_bin_size: float = 0.01      # Longitude binning size (degrees)
+    lon_bin_size: float = 0.10      # Longitude binning size (degrees) - UNIFIED for all outputs
     lat_buffer_deg: float = 2.0     # Latitude buffer for spatial filter
     lon_buffer_deg: float = 5.0     # Longitude buffer for spatial filter
+    force_reload: bool = False      # Bypass cache and reload from source
     
     # === CMEMS SETTINGS ===
     cmems_base_dir: str = "/Users/nicolocaron/Desktop/ARCFRESH/COPERNICUS DATA"

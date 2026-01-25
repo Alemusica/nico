@@ -32,14 +32,14 @@ from ..state import (
     get_dtu_data
 )
 
-# Import cache service for persistent data caching
-from src.services.cache_service import DataCache
+# Import intelligent cache (replaces old DataCache)
+from src.services.intelligent_cache import get_intelligent_cache
 
 # Import longitude filter for divided gates (Fram West/East, Davis West/East)
 from app.components.loaders.base import apply_longitude_filter
 
-# Global cache instance
-_cache = DataCache()
+# Global cache instance (IntelligentCache with disk persistence)
+_cache = get_intelligent_cache()
 
 
 def _render_cache_viewer():
@@ -89,9 +89,9 @@ def _render_cache_viewer():
                 if date_range:
                     st.caption(f"  {date_range} ({entry['n_obs']} obs)")
             with col2:
-                # Delete button
+                # Delete button - use clear_by_key for IntelligentCache
                 if st.button("🗑️", key=f"del_{entry['key']}", help=f"Delete {entry['key']}"):
-                    _cache.clear(entry['key'])
+                    _cache.clear_by_key(entry['key'])
                     st.rerun()
     
     # Clear all button
@@ -816,17 +816,57 @@ def _render_processing_params(config: AppConfig) -> AppConfig:
         help="Filter data using SLCCI quality flags"
     )
     
-    # Longitude binning size - SLIDER da 0.01 a 0.1
+    # Longitude binning size - UNIFIED for all outputs (slope + profiles)
+    # Default 0.1° (~11km bins), range 0.01° - 0.5°
     config.lon_bin_size = st.slider(
-        "Lon Bin Size (°)",
+        "🎚️ Lon Bin Size (°)",
         min_value=0.01,
-        max_value=0.10,
-        value=0.01,
+        max_value=0.50,
+        value=0.10,
         step=0.01,
         format="%.2f",
         key="sidebar_lon_bin",
-        help="Binning resolution for slope calculation (0.01° - 0.10°)"
+        help="Unified binning for slope & profiles. Default 0.1° (~11km). Lower=finer but noisier."
     )
+    
+    # Show approximate km resolution
+    km_approx = config.lon_bin_size * 111.0  # rough conversion at equator
+    st.caption(f"≈ {km_approx:.1f} km bins (varies with latitude)")
+    
+    # Cache Management Section
+    st.markdown("---")
+    st.markdown("**🗄️ Cache Management**")
+    
+    # Import SLCCI cache to show stats
+    try:
+        # Get current service instance from session state if exists
+        if "slcci_service" in st.session_state and st.session_state.slcci_service is not None:
+            cache_stats = st.session_state.slcci_service.get_cache_stats()
+            st.caption(
+                f"📊 Raw: {cache_stats.get('raw_entries', 0)} | "
+                f"Processed: {cache_stats.get('processed_entries', 0)} | "
+                f"Hits: {cache_stats.get('hits', 0)}"
+            )
+    except Exception:
+        pass
+    
+    # Clear Cache button
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🗑️ Clear Cache", key="clear_slcci_cache", use_container_width=True):
+            if "slcci_service" in st.session_state and st.session_state.slcci_service is not None:
+                st.session_state.slcci_service.clear_cache()
+                st.success("✅ Cache cleared!")
+            else:
+                st.info("No cache to clear")
+    with col2:
+        # Force reload checkbox
+        config.force_reload = st.checkbox(
+            "Force Reload",
+            value=False,
+            key="sidebar_force_reload",
+            help="Bypass cache and reload from source"
+        )
     
     return config
 
@@ -1198,7 +1238,7 @@ def _render_latitude_warning(config: AppConfig) -> AppConfig:
 
 
 def _load_slcci_data(config: AppConfig):
-    """Load SLCCI data using SLCCIService (local or API) with cache support."""
+    """Load SLCCI data using SLCCIService (local or API) with intelligent cache."""
     
     # Validate geoid path (always needed)
     if not Path(config.slcci_geoid_path).exists():
@@ -1218,12 +1258,16 @@ def _load_slcci_data(config: AppConfig):
         return
     
     try:
-        from src.services.slcci_service import SLCCIService, SLCCIConfig
+        from src.services.slcci_service import SLCCIService, SLCCIConfig, CacheConfig
         
         cycles = list(range(config.cycle_start, config.cycle_end + 1))
         
         # Determine pass number first (needed for cache key)
         pass_number = config.pass_number
+        
+        # Get bin size from config (set via slider)
+        bin_size = getattr(config, 'lon_bin_size', 0.10)
+        force_reload = getattr(config, 'force_reload', False)
         
         slcci_config = SLCCIConfig(
             base_dir=config.slcci_base_dir,
@@ -1232,12 +1276,27 @@ def _load_slcci_data(config: AppConfig):
             use_flag=config.use_flag,
             lat_buffer_deg=config.lat_buffer_deg,
             lon_buffer_deg=config.lon_buffer_deg,
-            lon_bin_size=getattr(config, 'lon_bin_size', 0.01),  # From sidebar slider
+            lon_bin_size=bin_size,  # UNIFIED bin size from slider
             source=source_mode,  # "local" or "api"
             satellite="J2",
         )
         
-        service = SLCCIService(slcci_config)
+        # Use existing service from session state if available (preserves cache)
+        # Recreate if config changed significantly
+        existing_service = st.session_state.get("slcci_service")
+        if existing_service is not None:
+            # Check if we need to recreate service (source or paths changed)
+            old_config = st.session_state.get("slcci_config")
+            if (old_config is None or 
+                old_config.slcci_base_dir != config.slcci_base_dir or
+                old_config.data_source_mode != source_mode):
+                service = SLCCIService(slcci_config)
+            else:
+                # Reuse service but update config (preserves cache!)
+                service = existing_service
+                service.config = slcci_config  # Update with new bin_size etc.
+        else:
+            service = SLCCIService(slcci_config)
         
         # Auto-find pass if needed
         if config.pass_mode == "auto":
@@ -1250,31 +1309,18 @@ def _load_slcci_data(config: AppConfig):
                 st.sidebar.error("No passes found near gate")
                 return
         
-        # Check cache first - use parent gate for cache key (Fram West/East share cache)
-        # Include cycle range in cache key so different time ranges are cached separately
-        cache_gate = _get_parent_gate_id(config.selected_gate)
-        gate_name = cache_gate.replace(" ", "_").lower()
-        time_range = (config.cycle_start, config.cycle_end)  # Use cycles as time range
-        cached_data = _cache.load("slcci", gate_name, pass_number=pass_number, time_range=time_range)
-        
-        if cached_data is not None:
-            st.sidebar.success(f"📦 Loaded from cache! (cycles {config.cycle_start}-{config.cycle_end})")
-            pass_data = cached_data
-        else:
-            # Load from source
-            with st.spinner(f"Loading {len(cycles)} cycles..."):
-                pass_data = service.load_pass_data(
-                    gate_path=gate_path,
-                    pass_number=pass_number,
-                    cycles=cycles,
-                )
-                
-                if pass_data is None:
-                    st.sidebar.error(f"❌ No data for pass {pass_number}")
-                    return
-                
-                # Save to cache with time range
-                _cache.save("slcci", gate_name, pass_data, pass_number=pass_number, time_range=time_range)
+        # Load data using service's intelligent cache
+        with st.spinner(f"Loading {len(cycles)} cycles (bin={bin_size}°)..."):
+            pass_data = service.load_pass_data(
+                gate_path=gate_path,
+                pass_number=pass_number,
+                cycles=cycles,
+                force_reload=force_reload,  # Bypass cache if requested
+            )
+            
+            if pass_data is None:
+                st.sidebar.error(f"❌ No data for pass {pass_number}")
+                return
         
         # Apply longitude filter for divided gates (Fram West/East, Davis West/East)
         lon_min, lon_max = _get_lon_filter_for_gate(config.selected_gate)
@@ -1293,15 +1339,18 @@ def _load_slcci_data(config: AppConfig):
         st.session_state["slcci_config"] = config
         st.session_state["datasets"] = {}  # Clear generic
         
-        # Success message
+        # Success message with cache stats
         n_obs = len(pass_data.df) if hasattr(pass_data, 'df') else 0
         n_cyc = pass_data.df['cycle'].nunique() if hasattr(pass_data, 'df') and 'cycle' in pass_data.df.columns else 0
+        cache_stats = service.get_cache_stats()
         
         st.sidebar.success(f"""
         ✅ SLCCI Data Loaded!{filter_info}
         - Pass: {pass_number}
         - Observations: {n_obs:,}
         - Cycles: {n_cyc}
+        - Bin size: {bin_size}°
+        - Cache: {cache_stats.get('hits', 0)} hits, {cache_stats.get('misses', 0)} misses
         """)
         
         st.rerun()

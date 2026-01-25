@@ -54,7 +54,7 @@ class SLCCIConfig:
     use_flag: bool = True
     lat_buffer_deg: float = 2.0
     lon_buffer_deg: float = 5.0
-    lon_bin_size: float = 0.01  # Longitude binning resolution (degrees)
+    lon_bin_size: float = 0.1  # Longitude binning resolution (degrees) - UNIFIED for all outputs
     
     # Data source: "local" or "api"
     source: DataSource = "local"
@@ -78,6 +78,221 @@ class PassData:
     profile_mean: np.ndarray
     dot_matrix: np.ndarray  # (n_gate_pts, ntime)
     time_array: np.ndarray
+    # Monthly climatology profiles (all years combined by month)
+    monthly_profiles: Optional[Dict[int, np.ndarray]] = None  # {1: Jan profile, 2: Feb profile, ...}
+    monthly_lon_centers: Optional[np.ndarray] = None
+    monthly_x_km: Optional[np.ndarray] = None
+
+
+# ==============================================================================
+# INTELLIGENT CACHE
+# ==============================================================================
+
+@dataclass
+class CacheConfig:
+    """Configuration for intelligent caching."""
+    enabled: bool = True
+    ttl_days: int = 14  # Time-to-live in days
+    max_entries: int = 50  # Max cached entries
+
+
+class SLCCICache:
+    """
+    Intelligent in-memory cache for SLCCI data.
+    
+    Two-level cache:
+    - Level 1 (raw_data): Raw DataFrame after loading from files (before binning)
+    - Level 2 (processed): Full PassData objects (after processing with specific bin_size)
+    
+    Cache keys are based on:
+    - gate_path (hash)
+    - pass_number
+    - cycles range
+    - bin_size (for processed cache only)
+    
+    Invalidation rules:
+    - bin_size change → invalidate processed, keep raw
+    - cycles change → invalidate all
+    - gate change → invalidate all
+    - TTL expired → invalidate entry
+    """
+    
+    def __init__(self, config: Optional[CacheConfig] = None):
+        self.config = config or CacheConfig()
+        
+        # Level 1: Raw data cache (before binning)
+        # Key: (gate_hash, pass_number, cycles_hash) → (DataFrame, timestamp)
+        self._raw_cache: Dict[str, Tuple[pd.DataFrame, float]] = {}
+        
+        # Level 2: Processed data cache (after binning)
+        # Key: (gate_hash, pass_number, cycles_hash, bin_size) → (PassData, timestamp)
+        self._processed_cache: Dict[str, Tuple[Any, float]] = {}
+        
+        # Metadata for logging
+        self._stats = {"hits": 0, "misses": 0, "invalidations": 0}
+    
+    @staticmethod
+    def _hash_gate(gate_path: str) -> str:
+        """Create short hash from gate path."""
+        import hashlib
+        return hashlib.md5(gate_path.encode()).hexdigest()[:12]
+    
+    @staticmethod
+    def _hash_cycles(cycles: List[int]) -> str:
+        """Create hash from cycles list."""
+        import hashlib
+        cycles_str = f"{min(cycles)}-{max(cycles)}-{len(cycles)}"
+        return hashlib.md5(cycles_str.encode()).hexdigest()[:8]
+    
+    def _make_raw_key(self, gate_path: str, pass_number: int, cycles: List[int]) -> str:
+        """Generate cache key for raw data."""
+        return f"raw_{self._hash_gate(gate_path)}_{pass_number}_{self._hash_cycles(cycles)}"
+    
+    def _make_processed_key(self, gate_path: str, pass_number: int, 
+                            cycles: List[int], bin_size: float) -> str:
+        """Generate cache key for processed data."""
+        return f"proc_{self._hash_gate(gate_path)}_{pass_number}_{self._hash_cycles(cycles)}_{bin_size:.3f}"
+    
+    def _is_expired(self, timestamp: float) -> bool:
+        """Check if cache entry is expired."""
+        import time
+        age_days = (time.time() - timestamp) / (24 * 3600)
+        return age_days > self.config.ttl_days
+    
+    def _enforce_max_entries(self, cache: dict):
+        """Remove oldest entries if cache exceeds max size."""
+        if len(cache) > self.config.max_entries:
+            # Sort by timestamp and remove oldest
+            sorted_keys = sorted(cache.keys(), key=lambda k: cache[k][1])
+            for key in sorted_keys[:len(cache) - self.config.max_entries]:
+                del cache[key]
+                logger.debug(f"Cache evicted: {key}")
+    
+    # -------------------------------------------------------------------------
+    # Raw Data Cache (Level 1)
+    # -------------------------------------------------------------------------
+    
+    def get_raw(self, gate_path: str, pass_number: int, 
+                cycles: List[int]) -> Optional[pd.DataFrame]:
+        """Get raw DataFrame from cache."""
+        if not self.config.enabled:
+            return None
+        
+        key = self._make_raw_key(gate_path, pass_number, cycles)
+        
+        if key in self._raw_cache:
+            df, timestamp = self._raw_cache[key]
+            if not self._is_expired(timestamp):
+                self._stats["hits"] += 1
+                logger.debug(f"Cache HIT (raw): {key}")
+                return df.copy()  # Return copy to prevent mutation
+            else:
+                # Expired - remove
+                del self._raw_cache[key]
+                logger.debug(f"Cache EXPIRED (raw): {key}")
+        
+        self._stats["misses"] += 1
+        return None
+    
+    def set_raw(self, gate_path: str, pass_number: int, 
+                cycles: List[int], df: pd.DataFrame):
+        """Store raw DataFrame in cache."""
+        if not self.config.enabled:
+            return
+        
+        import time
+        key = self._make_raw_key(gate_path, pass_number, cycles)
+        self._raw_cache[key] = (df.copy(), time.time())
+        self._enforce_max_entries(self._raw_cache)
+        logger.debug(f"Cache SET (raw): {key}, {len(df)} rows")
+    
+    # -------------------------------------------------------------------------
+    # Processed Data Cache (Level 2)
+    # -------------------------------------------------------------------------
+    
+    def get_processed(self, gate_path: str, pass_number: int, 
+                      cycles: List[int], bin_size: float) -> Optional[Any]:
+        """Get processed PassData from cache."""
+        if not self.config.enabled:
+            return None
+        
+        key = self._make_processed_key(gate_path, pass_number, cycles, bin_size)
+        
+        if key in self._processed_cache:
+            data, timestamp = self._processed_cache[key]
+            if not self._is_expired(timestamp):
+                self._stats["hits"] += 1
+                logger.debug(f"Cache HIT (processed): {key}")
+                return data
+            else:
+                del self._processed_cache[key]
+                logger.debug(f"Cache EXPIRED (processed): {key}")
+        
+        self._stats["misses"] += 1
+        return None
+    
+    def set_processed(self, gate_path: str, pass_number: int, 
+                      cycles: List[int], bin_size: float, data: Any):
+        """Store processed PassData in cache."""
+        if not self.config.enabled:
+            return
+        
+        import time
+        key = self._make_processed_key(gate_path, pass_number, cycles, bin_size)
+        self._processed_cache[key] = (data, time.time())
+        self._enforce_max_entries(self._processed_cache)
+        logger.debug(f"Cache SET (processed): {key}")
+    
+    # -------------------------------------------------------------------------
+    # Cache Management
+    # -------------------------------------------------------------------------
+    
+    def invalidate_for_bin_size(self, gate_path: str, pass_number: int, cycles: List[int]):
+        """Invalidate processed cache when bin_size changes (keep raw)."""
+        prefix = f"proc_{self._hash_gate(gate_path)}_{pass_number}_{self._hash_cycles(cycles)}"
+        keys_to_remove = [k for k in self._processed_cache.keys() if k.startswith(prefix)]
+        for key in keys_to_remove:
+            del self._processed_cache[key]
+            self._stats["invalidations"] += 1
+        if keys_to_remove:
+            logger.info(f"Cache invalidated {len(keys_to_remove)} processed entries for bin_size change")
+    
+    def invalidate_all(self, gate_path: Optional[str] = None):
+        """Invalidate all cache entries (or just for specific gate)."""
+        if gate_path:
+            gate_hash = self._hash_gate(gate_path)
+            raw_keys = [k for k in self._raw_cache.keys() if gate_hash in k]
+            proc_keys = [k for k in self._processed_cache.keys() if gate_hash in k]
+            for k in raw_keys:
+                del self._raw_cache[k]
+            for k in proc_keys:
+                del self._processed_cache[k]
+            count = len(raw_keys) + len(proc_keys)
+        else:
+            count = len(self._raw_cache) + len(self._processed_cache)
+            self._raw_cache.clear()
+            self._processed_cache.clear()
+        
+        self._stats["invalidations"] += count
+        logger.info(f"Cache cleared: {count} entries removed")
+    
+    def clear(self):
+        """Clear all caches."""
+        self.invalidate_all()
+    
+    def get_stats(self) -> dict:
+        """Get cache statistics."""
+        return {
+            **self._stats,
+            "raw_entries": len(self._raw_cache),
+            "processed_entries": len(self._processed_cache),
+            "total_entries": len(self._raw_cache) + len(self._processed_cache),
+        }
+    
+    def __repr__(self) -> str:
+        stats = self.get_stats()
+        return (f"SLCCICache(raw={stats['raw_entries']}, processed={stats['processed_entries']}, "
+                f"hits={stats['hits']}, misses={stats['misses']})")
 
 
 # ==============================================================================
@@ -115,6 +330,11 @@ class SLCCIService:
     - "local": Load from local NetCDF files
     - "api": Load via CEDA OPeNDAP API
     
+    Features intelligent caching:
+    - Raw data cache: stores DataFrame after loading (before binning)
+    - Processed cache: stores PassData (after processing with specific bin_size)
+    - Automatic invalidation when parameters change
+    
     Example usage:
         # Local files
         service = SLCCIService()
@@ -124,14 +344,24 @@ class SLCCIService:
         config = SLCCIConfig(source="api", satellite="J2")
         service = SLCCIService(config)
         pass_data = service.load_pass_data(gate_path="/path/to/gate.shp", pass_number=248)
+        
+        # Check cache stats
+        print(service.cache)
+        
+        # Clear cache
+        service.clear_cache()
     """
     
-    def __init__(self, config: Optional[SLCCIConfig] = None):
+    def __init__(self, config: Optional[SLCCIConfig] = None, 
+                 cache_config: Optional[CacheConfig] = None):
         """Initialize SLCCI service with configuration."""
         self.config = config or SLCCIConfig()
         self._geoid_interp: Optional[RegularGridInterpolator] = None
         self._gate_points_cache: Dict = {}
         self._ceda_client = None  # Lazy-loaded
+        
+        # Initialize intelligent cache
+        self.cache = SLCCICache(cache_config)
         
         # Validate paths exist
         if self.config.source == "local":
@@ -139,6 +369,14 @@ class SLCCIService:
                 logger.warning(f"SLCCI base_dir not found: {self.config.base_dir}")
         if not os.path.exists(self.config.geoid_path):
             logger.warning(f"Geoid file not found: {self.config.geoid_path}")
+    
+    def clear_cache(self, gate_path: Optional[str] = None):
+        """Clear cache (all or for specific gate)."""
+        self.cache.clear() if gate_path is None else self.cache.invalidate_all(gate_path)
+    
+    def get_cache_stats(self) -> dict:
+        """Get cache statistics."""
+        return self.cache.get_stats()
     
     @property
     def ceda_client(self):
@@ -158,9 +396,14 @@ class SLCCIService:
         gate_path: str,
         pass_number: int,
         cycles: Optional[List[int]] = None,
+        force_reload: bool = False,
     ) -> Optional[PassData]:
         """
         Load satellite data for a specific pass and compute DOT analysis.
+        
+        Uses two-level caching:
+        - Level 1 (raw): Caches raw DataFrame before binning
+        - Level 2 (processed): Caches full PassData with current bin_size
         
         Parameters
         ----------
@@ -170,6 +413,8 @@ class SLCCIService:
             Pass number to load
         cycles : List[int], optional
             Cycles to load (defaults to config.cycles)
+        force_reload : bool
+            If True, bypass cache and reload from source
             
         Returns
         -------
@@ -177,36 +422,65 @@ class SLCCIService:
             Container with all analysis results, or None if no data
         """
         cycles = cycles or self.config.cycles
+        bin_size = self.config.lon_bin_size
         
-        logger.info(f"Loading pass {pass_number} for gate: {Path(gate_path).name}")
+        logger.info(f"Loading pass {pass_number} for gate: {Path(gate_path).name} (bin_size={bin_size}°)")
         
-        # 1. Load gate geometry
+        # --- CHECK PROCESSED CACHE (Level 2) ---
+        if not force_reload:
+            cached_pass_data = self.cache.get_processed(gate_path, pass_number, cycles, bin_size)
+            if cached_pass_data is not None:
+                logger.info(f"✅ Cache HIT (processed) for pass {pass_number}")
+                return cached_pass_data
+        
+        # --- CHECK RAW CACHE (Level 1) ---
+        cached_df = None if force_reload else self.cache.get_raw(gate_path, pass_number, cycles)
+        
+        if cached_df is not None:
+            logger.info(f"✅ Cache HIT (raw) for pass {pass_number}, processing with bin_size={bin_size}°")
+            df = cached_df
+            ds = None  # No need to reload
+        else:
+            # --- LOAD FROM SOURCE ---
+            logger.info(f"📥 Cache MISS, loading from source...")
+            
+            # 1. Load gate geometry
+            gate_gdf = _load_gate_gdf(gate_path)
+            
+            # 2. Load satellite data
+            ds = self._load_filtered_cycles(
+                cycles=cycles,
+                gate_path=gate_path,
+                pass_number=pass_number,
+            )
+            
+            if ds is None or ds.sizes.get("time", 0) == 0:
+                logger.warning(f"No data found for pass {pass_number}")
+                return None
+            
+            # 3. Interpolate and add geoid
+            geoid_values = self._interpolate_geoid(
+                ds["latitude"].values,
+                ds["longitude"].values,
+            )
+            
+            # 4. Build DataFrame with DOT
+            df = self._build_pass_dataframe(ds, geoid_values, pass_number)
+            
+            if df is None or len(df) == 0:
+                logger.warning(f"Empty DataFrame for pass {pass_number}")
+                return None
+            
+            # --- STORE IN RAW CACHE ---
+            self.cache.set_raw(gate_path, pass_number, cycles, df)
+            logger.info(f"💾 Cached raw DataFrame ({len(df)} rows)")
+        
+        # --- PROCESS WITH CURRENT BIN SIZE ---
+        # (df is already loaded - either from cache or from source above)
+        
+        # Load gate geometry
         gate_gdf = _load_gate_gdf(gate_path)
         strait_name = self._extract_strait_name(gate_path)
-        
-        # 2. Load satellite data
-        ds = self._load_filtered_cycles(
-            cycles=cycles,
-            gate_path=gate_path,
-            pass_number=pass_number,
-        )
-        
-        if ds is None or ds.sizes.get("time", 0) == 0:
-            logger.warning(f"No data found for pass {pass_number}")
-            return None
-        
-        # 3. Interpolate and add geoid
-        geoid_values = self._interpolate_geoid(
-            ds["latitude"].values,
-            ds["longitude"].values,
-        )
-        
-        # 4. Build DataFrame with DOT
-        df = self._build_pass_dataframe(ds, geoid_values, pass_number)
-        
-        if df is None or len(df) == 0:
-            logger.warning(f"Empty DataFrame for pass {pass_number}")
-            return None
         
         # 5. Build gate profile points (for reference)
         gate_lon_pts, gate_lat_pts, _ = self._get_gate_profile_points(gate_gdf)
@@ -214,7 +488,7 @@ class SLCCIService:
         # 6. Build DOT matrix using LONGITUDE BINNING (for slope time series)
         dot_matrix, time_periods, lon_centers, x_km = self._build_dot_matrix(
             df, gate_lon_pts, gate_lat_pts, 
-            lon_bin_size=self.config.lon_bin_size
+            lon_bin_size=bin_size
         )
         
         # Use lon_centers for profiles instead of gate points
@@ -227,15 +501,22 @@ class SLCCIService:
         # 8. Compute profile mean using POOLED method (all observations, not mean-of-means)
         # This gives equal weight to each observation, not each time period
         profile_mean, _, _ = self._build_mean_profile_pooled(
-            df, lon_bin_size=self.config.lon_bin_size
+            df, lon_bin_size=bin_size
         )
+        
+        # 9. Build monthly climatology profiles (same bin size for consistency)
+        monthly_profiles, monthly_lon_centers, monthly_x_km = self._build_monthly_climatology_profiles(
+            df, lon_bin_size=bin_size
+        )
+        
         time_array = np.array([pd.Timestamp(str(p)) for p in time_periods])
         
-        satellite = ds.attrs.get("satellite_type", "J2")
+        # Get satellite from ds if available, otherwise default
+        satellite = ds.attrs.get("satellite_type", "J2") if ds is not None else self.config.satellite
         
         logger.info(f"Loaded {len(df)} observations for pass {pass_number}")
         
-        return PassData(
+        pass_data = PassData(
             pass_number=pass_number,
             strait_name=strait_name,
             satellite=satellite,
@@ -248,7 +529,16 @@ class SLCCIService:
             profile_mean=profile_mean,
             dot_matrix=dot_matrix,
             time_array=time_array,
+            monthly_profiles=monthly_profiles,
+            monthly_lon_centers=monthly_lon_centers,
+            monthly_x_km=monthly_x_km,
         )
+        
+        # --- STORE IN PROCESSED CACHE ---
+        self.cache.set_processed(gate_path, pass_number, cycles, bin_size, pass_data)
+        logger.info(f"💾 Cached processed PassData (bin_size={bin_size}°)")
+        
+        return pass_data
     
     @log_call(logger)
     def find_closest_pass(
@@ -859,6 +1149,100 @@ class SLCCIService:
                     f"(mean {obs_count[obs_count > 0].mean():.1f} obs/bin)")
         
         return profile_mean, lon_centers, x_km
+    
+    def _build_monthly_climatology_profiles(
+        self,
+        df: pd.DataFrame,
+        lon_bin_size: float = 0.1,
+    ) -> Tuple[Dict[int, np.ndarray], np.ndarray, np.ndarray]:
+        """
+        Build monthly climatological DOT profiles.
+        
+        Aggregates ALL observations by MONTH (1-12), regardless of year.
+        This creates a climatological view: "What does January look like on average?"
+        
+        Parameters
+        ----------
+        df : pd.DataFrame
+            DataFrame with 'lon', 'lat', 'dot', 'month' columns
+        lon_bin_size : float
+            Longitude bin size in degrees (uses config.lon_bin_size by default)
+            
+        Returns
+        -------
+        monthly_profiles : Dict[int, np.ndarray]
+            Dict mapping month (1-12) to mean DOT profile
+        lon_centers : np.ndarray
+            Center longitude of each bin
+        x_km : np.ndarray
+            Distance in km from first bin
+        """
+        # Determine longitude range from DATA
+        lon_min = df["lon"].min()
+        lon_max = df["lon"].max()
+        
+        # Handle dateline crossing
+        if lon_max - lon_min > 180:
+            logger.warning(f"[_build_monthly_climatology_profiles] Dateline crossing detected")
+            df = df.copy()
+            df.loc[df["lon"] < 0, "lon"] += 360
+            lon_min = df["lon"].min()
+            lon_max = df["lon"].max()
+        
+        # Create fixed longitude bins (larger for smoother climatology)
+        lon_bins = np.arange(lon_min, lon_max + lon_bin_size, lon_bin_size)
+        lon_centers = (lon_bins[:-1] + lon_bins[1:]) / 2
+        n_lon_bins = len(lon_centers)
+        
+        # Prepare df copy with bin assignment
+        df_copy = df.copy()
+        df_copy["lon_bin"] = pd.cut(
+            df_copy["lon"],
+            bins=lon_bins,
+            labels=False,
+            include_lowest=True
+        )
+        
+        # Build profile for each month (1-12)
+        monthly_profiles = {}
+        
+        for month in range(1, 13):
+            month_data = df_copy[df_copy["month"] == month]
+            
+            if month_data.empty:
+                monthly_profiles[month] = np.full(n_lon_bins, np.nan)
+                continue
+            
+            # Pool all observations for this month (across all years)
+            binned = month_data.groupby("lon_bin")["dot"].mean()
+            
+            profile = np.full(n_lon_bins, np.nan, dtype=float)
+            for bin_idx in binned.index:
+                if pd.notna(bin_idx) and int(bin_idx) < n_lon_bins:
+                    profile[int(bin_idx)] = binned[bin_idx]
+            
+            monthly_profiles[month] = profile
+            
+            # Log stats
+            n_obs = len(month_data)
+            n_years = month_data["year"].nunique()
+            valid_bins = np.sum(np.isfinite(profile))
+            logger.debug(f"Month {month}: {n_obs} obs from {n_years} years → {valid_bins}/{n_lon_bins} bins")
+        
+        # Calculate distance in km
+        R_earth = 6371.0
+        mean_lat = df["lat"].mean()
+        lat_rad = np.deg2rad(mean_lat)
+        lon_rad = np.deg2rad(lon_centers)
+        dlon = lon_rad - lon_rad[0]
+        x_km = R_earth * dlon * np.cos(lat_rad)
+        
+        # Summary log
+        months_with_data = sum(1 for m, p in monthly_profiles.items() if np.any(np.isfinite(p)))
+        logger.info(f"Monthly climatology: {months_with_data}/12 months have data, "
+                    f"{n_lon_bins} bins of {lon_bin_size}°")
+        
+        return monthly_profiles, lon_centers, x_km
     
     def _compute_slope_series(
         self,

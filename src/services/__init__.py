@@ -54,14 +54,22 @@ Usage:
 from src.services.gate_service import GateService
 from src.services.data_service import DataService
 from src.services.analysis_service import AnalysisService
-from src.services.slcci_service import SLCCIService, SLCCIConfig, PassData
+from src.services.slcci_service import SLCCIService, SLCCIConfig, PassData, CacheConfig, SLCCICache
 from src.services.cmems_service import CMEMSService, CMEMSConfig
 from src.services.cmems_service import PassData as CMEMSPassData
 from src.services.cmems_l4_service import CMEMSL4Service, CMEMSL4Config, CMEMSL4PassData
 from src.services.dtu_service import DTUService, DTUConfig, DTUPassData
 
-# New services (recovered from VS Code History)
-from src.services.cache_service import DataCache, get_cache, cache_pass_data, load_cached_pass_data, is_cached
+# Intelligent cache (shared across services)
+from src.services.intelligent_cache import (
+    IntelligentCache,
+    CacheConfig as IntelligentCacheConfig,
+    get_intelligent_cache,
+    clear_global_cache,
+    save_global_cache,
+)
+
+# Bathymetry and Transport services
 from src.services.bathymetry_service import BathymetryService, BathymetryProfile
 from src.services.transport_service import (
     VolumeTransportResult,
@@ -69,6 +77,20 @@ from src.services.transport_service import (
     compute_segment_widths,
     calculate_volume_transport,
 )
+
+# Legacy cache - DEPRECATED, use IntelligentCache instead
+# Keeping imports for backward compatibility but will be removed
+try:
+    from src.services.cache_service import DataCache, get_cache, cache_pass_data, load_cached_pass_data, is_cached
+    _LEGACY_CACHE_AVAILABLE = True
+except ImportError:
+    _LEGACY_CACHE_AVAILABLE = False
+    # Create stubs for backward compatibility
+    DataCache = IntelligentCache  # Alias to new cache
+    def get_cache(): return get_intelligent_cache()
+    def cache_pass_data(*args, **kwargs): pass
+    def load_cached_pass_data(*args, **kwargs): return None
+    def is_cached(*args, **kwargs): return False
 
 __all__ = [
     # Core services
@@ -79,6 +101,8 @@ __all__ = [
     "SLCCIService",
     "SLCCIConfig",
     "PassData",
+    "CacheConfig",  # SLCCI intelligent cache configuration
+    "SLCCICache",   # SLCCI intelligent cache
     "CMEMSService",  # L3 along-track
     "CMEMSConfig",
     "CMEMSPassData",
@@ -89,7 +113,13 @@ __all__ = [
     "DTUService",
     "DTUConfig",
     "DTUPassData",
-    # Cache service
+    # Intelligent cache (shared) - PRIMARY CACHE SYSTEM
+    "IntelligentCache",
+    "IntelligentCacheConfig",
+    "get_intelligent_cache",
+    "clear_global_cache",
+    "save_global_cache",
+    # Legacy cache - DEPRECATED (kept for backward compatibility)
     "DataCache",
     "get_cache",
     "cache_pass_data",
