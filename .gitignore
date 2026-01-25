@@ -125,3 +125,7 @@ site/
 references.bib
 *.log
 config/credentials.yaml
+
+# Intelligent cache (large binary files)
+data/cache/intelligent/*.pkl
+

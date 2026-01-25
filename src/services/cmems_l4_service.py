@@ -369,6 +369,7 @@ class CMEMSL4Service:
         config: CMEMSL4Config,
         progress_callback: Optional[callable] = None,
         force_reload: bool = False,
+        use_cache: bool = True,
     ) -> Optional[CMEMSL4PassData]:
         """
         Load CMEMS L4 gridded data for a gate via API.
@@ -386,6 +387,8 @@ class CMEMSL4Service:
             Callback(progress, message) for UI updates
         force_reload : bool
             If True, bypass cache and reload from API
+        use_cache : bool
+            If False, bypass cache entirely (sidebar manages its own cache)
         
         Returns
         -------
@@ -406,8 +409,11 @@ class CMEMSL4Service:
         
         logger.info(f"Loading CMEMS L4 data for {strait_name}")
         
+        # Skip cache if use_cache=False (sidebar manages its own cache)
+        skip_cache = not use_cache or force_reload
+        
         # --- CHECK L2 CACHE (processed) ---
-        if not force_reload:
+        if not skip_cache:
             cached_result = self._cache.get_processed(
                 self.SERVICE_NAME, cache_key, n_gate_pts=config.n_gate_pts
             )
@@ -468,6 +474,8 @@ class CMEMSL4Service:
             
             # --- STORE IN L1 CACHE ---
             self._cache.set_raw(self.SERVICE_NAME, cache_key, ds)
+            # Force save to disk for persistence
+            self._cache.save_to_disk()
             logger.info(f"💾 Cached raw xarray Dataset from API")
         
         # --- PROCESS (from cached or fresh ds) ---
@@ -612,6 +620,8 @@ class CMEMSL4Service:
         self._cache.set_processed(
             self.SERVICE_NAME, cache_key, pass_data, n_gate_pts=config.n_gate_pts
         )
+        # Force save to disk for persistence across sessions
+        self._cache.save_to_disk()
         logger.info(f"💾 Cached processed CMEMSL4PassData (n_gate_pts={config.n_gate_pts})")
         
         return pass_data
