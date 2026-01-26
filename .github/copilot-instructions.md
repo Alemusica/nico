@@ -1,6 +1,19 @@
 # 🤖 Copilot/AI Agent Instructions
 
-> ⚠️ **CRITICAL: READ THIS ENTIRE FILE FIRST** - Every agent, every session, every time.
+> ⚠️ **CRITICAL: READ GATE.md FIRST** - Every agent, every session, every time.
+
+---
+
+## 🚨 STEP 0: READ THE GATE (MANDATORY!)
+
+**Before doing ANYTHING, read the main GATE file:** `GATE.md`
+
+The GATE.md file is your single source of truth containing:
+- Complete architecture (macro view)
+- Current project state
+- Known issues and gotchas
+- File map with line counts
+- Common task patterns
 
 ---
 

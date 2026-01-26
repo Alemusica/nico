@@ -1,0 +1,24 @@
+#!/bin/bash
+# Pre-commit hook: Remind to update GATE.md
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+echo -e "${YELLOW}=== GATE.md UPDATE REMINDER ===${NC}"
+
+if git diff --cached --name-only | grep -q "GATE.md"; then
+    echo -e "${GREEN}GATE.md is included in this commit${NC}"
+else
+    echo -e "${YELLOW}Warning: GATE.md is NOT in this commit${NC}"
+    echo "Consider updating GATE.md if you made significant changes"
+fi
+
+TODAY=$(date +%Y-%m-%d)
+if [ -f "GATE.md" ]; then
+    sed -i '' "s/Last Updated: .*/Last Updated: $TODAY/" GATE.md 2>/dev/null
+    git add GATE.md 2>/dev/null
+fi
+
+exit 0
