@@ -554,65 +554,6 @@ def export_monthly_profiles_grid(
     return buf.getvalue()
 
 
-def export_velocity_hovmoller(
-    v_perp: np.ndarray,
-    x_km: np.ndarray,
-    time_array: np.ndarray,
-    gate_name: str,
-    dataset: str = "cmems_l4",
-    dpi: int = 300
-) -> bytes:
-    """
-    Generate Hovmöller diagram (time vs distance) as PNG bytes.
-    
-    Args:
-        v_perp: Perpendicular velocity (m/s), shape (n_pts, n_time)
-        x_km: Distance along gate (km)
-        time_array: Time values
-    """
-    time_pd = pd.to_datetime(time_array)
-    start_year = time_pd.min().year
-    end_year = time_pd.max().year
-    n_obs = v_perp.shape[1]
-    
-    fig, ax = plt.subplots(figsize=(14, 8), dpi=dpi)
-    
-    # Convert to cm/s for display
-    v_cm_s = v_perp * 100
-    
-    # Create mesh grid
-    time_num = mdates.date2num(time_pd)
-    X, Y = np.meshgrid(time_num, x_km)
-    
-    # Plot
-    vmax = np.nanpercentile(np.abs(v_cm_s), 98)
-    pcm = ax.pcolormesh(X, Y, v_cm_s, cmap='RdBu_r', vmin=-vmax, vmax=vmax, shading='auto')
-    
-    # Colorbar
-    cbar = plt.colorbar(pcm, ax=ax, label='Perpendicular Velocity (cm/s)')
-    
-    # Labels
-    title = create_figure_title(gate_name, "Velocity Hovmöller Diagram", dataset,
-                                start_year, end_year, n_obs)
-    ax.set_title(title, fontsize=11, fontweight='bold')
-    ax.set_xlabel('Time', fontsize=10)
-    ax.set_ylabel('Distance along gate (km)', fontsize=10)
-    
-    # Format x-axis
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
-    ax.xaxis.set_major_locator(mdates.YearLocator(2))
-    
-    plt.tight_layout()
-    
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                facecolor='white', edgecolor='none')
-    plt.close(fig)
-    buf.seek(0)
-    
-    return buf.getvalue()
-
-
 def export_bathymetry_profile(
     depth_profile: np.ndarray,
     x_km: np.ndarray,
@@ -716,31 +657,90 @@ def export_salt_flux_timeseries(
 
 
 # ==============================================================================
-# NEW EXPORT FUNCTIONS (7 nuove funzioni richieste)
+# EXPORT FUNCTIONS - Richieste specifiche utente
 # ==============================================================================
 
-def export_mean_dot_profile(
-    dot_mean: np.ndarray,
+def export_slope_timeline(
+    slope_values: np.ndarray,
+    time_array: np.ndarray,
+    gate_name: str,
+    dataset: str = "cmems_l4",
+    dpi: int = 300
+) -> bytes:
+    """
+    📈 Slope Timeline - Pendenza DOT nel tempo.
+    Mostra l'evoluzione della slope (mm/km) nel tempo.
+    """
+    time_pd = pd.to_datetime(time_array)
+    start_year = time_pd.min().year
+    end_year = time_pd.max().year
+    
+    fig, ax = plt.subplots(figsize=(14, 6), dpi=dpi)
+    
+    # Slope in mm/km
+    slope_mm_km = slope_values * 1000  # m/km -> mm/km
+    
+    ax.plot(time_pd, slope_mm_km, 'b-', linewidth=0.8, alpha=0.7)
+    
+    # Rolling mean (30 days)
+    df = pd.DataFrame({'time': time_pd, 'slope': slope_mm_km}).set_index('time')
+    rolling = df['slope'].rolling(window=30, center=True).mean()
+    ax.plot(rolling.index, rolling.values, 'r-', linewidth=2, label='30-day mean')
+    
+    # Mean line
+    mean_slope = np.nanmean(slope_mm_km)
+    ax.axhline(y=mean_slope, color='green', linestyle='--', linewidth=1.5, 
+               label=f'Mean: {mean_slope:.2f} mm/km')
+    ax.axhline(y=0, color='gray', linestyle='-', linewidth=0.5)
+    
+    title = f"{gate_name} - DOT Slope Timeline\n{DATASET_FULL_NAMES.get(dataset, dataset)}\n{start_year}-{end_year}"
+    ax.set_title(title, fontsize=11, fontweight='bold')
+    ax.set_xlabel('Time', fontsize=10)
+    ax.set_ylabel('Slope (mm/km)', fontsize=10)
+    ax.legend(loc='best')
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
+    ax.xaxis.set_major_locator(mdates.YearLocator())
+    
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def export_dot_profile_along_gate(
+    dot_matrix: np.ndarray,
     x_km: np.ndarray,
     gate_name: str,
     dataset: str = "cmems_l4",
-    dot_std: np.ndarray = None,
     start_year: int = None,
     end_year: int = None,
-    n_obs: int = None,
     dpi: int = 300
 ) -> bytes:
-    """Generate Mean DOT Profile with ±std shading."""
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=dpi)
+    """
+    📊 DOT Profile Along Gate - Profilo medio DOT con ±std.
+    """
+    dot_mean = np.nanmean(dot_matrix, axis=1)
+    dot_std = np.nanstd(dot_matrix, axis=1)
     
-    ax.plot(x_km, dot_mean, 'b-', linewidth=2, label='Mean DOT')
+    fig, ax = plt.subplots(figsize=(12, 6), dpi=dpi)
     
-    if dot_std is not None:
-        ax.fill_between(x_km, dot_mean - dot_std, dot_mean + dot_std,
-                       alpha=0.3, color='blue', label='±1 std')
+    ax.plot(x_km, dot_mean, 'darkblue', linewidth=2, label='Mean DOT')
+    ax.fill_between(x_km, dot_mean - dot_std, dot_mean + dot_std,
+                   alpha=0.3, color='blue', label='±1 std')
     
-    title = create_figure_title(gate_name, "Mean DOT Profile", dataset,
-                                start_year, end_year, n_obs)
+    # Linear regression
+    valid = ~np.isnan(dot_mean)
+    if valid.sum() > 2:
+        slope, intercept, r_value, _, _ = stats.linregress(x_km[valid], dot_mean[valid])
+        ax.plot(x_km, slope * x_km + intercept, 'r--', linewidth=1.5, alpha=0.8,
+               label=f'Fit: slope={slope*1000:.2f} mm/km, R²={r_value**2:.3f}')
+    
+    title = f"{gate_name} - DOT Profile Along Gate\n{DATASET_FULL_NAMES.get(dataset, dataset)}"
+    if start_year and end_year:
+        title += f"\n{start_year}-{end_year}"
     ax.set_title(title, fontsize=11, fontweight='bold')
     ax.set_xlabel('Distance along gate (km)', fontsize=10)
     ax.set_ylabel('DOT (m)', fontsize=10)
@@ -749,180 +749,98 @@ def export_mean_dot_profile(
     
     plt.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                facecolor='white', edgecolor='none')
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
 
 
-def export_gate_spatial_map(
+def export_spatial_map(
     gate_lon: np.ndarray,
     gate_lat: np.ndarray,
     gate_name: str,
     dpi: int = 300
 ) -> bytes:
-    """Generate Gate Spatial Map with coastlines using cartopy."""
+    """
+    🗺️ Spatial Map - Mappa geografica con coastlines, confini e griglia lat/lon.
+    """
     try:
         import cartopy.crs as ccrs
         import cartopy.feature as cfeature
+        from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
         
-        # Calculate map bounds with padding
-        lon_min, lon_max = gate_lon.min() - 5, gate_lon.max() + 5
-        lat_min, lat_max = gate_lat.min() - 3, gate_lat.max() + 3
+        # Calculate bounds
+        lon_min, lon_max = gate_lon.min() - 10, gate_lon.max() + 10
+        lat_min, lat_max = gate_lat.min() - 5, gate_lat.max() + 5
         
-        # Use NorthPolarStereo for Arctic gates
-        if lat_min > 60:
-            proj = ccrs.NorthPolarStereo()
-            extent_proj = ccrs.PlateCarree()
+        # Projection
+        central_lon = (lon_min + lon_max) / 2
+        central_lat = (lat_min + lat_max) / 2
+        
+        if central_lat > 60:
+            proj = ccrs.NorthPolarStereo(central_longitude=central_lon)
         else:
-            proj = ccrs.PlateCarree()
-            extent_proj = ccrs.PlateCarree()
+            proj = ccrs.LambertConformal(central_longitude=central_lon, central_latitude=central_lat)
         
-        fig, ax = plt.subplots(figsize=(10, 8), dpi=dpi, subplot_kw={'projection': proj})
+        fig, ax = plt.subplots(figsize=(12, 10), dpi=dpi, subplot_kw={'projection': proj})
         
-        # Set extent
-        if lat_min > 60:
-            ax.set_extent([-180, 180, max(60, lat_min - 5), 90], crs=extent_proj)
+        # Extent
+        if central_lat > 60:
+            ax.set_extent([lon_min, lon_max, max(55, lat_min), 90], crs=ccrs.PlateCarree())
         else:
-            ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=extent_proj)
+            ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
         
-        # Add features
-        ax.add_feature(cfeature.LAND, facecolor='lightgray')
-        ax.add_feature(cfeature.OCEAN, facecolor='lightblue', alpha=0.5)
-        ax.add_feature(cfeature.COASTLINE, linewidth=0.5)
-        ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.3)
-        ax.gridlines(draw_labels=True, alpha=0.3)
+        # Features
+        ax.add_feature(cfeature.LAND, facecolor='#f0e68c', edgecolor='black', linewidth=0.5)
+        ax.add_feature(cfeature.OCEAN, facecolor='#add8e6')
+        ax.add_feature(cfeature.COASTLINE, linewidth=1, edgecolor='black')
+        ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5, edgecolor='gray')
+        ax.add_feature(cfeature.RIVERS, linewidth=0.5, edgecolor='blue', alpha=0.5)
+        ax.add_feature(cfeature.LAKES, facecolor='lightblue', edgecolor='blue', linewidth=0.3)
         
-        # Plot gate
-        ax.plot(gate_lon, gate_lat, 'r-', linewidth=3, transform=ccrs.PlateCarree(),
-               label=f'{gate_name} Gate', zorder=10)
-        ax.scatter(gate_lon[0], gate_lat[0], c='green', s=100, marker='o',
-                  transform=ccrs.PlateCarree(), label='Start', zorder=11)
-        ax.scatter(gate_lon[-1], gate_lat[-1], c='red', s=100, marker='s',
-                  transform=ccrs.PlateCarree(), label='End', zorder=11)
+        # Gridlines with labels
+        gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle='--')
+        gl.top_labels = False
+        gl.right_labels = False
+        gl.xformatter = LONGITUDE_FORMATTER
+        gl.yformatter = LATITUDE_FORMATTER
+        gl.xlabel_style = {'size': 9}
+        gl.ylabel_style = {'size': 9}
         
-        ax.set_title(f'{gate_name} - Gate Location', fontsize=12, fontweight='bold')
-        ax.legend(loc='lower left')
+        # Plot gate line
+        ax.plot(gate_lon, gate_lat, 'r-', linewidth=4, transform=ccrs.PlateCarree(),
+               label=f'{gate_name}', zorder=10)
+        
+        # Start/End markers
+        ax.scatter(gate_lon[0], gate_lat[0], c='lime', s=150, marker='o', edgecolor='black',
+                  transform=ccrs.PlateCarree(), label=f'Start ({gate_lon[0]:.1f}°, {gate_lat[0]:.1f}°)', zorder=11)
+        ax.scatter(gate_lon[-1], gate_lat[-1], c='red', s=150, marker='s', edgecolor='black',
+                  transform=ccrs.PlateCarree(), label=f'End ({gate_lon[-1]:.1f}°, {gate_lat[-1]:.1f}°)', zorder=11)
+        
+        ax.set_title(f'{gate_name} - Geographic Location', fontsize=14, fontweight='bold')
+        ax.legend(loc='lower left', fontsize=9)
         
     except ImportError:
-        # Fallback without cartopy
-        fig, ax = plt.subplots(figsize=(10, 8), dpi=dpi)
-        ax.plot(gate_lon, gate_lat, 'r-', linewidth=2, label=f'{gate_name} Gate')
-        ax.scatter(gate_lon[0], gate_lat[0], c='green', s=100, marker='o', label='Start')
-        ax.scatter(gate_lon[-1], gate_lat[-1], c='red', s=100, marker='s', label='End')
-        ax.set_xlabel('Longitude')
-        ax.set_ylabel('Latitude')
-        ax.set_title(f'{gate_name} - Gate Location', fontsize=12, fontweight='bold')
+        # Fallback senza cartopy
+        fig, ax = plt.subplots(figsize=(12, 10), dpi=dpi)
+        ax.plot(gate_lon, gate_lat, 'r-', linewidth=3, label=gate_name)
+        ax.scatter(gate_lon[0], gate_lat[0], c='lime', s=150, marker='o', edgecolor='black', label='Start')
+        ax.scatter(gate_lon[-1], gate_lat[-1], c='red', s=150, marker='s', edgecolor='black', label='End')
+        ax.set_xlabel('Longitude (°)', fontsize=10)
+        ax.set_ylabel('Latitude (°)', fontsize=10)
+        ax.set_title(f'{gate_name} - Geographic Location', fontsize=14, fontweight='bold')
         ax.legend()
         ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                facecolor='white', edgecolor='none')
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
 
 
-def export_velocity_comparison_timeseries(
-    v_perp_mean_ts: np.ndarray,
-    time_array: np.ndarray,
-    gate_name: str,
-    v_geo_mean_ts: np.ndarray = None,
-    dataset: str = "cmems_l4",
-    dpi: int = 300
-) -> bytes:
-    """Generate v_perp vs v_geo comparison time series."""
-    time_pd = pd.to_datetime(time_array)
-    
-    fig, ax = plt.subplots(figsize=(12, 6), dpi=dpi)
-    
-    ax.plot(time_pd, v_perp_mean_ts, 'b-', linewidth=1, alpha=0.7, label='v_perp (cm/s)')
-    
-    if v_geo_mean_ts is not None:
-        ax.plot(time_pd, v_geo_mean_ts, 'r-', linewidth=1, alpha=0.7, label='v_geo (cm/s)')
-    
-    ax.axhline(y=0, color='gray', linestyle='--', linewidth=1)
-    
-    title = f"{gate_name} - Mean Cross-Gate Velocity [{dataset.upper()}]"
-    ax.set_title(title, fontsize=11, fontweight='bold')
-    ax.set_xlabel('Time', fontsize=10)
-    ax.set_ylabel('Velocity (cm/s)', fontsize=10)
-    ax.legend(loc='best')
-    ax.grid(True, alpha=0.3)
-    
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
-    ax.xaxis.set_major_locator(mdates.YearLocator())
-    
-    plt.tight_layout()
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                facecolor='white', edgecolor='none')
-    plt.close(fig)
-    buf.seek(0)
-    return buf.getvalue()
-
-
-def export_monthly_velocity_grid(
-    v_perp: np.ndarray,
-    x_km: np.ndarray,
-    time_array: np.ndarray,
-    gate_name: str,
-    dataset: str = "cmems_l4",
-    dpi: int = 300
-) -> bytes:
-    """Generate 3x4 Monthly Velocity Grid with slope and R²."""
-    from scipy import stats
-    
-    time_pd = pd.to_datetime(time_array)
-    months_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    
-    fig, axes = plt.subplots(3, 4, figsize=(16, 12), dpi=dpi)
-    axes = axes.flatten()
-    
-    for month_idx in range(12):
-        ax = axes[month_idx]
-        month_mask = time_pd.month == (month_idx + 1)
-        
-        if month_mask.sum() > 0:
-            v_month = v_perp[:, month_mask]
-            v_mean = np.nanmean(v_month, axis=1) * 100  # cm/s
-            v_std = np.nanstd(v_month, axis=1) * 100
-            
-            ax.plot(x_km, v_mean, 'b-', linewidth=1.5)
-            ax.fill_between(x_km, v_mean - v_std, v_mean + v_std, alpha=0.3, color='blue')
-            
-            # Linear regression for slope and R²
-            valid = ~np.isnan(v_mean)
-            if valid.sum() > 2:
-                slope, intercept, r_value, p_val, std_err = stats.linregress(x_km[valid], v_mean[valid])
-                ax.plot(x_km, slope * x_km + intercept, 'r--', linewidth=1, alpha=0.7)
-                ax.text(0.05, 0.95, f'slope={slope:.3f}\nR²={r_value**2:.3f}',
-                       transform=ax.transAxes, fontsize=8, verticalalignment='top',
-                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-        
-        ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
-        ax.set_title(months_names[month_idx], fontsize=10, fontweight='bold')
-        ax.set_xlabel('Distance (km)' if month_idx >= 8 else '', fontsize=8)
-        ax.set_ylabel('Velocity (cm/s)' if month_idx % 4 == 0 else '', fontsize=8)
-        ax.grid(True, alpha=0.3)
-    
-    fig.suptitle(f'{gate_name} - Monthly Velocity Profiles [{dataset.upper()}]',
-                fontsize=14, fontweight='bold', y=1.02)
-    plt.tight_layout()
-    
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                facecolor='white', edgecolor='none')
-    plt.close(fig)
-    buf.seek(0)
-    return buf.getvalue()
-
-
-def export_monthly_dot_analysis(
+def export_monthly_dot_profiles_grid(
     dot_matrix: np.ndarray,
     x_km: np.ndarray,
     time_array: np.ndarray,
@@ -930,10 +848,10 @@ def export_monthly_dot_analysis(
     dataset: str = "cmems_l4",
     dpi: int = 300
 ) -> bytes:
-    """Generate 3x4 Monthly DOT Analysis grid."""
+    """
+    📊 Monthly DOT Analysis (3×4) - 12 plot mensili con slope (mm/km) e R².
+    """
     time_pd = pd.to_datetime(time_array)
-    months_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     
     fig, axes = plt.subplots(3, 4, figsize=(16, 12), dpi=dpi)
     axes = axes.flatten()
@@ -947,61 +865,209 @@ def export_monthly_dot_analysis(
             dot_mean = np.nanmean(dot_month, axis=1)
             dot_std = np.nanstd(dot_month, axis=1)
             
+            # Plot mean with std
             ax.plot(x_km, dot_mean, 'darkblue', linewidth=1.5)
-            ax.fill_between(x_km, dot_mean - dot_std, dot_mean + dot_std,
-                           alpha=0.3, color='blue')
+            ax.fill_between(x_km, dot_mean - dot_std, dot_mean + dot_std, alpha=0.3, color='blue')
+            
+            # Linear regression
+            valid = ~np.isnan(dot_mean)
+            if valid.sum() > 2:
+                slope, intercept, r_value, _, _ = stats.linregress(x_km[valid], dot_mean[valid])
+                slope_mm_km = slope * 1000  # mm/km
+                ax.plot(x_km, slope * x_km + intercept, 'r--', linewidth=1, alpha=0.7)
+                ax.text(0.05, 0.95, f'slope={slope_mm_km:.2f} mm/km\nR²={r_value**2:.3f}',
+                       transform=ax.transAxes, fontsize=8, verticalalignment='top',
+                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
         
-        ax.set_title(months_names[month_idx], fontsize=10, fontweight='bold')
+        ax.set_title(MONTH_ABBREV[month_idx], fontsize=10, fontweight='bold')
         ax.set_xlabel('Distance (km)' if month_idx >= 8 else '', fontsize=8)
         ax.set_ylabel('DOT (m)' if month_idx % 4 == 0 else '', fontsize=8)
         ax.grid(True, alpha=0.3)
     
-    fig.suptitle(f'{gate_name} - Monthly DOT Analysis [{dataset.upper()}]',
+    fig.suptitle(f'{gate_name} - Monthly DOT Profiles [{dataset.upper()}]',
                 fontsize=14, fontweight='bold', y=1.02)
     plt.tight_layout()
     
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                facecolor='white', edgecolor='none')
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
 
 
-def export_salinity_density_profile(
-    salinity_profile: np.ndarray,
-    density_profile: np.ndarray,
+def export_monthly_velocity_profiles_grid(
+    v_perp: np.ndarray,
     x_km: np.ndarray,
+    time_array: np.ndarray,
     gate_name: str,
+    dataset: str = "cmems_l4",
     dpi: int = 300
 ) -> bytes:
-    """Generate Salinity & Density profiles plot."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), dpi=dpi)
+    """
+    📊 Velocity Profile Along Gate (12 plot mensili) con slope e R².
+    Colori consistenti con Streamlit.
+    """
+    time_pd = pd.to_datetime(time_array)
     
-    # Salinity
-    ax1.plot(x_km, salinity_profile, 'g-', linewidth=2)
-    ax1.set_xlabel('Distance along gate (km)', fontsize=10)
-    ax1.set_ylabel('Salinity (PSU)', fontsize=10)
-    ax1.set_title(f'{gate_name} - Salinity Profile', fontsize=11, fontweight='bold')
-    ax1.grid(True, alpha=0.3)
+    fig, axes = plt.subplots(3, 4, figsize=(16, 12), dpi=dpi)
+    axes = axes.flatten()
     
-    # Density
-    ax2.plot(x_km, density_profile, 'purple', linewidth=2)
-    ax2.set_xlabel('Distance along gate (km)', fontsize=10)
-    ax2.set_ylabel('Density (kg/m³)', fontsize=10)
-    ax2.set_title(f'{gate_name} - Density Profile', fontsize=11, fontweight='bold')
-    ax2.grid(True, alpha=0.3)
+    # Color scheme matching Streamlit
+    positive_color = '#1f77b4'  # Blue for northward
+    negative_color = '#d62728'  # Red for southward
+    
+    for month_idx in range(12):
+        ax = axes[month_idx]
+        month_mask = time_pd.month == (month_idx + 1)
+        
+        if month_mask.sum() > 0:
+            v_month = v_perp[:, month_mask]
+            v_mean = np.nanmean(v_month, axis=1) * 100  # cm/s
+            v_std = np.nanstd(v_month, axis=1) * 100
+            
+            # Color based on mean direction
+            color = positive_color if np.nanmean(v_mean) >= 0 else negative_color
+            
+            ax.plot(x_km, v_mean, color=color, linewidth=1.5)
+            ax.fill_between(x_km, v_mean - v_std, v_mean + v_std, alpha=0.3, color=color)
+            
+            # Linear regression
+            valid = ~np.isnan(v_mean)
+            if valid.sum() > 2:
+                slope, intercept, r_value, _, _ = stats.linregress(x_km[valid], v_mean[valid])
+                ax.plot(x_km, slope * x_km + intercept, 'k--', linewidth=1, alpha=0.7)
+                ax.text(0.05, 0.95, f'slope={slope:.4f}\nR²={r_value**2:.3f}',
+                       transform=ax.transAxes, fontsize=8, verticalalignment='top',
+                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        ax.axhline(y=0, color='gray', linestyle='-', linewidth=0.5)
+        ax.set_title(MONTH_ABBREV[month_idx], fontsize=10, fontweight='bold')
+        ax.set_xlabel('Distance (km)' if month_idx >= 8 else '', fontsize=8)
+        ax.set_ylabel('v (cm/s)' if month_idx % 4 == 0 else '', fontsize=8)
+        ax.grid(True, alpha=0.3)
+    
+    fig.suptitle(f'{gate_name} - Monthly Velocity Profiles [{dataset.upper()}]',
+                fontsize=14, fontweight='bold', y=1.02)
+    plt.tight_layout()
+    
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def export_velocity_comparison_timeseries(
+    v_perp: np.ndarray,
+    v_geo: np.ndarray,
+    time_array: np.ndarray,
+    gate_name: str,
+    dataset: str = "cmems_l4",
+    dpi: int = 300
+) -> bytes:
+    """
+    📈 Time Series: v_perp vs v_geo - Entrambe le velocità nello stesso plot.
+    """
+    time_pd = pd.to_datetime(time_array)
+    start_year = time_pd.min().year
+    end_year = time_pd.max().year
+    
+    # Mean along gate for each time step
+    v_perp_mean = np.nanmean(v_perp, axis=0) * 100  # cm/s
+    v_geo_mean = np.nanmean(v_geo, axis=0) * 100 if v_geo is not None else None
+    
+    fig, ax = plt.subplots(figsize=(14, 6), dpi=dpi)
+    
+    ax.plot(time_pd, v_perp_mean, 'b-', linewidth=0.8, alpha=0.7, label='v_perp')
+    if v_geo_mean is not None:
+        ax.plot(time_pd, v_geo_mean, 'r-', linewidth=0.8, alpha=0.7, label='v_geo')
+    
+    # Rolling means
+    df_perp = pd.DataFrame({'time': time_pd, 'v': v_perp_mean}).set_index('time')
+    rolling_perp = df_perp['v'].rolling(window=30, center=True).mean()
+    ax.plot(rolling_perp.index, rolling_perp.values, 'b-', linewidth=2, label='v_perp (30-day)')
+    
+    if v_geo_mean is not None:
+        df_geo = pd.DataFrame({'time': time_pd, 'v': v_geo_mean}).set_index('time')
+        rolling_geo = df_geo['v'].rolling(window=30, center=True).mean()
+        ax.plot(rolling_geo.index, rolling_geo.values, 'r-', linewidth=2, label='v_geo (30-day)')
+    
+    ax.axhline(y=0, color='gray', linestyle='--', linewidth=1)
+    
+    title = f"{gate_name} - Cross-Gate Velocity Comparison\n{DATASET_FULL_NAMES.get(dataset, dataset)}\n{start_year}-{end_year}"
+    ax.set_title(title, fontsize=11, fontweight='bold')
+    ax.set_xlabel('Time', fontsize=10)
+    ax.set_ylabel('Velocity (cm/s)', fontsize=10)
+    ax.legend(loc='best')
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
+    ax.xaxis.set_major_locator(mdates.YearLocator())
     
     plt.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                facecolor='white', edgecolor='none')
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
 
 
-def export_bathymetry_profile_fixed(
+def export_total_transport_timeseries(
+    transport_sv: np.ndarray,
+    time_array: np.ndarray,
+    gate_name: str,
+    dataset: str = "cmems_l4",
+    dpi: int = 300
+) -> bytes:
+    """
+    📈 Total Transport Time Series - Volume transport nel tempo.
+    Colorato come su Streamlit.
+    """
+    time_pd = pd.to_datetime(time_array)
+    start_year = time_pd.min().year
+    end_year = time_pd.max().year
+    n_obs = len(transport_sv[~np.isnan(transport_sv)])
+    
+    fig, ax = plt.subplots(figsize=(14, 6), dpi=dpi)
+    
+    # Color by sign (matching Streamlit)
+    positive_mask = transport_sv >= 0
+    
+    ax.fill_between(time_pd, 0, transport_sv, where=positive_mask, 
+                   color='#1f77b4', alpha=0.3, label='Northward')
+    ax.fill_between(time_pd, 0, transport_sv, where=~positive_mask, 
+                   color='#d62728', alpha=0.3, label='Southward')
+    ax.plot(time_pd, transport_sv, 'k-', linewidth=0.5, alpha=0.5)
+    
+    # Rolling mean
+    df = pd.DataFrame({'time': time_pd, 'transport': transport_sv}).set_index('time')
+    rolling = df['transport'].rolling(window=30, center=True).mean()
+    ax.plot(rolling.index, rolling.values, 'purple', linewidth=2, label='30-day mean')
+    
+    # Statistics
+    mean_val = np.nanmean(transport_sv)
+    std_val = np.nanstd(transport_sv)
+    ax.axhline(y=mean_val, color='green', linestyle='--', linewidth=1.5,
+               label=f'Mean: {mean_val:.2f} ± {std_val:.2f} Sv')
+    ax.axhline(y=0, color='gray', linestyle='-', linewidth=1)
+    
+    title = f"{gate_name} - Total Volume Transport\n{DATASET_FULL_NAMES.get(dataset, dataset)}\n{start_year}-{end_year} | N={n_obs}"
+    ax.set_title(title, fontsize=11, fontweight='bold')
+    ax.set_xlabel('Time', fontsize=10)
+    ax.set_ylabel('Volume Transport (Sv)', fontsize=10)
+    ax.legend(loc='best')
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
+    ax.xaxis.set_major_locator(mdates.YearLocator())
+    
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def export_bathymetry_profile_clean(
     depth_profile: np.ndarray,
     x_km: np.ndarray,
     gate_name: str,
@@ -1009,36 +1075,94 @@ def export_bathymetry_profile_fixed(
     gate_lat: np.ndarray = None,
     dpi: int = 300
 ) -> bytes:
-    """Generate Bathymetry profile with fixed Y-axis (no brown fill)."""
+    """
+    🏔️ Bathymetry Profile - Senza marrone, zero in alto.
+    """
     fig, ax = plt.subplots(figsize=(12, 5), dpi=dpi)
     
-    # Plot depth as line only (no fill)
-    ax.plot(x_km, -np.abs(depth_profile), 'navy', linewidth=2, label='Seafloor')
+    # Depth as positive values, zero at top
+    depth_positive = np.abs(depth_profile)
     
-    # Y-axis: fixed range based on max depth
-    max_depth = np.nanmax(np.abs(depth_profile))
-    ax.set_ylim(-max_depth * 1.1, 50)
+    # Plot seafloor line (blue/navy)
+    ax.plot(x_km, depth_positive, 'navy', linewidth=2)
+    ax.fill_between(x_km, depth_positive, depth_positive.max() * 1.1, 
+                   color='lightblue', alpha=0.3)
     
-    ax.axhline(y=0, color='lightblue', linewidth=2, label='Sea Level')
+    # Sea level at top (y=0)
+    ax.axhline(y=0, color='steelblue', linewidth=2, label='Sea Surface')
+    
+    # Invert y-axis so 0 is at top
+    ax.invert_yaxis()
+    ax.set_ylim(depth_positive.max() * 1.1, -50)  # Small buffer above sea level
     
     ax.set_xlabel('Distance along gate (km)', fontsize=10)
     ax.set_ylabel('Depth (m)', fontsize=10)
-    ax.set_title(f'{gate_name} - Bathymetry Profile', fontsize=12, fontweight='bold')
+    
+    title = f"{gate_name} - Bathymetry Profile\n{DATASET_FULL_NAMES['gebco']}"
+    if gate_lon is not None and gate_lat is not None:
+        title += f"\nStart: ({gate_lon[0]:.2f}°, {gate_lat[0]:.2f}°) → End: ({gate_lon[-1]:.2f}°, {gate_lat[-1]:.2f}°)"
+    ax.set_title(title, fontsize=11, fontweight='bold')
+    
     ax.legend(loc='lower right')
     ax.grid(True, alpha=0.3)
     
-    # Add coordinate labels if available
-    if gate_lon is not None and gate_lat is not None:
-        ax.text(0.02, 0.02, f'Start: ({gate_lon[0]:.2f}°, {gate_lat[0]:.2f}°)',
-               transform=ax.transAxes, fontsize=8, verticalalignment='bottom')
-        ax.text(0.98, 0.02, f'End: ({gate_lon[-1]:.2f}°, {gate_lat[-1]:.2f}°)',
-               transform=ax.transAxes, fontsize=8, verticalalignment='bottom',
-               horizontalalignment='right')
+    # Stats annotation
+    max_depth = np.nanmax(depth_positive)
+    mean_depth = np.nanmean(depth_positive)
+    ax.text(0.02, 0.02, f'Max: {max_depth:.0f} m\nMean: {mean_depth:.0f} m\nLength: {x_km.max():.0f} km',
+           transform=ax.transAxes, fontsize=9, verticalalignment='bottom',
+           bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     
     plt.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                facecolor='white', edgecolor='none')
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def export_salinity_density_along_gate(
+    salinity_profile: np.ndarray,
+    density_profile: np.ndarray,
+    x_km: np.ndarray,
+    gate_name: str,
+    dpi: int = 300
+) -> bytes:
+    """
+    🌡️ Salinity & Density Along Gate - Due pannelli.
+    """
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), dpi=dpi, sharex=True)
+    
+    # Salinity
+    ax1.plot(x_km, salinity_profile, 'g-', linewidth=2)
+    ax1.fill_between(x_km, salinity_profile.min() * 0.99, salinity_profile, 
+                    alpha=0.3, color='green')
+    ax1.set_ylabel('Salinity (PSU)', fontsize=10)
+    ax1.set_title(f'{gate_name} - Salinity Along Gate', fontsize=11, fontweight='bold')
+    ax1.grid(True, alpha=0.3)
+    
+    mean_sal = np.nanmean(salinity_profile)
+    ax1.axhline(y=mean_sal, color='darkgreen', linestyle='--', 
+               label=f'Mean: {mean_sal:.2f} PSU')
+    ax1.legend(loc='best')
+    
+    # Density
+    ax2.plot(x_km, density_profile, 'purple', linewidth=2)
+    ax2.fill_between(x_km, density_profile.min() * 0.999, density_profile,
+                    alpha=0.3, color='purple')
+    ax2.set_xlabel('Distance along gate (km)', fontsize=10)
+    ax2.set_ylabel('Density (kg/m³)', fontsize=10)
+    ax2.set_title(f'{gate_name} - Density Along Gate', fontsize=11, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    
+    mean_dens = np.nanmean(density_profile)
+    ax2.axhline(y=mean_dens, color='darkviolet', linestyle='--',
+               label=f'Mean: {mean_dens:.2f} kg/m³')
+    ax2.legend(loc='best')
+    
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
@@ -1083,32 +1207,48 @@ def generate_full_export(
     gate_data: Dict[str, Any],
     include_images: bool = True,
     include_csv: bool = True,
-    dpi: int = 300
+    dpi: int = 300,
+    # Checkbox options per selezionare quali export includere
+    export_options: Dict[str, bool] = None
 ) -> bytes:
     """
     Generate complete export ZIP with all images and CSV files.
     
     Args:
-        gate_data: Dictionary containing all gate data:
-            - gate_name: str
-            - dataset: str
-            - transport_sv: np.ndarray
-            - salt_flux_kg_s: np.ndarray (optional)
-            - time_array: np.ndarray
-            - v_perp: np.ndarray
-            - x_km: np.ndarray
-            - depth_profile: np.ndarray
-            - gate_lon: np.ndarray
-            - gate_lat: np.ndarray
-            - monthly_v_perp: Dict (optional)
-            - monthly_salt_flux: Dict (optional)
+        gate_data: Dictionary containing all gate data
         include_images: Whether to include PNG images
         include_csv: Whether to include CSV files
-        dpi: Image resolution
+        dpi: Image resolution (default 300)
+        export_options: Dict of export options (checkboxes)
+            - slope_timeline: 📈 Slope Timeline
+            - dot_profile: 📊 DOT Profile Along Gate
+            - spatial_map: 🗺️ Spatial Map (geography)
+            - monthly_dot: 📊 Monthly DOT Analysis (3×4)
+            - monthly_velocity: 📊 Monthly Velocity Profiles (3×4)
+            - velocity_comparison: 📈 v_perp vs v_geo
+            - total_transport: 📈 Total Transport Time Series
+            - bathymetry: 🏔️ Bathymetry Profile
+            - salinity_density: 🌡️ Salinity & Density
+            - volume_transport_stats: 📊 Volume Transport Statistics (monthly)
         
     Returns:
         ZIP file bytes
     """
+    # Default: all exports enabled
+    if export_options is None:
+        export_options = {
+            'slope_timeline': True,
+            'dot_profile': True,
+            'spatial_map': True,
+            'monthly_dot': True,
+            'monthly_velocity': True,
+            'velocity_comparison': True,
+            'total_transport': True,
+            'bathymetry': True,
+            'salinity_density': True,
+            'volume_transport_stats': True,
+        }
+    
     files = {}
     
     gate_name = gate_data['gate_name']
@@ -1122,11 +1262,23 @@ def generate_full_export(
     
     logger.info(f"Generating export for {gate_name} ({start_year}-{end_year})")
     
+    # Extract data
+    v_perp = gate_data.get('v_perp')
+    v_geo = gate_data.get('v_geo')
+    x_km = gate_data.get('x_km')
+    dot_matrix = gate_data.get('dot_matrix')
+    transport_sv = gate_data.get('transport_sv')
+    depth_profile = gate_data.get('depth_profile')
+    gate_lon = gate_data.get('gate_lon')
+    gate_lat = gate_data.get('gate_lat')
+    salinity_profile = gate_data.get('salinity_profile')
+    density_profile = gate_data.get('density_profile')
+    slope_values = gate_data.get('slope_values')
+    
     # =========================================================================
     # CSV FILES
     # =========================================================================
     if include_csv:
-        transport_sv = gate_data.get('transport_sv')
         if transport_sv is not None:
             # Raw monthly data
             df_raw = generate_volume_transport_raw_csv(
@@ -1155,134 +1307,106 @@ def generate_full_export(
             files[f"csv/{gate_name_safe}_salt_flux_raw.csv"] = df_salt.to_csv(index=False)
     
     # =========================================================================
-    # IMAGE FILES
+    # IMAGE FILES (based on export_options)
     # =========================================================================
     if include_images:
-        n_obs = len(time_array)
         
-        # Volume Transport
-        transport_sv = gate_data.get('transport_sv')
-        if transport_sv is not None:
-            # Time series
-            img = export_volume_transport_timeseries(
-                transport_sv, time_array, gate_name, dataset, dpi
-            )
-            files[f"volume_transport/{gate_name_safe}_timeseries.png"] = img
-            
-            # Statistics boxplot
-            img = export_volume_transport_statistics(
-                transport_sv, time_array, gate_name, dataset, dpi
-            )
-            files[f"volume_transport/{gate_name_safe}_statistics.png"] = img
+        # 📈 Slope Timeline
+        if export_options.get('slope_timeline', True) and slope_values is not None:
+            try:
+                img = export_slope_timeline(slope_values, time_array, gate_name, dataset, dpi)
+                files[f"dot_analysis/{gate_name_safe}_slope_timeline.png"] = img
+            except Exception as e:
+                logger.warning(f"Failed to export slope timeline: {e}")
         
-        # Monthly velocity profiles (3x4 grid)
-        monthly_v_perp = gate_data.get('monthly_v_perp')
-        if monthly_v_perp is not None:
-            img = export_monthly_profiles_grid(
-                monthly_v_perp, gate_name, "Volume Transport",
-                dataset, start_year, end_year, n_obs,
-                y_label="Velocity (cm/s)", y_scale=100.0,
-                show_regression=True, dpi=dpi
-            )
-            files[f"volume_transport/{gate_name_safe}_monthly_profiles_grid.png"] = img
+        # 📊 DOT Profile Along Gate
+        if export_options.get('dot_profile', True) and dot_matrix is not None and x_km is not None:
+            try:
+                img = export_dot_profile_along_gate(
+                    dot_matrix, x_km, gate_name, dataset, start_year, end_year, dpi
+                )
+                files[f"dot_analysis/{gate_name_safe}_dot_profile.png"] = img
+            except Exception as e:
+                logger.warning(f"Failed to export DOT profile: {e}")
         
-        # Velocity Hovmöller
-        v_perp = gate_data.get('v_perp')
-        x_km = gate_data.get('x_km')
-        if v_perp is not None and x_km is not None:
-            img = export_velocity_hovmoller(
-                v_perp, x_km, time_array, gate_name, dataset, dpi
-            )
-            files[f"velocity/{gate_name_safe}_hovmoller.png"] = img
+        # 🗺️ Spatial Map (with geography)
+        if export_options.get('spatial_map', True) and gate_lon is not None and gate_lat is not None:
+            try:
+                img = export_spatial_map(gate_lon, gate_lat, gate_name, dpi)
+                files[f"spatial/{gate_name_safe}_geographic_map.png"] = img
+            except Exception as e:
+                logger.warning(f"Failed to export spatial map: {e}")
         
-        # Bathymetry
-        depth_profile = gate_data.get('depth_profile')
-        gate_lon = gate_data.get('gate_lon')
-        gate_lat = gate_data.get('gate_lat')
-        if depth_profile is not None and x_km is not None:
-            img = export_bathymetry_profile(
-                depth_profile, x_km, gate_name, gate_lon, gate_lat, dpi
-            )
-            files[f"bathymetry/{gate_name_safe}_depth_profile.png"] = img
+        # 📊 Monthly DOT Analysis (3×4) with slope mm/km and R²
+        if export_options.get('monthly_dot', True) and dot_matrix is not None and x_km is not None:
+            try:
+                img = export_monthly_dot_profiles_grid(
+                    dot_matrix, x_km, time_array, gate_name, dataset, dpi
+                )
+                files[f"monthly_analysis/{gate_name_safe}_monthly_dot_grid.png"] = img
+            except Exception as e:
+                logger.warning(f"Failed to export monthly DOT grid: {e}")
         
-        # Salt Flux
-        salt_flux = gate_data.get('salt_flux_kg_s')
-        if salt_flux is not None:
-            img = export_salt_flux_timeseries(
-                salt_flux, time_array, gate_name, dataset, dpi
-            )
-            files[f"salt_flux/{gate_name_safe}_timeseries.png"] = img
+        # 📊 Monthly Velocity Profiles (3×4) with slope and R²
+        if export_options.get('monthly_velocity', True) and v_perp is not None and x_km is not None:
+            try:
+                img = export_monthly_velocity_profiles_grid(
+                    v_perp, x_km, time_array, gate_name, dataset, dpi
+                )
+                files[f"velocity/{gate_name_safe}_monthly_velocity_grid.png"] = img
+            except Exception as e:
+                logger.warning(f"Failed to export monthly velocity grid: {e}")
         
-        # Salt flux monthly profiles (3x4 grid)
-        monthly_salt_flux = gate_data.get('monthly_salt_flux')
-        if monthly_salt_flux is not None:
-            img = export_monthly_profiles_grid(
-                monthly_salt_flux, gate_name, "Salt Flux Along Gate",
-                dataset, start_year, end_year, n_obs,
-                y_label="Salt Flux (kg/m·s)", y_scale=1.0,
-                show_regression=True, dpi=dpi
-            )
-            files[f"salt_flux/{gate_name_safe}_along_gate_grid.png"] = img
+        # 📈 v_perp vs v_geo Time Series
+        if export_options.get('velocity_comparison', True) and v_perp is not None:
+            try:
+                img = export_velocity_comparison_timeseries(
+                    v_perp, v_geo, time_array, gate_name, dataset, dpi
+                )
+                files[f"velocity/{gate_name_safe}_velocity_comparison.png"] = img
+            except Exception as e:
+                logger.warning(f"Failed to export velocity comparison: {e}")
         
-        # =====================================================================
-        # NEW EXPORTS (7 nuove funzioni)
-        # =====================================================================
+        # 📈 Total Transport Time Series
+        if export_options.get('total_transport', True) and transport_sv is not None:
+            try:
+                img = export_total_transport_timeseries(
+                    transport_sv, time_array, gate_name, dataset, dpi
+                )
+                files[f"volume_transport/{gate_name_safe}_total_transport_timeseries.png"] = img
+            except Exception as e:
+                logger.warning(f"Failed to export transport timeseries: {e}")
         
-        # 1. Mean DOT Profile
-        dot_matrix = gate_data.get('dot_matrix')
-        if dot_matrix is not None and x_km is not None:
-            dot_mean = np.nanmean(dot_matrix, axis=1)
-            dot_std = np.nanstd(dot_matrix, axis=1)
-            img = export_mean_dot_profile(
-                dot_mean, x_km, gate_name, dataset, dot_std,
-                start_year, end_year, n_obs, dpi
-            )
-            files[f"dot_profile/{gate_name_safe}_mean_dot_profile.png"] = img
+        # 🏔️ Bathymetry Profile (clean, zero at top)
+        if export_options.get('bathymetry', True) and depth_profile is not None and x_km is not None:
+            try:
+                img = export_bathymetry_profile_clean(
+                    depth_profile, x_km, gate_name, gate_lon, gate_lat, dpi
+                )
+                files[f"bathymetry/{gate_name_safe}_bathymetry.png"] = img
+            except Exception as e:
+                logger.warning(f"Failed to export bathymetry: {e}")
         
-        # 2. Gate Spatial Map (with coastlines)
-        if gate_lon is not None and gate_lat is not None:
-            img = export_gate_spatial_map(gate_lon, gate_lat, gate_name, dpi)
-            files[f"spatial/{gate_name_safe}_gate_map.png"] = img
+        # 🌡️ Salinity & Density Along Gate
+        if export_options.get('salinity_density', True):
+            if salinity_profile is not None and density_profile is not None and x_km is not None:
+                try:
+                    img = export_salinity_density_along_gate(
+                        salinity_profile, density_profile, x_km, gate_name, dpi
+                    )
+                    files[f"salt_flux/{gate_name_safe}_salinity_density.png"] = img
+                except Exception as e:
+                    logger.warning(f"Failed to export salinity/density: {e}")
         
-        # 3. Velocity Comparison (v_perp vs v_geo)
-        if v_perp is not None:
-            v_perp_mean_ts = np.nanmean(v_perp, axis=0) * 100  # cm/s
-            v_geo = gate_data.get('v_geo')
-            v_geo_mean_ts = np.nanmean(v_geo, axis=0) * 100 if v_geo is not None else None
-            img = export_velocity_comparison_timeseries(
-                v_perp_mean_ts, time_array, gate_name, v_geo_mean_ts, dataset, dpi
-            )
-            files[f"velocity/{gate_name_safe}_velocity_comparison.png"] = img
-        
-        # 4. Monthly Velocity Grid (3x4 with slope and R²)
-        if v_perp is not None and x_km is not None:
-            img = export_monthly_velocity_grid(
-                v_perp, x_km, time_array, gate_name, dataset, dpi
-            )
-            files[f"velocity/{gate_name_safe}_monthly_velocity_grid.png"] = img
-        
-        # 5. Monthly DOT Analysis (3x4)
-        if dot_matrix is not None and x_km is not None:
-            img = export_monthly_dot_analysis(
-                dot_matrix, x_km, time_array, gate_name, dataset, dpi
-            )
-            files[f"monthly_analysis/{gate_name_safe}_monthly_dot.png"] = img
-        
-        # 6. Salinity & Density Profile
-        salinity_profile = gate_data.get('salinity_profile')
-        density_profile = gate_data.get('density_profile')
-        if salinity_profile is not None and density_profile is not None and x_km is not None:
-            img = export_salinity_density_profile(
-                salinity_profile, density_profile, x_km, gate_name, dpi
-            )
-            files[f"salt_flux/{gate_name_safe}_salinity_density.png"] = img
-        
-        # 7. Bathymetry Profile Fixed (no brown fill)
-        if depth_profile is not None and x_km is not None:
-            img = export_bathymetry_profile_fixed(
-                depth_profile, x_km, gate_name, gate_lon, gate_lat, dpi
-            )
-            files[f"bathymetry/{gate_name_safe}_depth_profile_fixed.png"] = img
+        # 📊 Volume Transport Monthly Statistics (boxplot)
+        if export_options.get('volume_transport_stats', True) and transport_sv is not None:
+            try:
+                img = export_volume_transport_statistics(
+                    transport_sv, time_array, gate_name, dataset, dpi
+                )
+                files[f"volume_transport/{gate_name_safe}_monthly_statistics.png"] = img
+            except Exception as e:
+                logger.warning(f"Failed to export transport statistics: {e}")
     
     # Create timestamp for folder name
     timestamp = datetime.now().strftime("%Y-%m-%d")
@@ -1295,19 +1419,12 @@ def generate_multi_gate_export(
     gates_data: List[Dict[str, Any]],
     include_images: bool = True,
     include_csv: bool = True,
-    dpi: int = 300
+    dpi: int = 300,
+    export_options: Dict[str, bool] = None
 ) -> bytes:
     """
     Generate export ZIP for multiple gates.
-    
-    Args:
-        gates_data: List of gate data dictionaries
-        include_images: Whether to include PNG images
-        include_csv: Whether to include CSV files
-        dpi: Image resolution
-        
-    Returns:
-        ZIP file bytes
+    Uses same export options as generate_full_export.
     """
     all_files = {}
     
@@ -1315,22 +1432,36 @@ def generate_multi_gate_export(
         gate_name = gate_data['gate_name']
         gate_name_safe = gate_name.lower().replace(' ', '_').replace('-', '_')
         
-        # Generate files for this gate
-        single_gate_files = {}
-        
-        # ... (same logic as generate_full_export but without creating ZIP)
-        # Add to all_files with gate subfolder
-        
         dataset = gate_data.get('dataset', 'cmems_l4')
         time_array = gate_data['time_array']
         time_pd = pd.to_datetime(time_array)
         start_year = time_pd.min().year
         end_year = time_pd.max().year
-        n_obs = len(time_array)
+        
+        # Extract data
+        v_perp = gate_data.get('v_perp')
+        v_geo = gate_data.get('v_geo')
+        x_km = gate_data.get('x_km')
+        dot_matrix = gate_data.get('dot_matrix')
+        transport_sv = gate_data.get('transport_sv')
+        depth_profile = gate_data.get('depth_profile')
+        gate_lon = gate_data.get('gate_lon')
+        gate_lat = gate_data.get('gate_lat')
+        salinity_profile = gate_data.get('salinity_profile')
+        density_profile = gate_data.get('density_profile')
+        slope_values = gate_data.get('slope_values')
+        
+        # Default options
+        if export_options is None:
+            export_options = {
+                'slope_timeline': True, 'dot_profile': True, 'spatial_map': True,
+                'monthly_dot': True, 'monthly_velocity': True, 'velocity_comparison': True,
+                'total_transport': True, 'bathymetry': True, 'salinity_density': True,
+                'volume_transport_stats': True,
+            }
         
         # CSV
         if include_csv:
-            transport_sv = gate_data.get('transport_sv')
             if transport_sv is not None:
                 df_raw = generate_volume_transport_raw_csv(transport_sv, time_array, gate_name, dataset)
                 all_files[f"csv/{gate_name_safe}_volume_transport_raw.csv"] = df_raw.to_csv(index=False)
@@ -1343,47 +1474,55 @@ def generate_multi_gate_export(
         
         # Images
         if include_images:
-            transport_sv = gate_data.get('transport_sv')
-            if transport_sv is not None:
-                img = export_volume_transport_timeseries(transport_sv, time_array, gate_name, dataset, dpi)
-                all_files[f"volume_transport/{gate_name_safe}_timeseries.png"] = img
-                
-                img = export_volume_transport_statistics(transport_sv, time_array, gate_name, dataset, dpi)
-                all_files[f"volume_transport/{gate_name_safe}_statistics.png"] = img
+            # Apply same export logic as generate_full_export
+            if export_options.get('spatial_map', True) and gate_lon is not None and gate_lat is not None:
+                try:
+                    img = export_spatial_map(gate_lon, gate_lat, gate_name, dpi)
+                    all_files[f"spatial/{gate_name_safe}_geographic_map.png"] = img
+                except Exception as e:
+                    logger.warning(f"Failed spatial map for {gate_name}: {e}")
             
-            monthly_v_perp = gate_data.get('monthly_v_perp')
-            if monthly_v_perp is not None:
-                img = export_monthly_profiles_grid(
-                    monthly_v_perp, gate_name, "Volume Transport", dataset,
-                    start_year, end_year, n_obs, "Velocity (cm/s)", 100.0, True, dpi
-                )
-                all_files[f"volume_transport/{gate_name_safe}_monthly_profiles_grid.png"] = img
+            if export_options.get('monthly_velocity', True) and v_perp is not None and x_km is not None:
+                try:
+                    img = export_monthly_velocity_profiles_grid(v_perp, x_km, time_array, gate_name, dataset, dpi)
+                    all_files[f"velocity/{gate_name_safe}_monthly_velocity_grid.png"] = img
+                except Exception as e:
+                    logger.warning(f"Failed monthly velocity for {gate_name}: {e}")
             
-            v_perp = gate_data.get('v_perp')
-            x_km = gate_data.get('x_km')
-            if v_perp is not None and x_km is not None:
-                img = export_velocity_hovmoller(v_perp, x_km, time_array, gate_name, dataset, dpi)
-                all_files[f"velocity/{gate_name_safe}_hovmoller.png"] = img
+            if export_options.get('velocity_comparison', True) and v_perp is not None:
+                try:
+                    img = export_velocity_comparison_timeseries(v_perp, v_geo, time_array, gate_name, dataset, dpi)
+                    all_files[f"velocity/{gate_name_safe}_velocity_comparison.png"] = img
+                except Exception as e:
+                    logger.warning(f"Failed velocity comparison for {gate_name}: {e}")
             
-            depth_profile = gate_data.get('depth_profile')
-            gate_lon = gate_data.get('gate_lon')
-            gate_lat = gate_data.get('gate_lat')
-            if depth_profile is not None and x_km is not None:
-                img = export_bathymetry_profile(depth_profile, x_km, gate_name, gate_lon, gate_lat, dpi)
-                all_files[f"bathymetry/{gate_name_safe}_depth_profile.png"] = img
+            if export_options.get('total_transport', True) and transport_sv is not None:
+                try:
+                    img = export_total_transport_timeseries(transport_sv, time_array, gate_name, dataset, dpi)
+                    all_files[f"volume_transport/{gate_name_safe}_total_transport_timeseries.png"] = img
+                except Exception as e:
+                    logger.warning(f"Failed transport timeseries for {gate_name}: {e}")
             
-            salt_flux = gate_data.get('salt_flux_kg_s')
-            if salt_flux is not None:
-                img = export_salt_flux_timeseries(salt_flux, time_array, gate_name, dataset, dpi)
-                all_files[f"salt_flux/{gate_name_safe}_timeseries.png"] = img
+            if export_options.get('bathymetry', True) and depth_profile is not None and x_km is not None:
+                try:
+                    img = export_bathymetry_profile_clean(depth_profile, x_km, gate_name, gate_lon, gate_lat, dpi)
+                    all_files[f"bathymetry/{gate_name_safe}_bathymetry.png"] = img
+                except Exception as e:
+                    logger.warning(f"Failed bathymetry for {gate_name}: {e}")
             
-            monthly_salt_flux = gate_data.get('monthly_salt_flux')
-            if monthly_salt_flux is not None:
-                img = export_monthly_profiles_grid(
-                    monthly_salt_flux, gate_name, "Salt Flux Along Gate", dataset,
-                    start_year, end_year, n_obs, "Salt Flux (kg/m·s)", 1.0, True, dpi
-                )
-                all_files[f"salt_flux/{gate_name_safe}_along_gate_grid.png"] = img
+            if export_options.get('monthly_dot', True) and dot_matrix is not None and x_km is not None:
+                try:
+                    img = export_monthly_dot_profiles_grid(dot_matrix, x_km, time_array, gate_name, dataset, dpi)
+                    all_files[f"monthly_analysis/{gate_name_safe}_monthly_dot_grid.png"] = img
+                except Exception as e:
+                    logger.warning(f"Failed monthly DOT for {gate_name}: {e}")
+            
+            if export_options.get('dot_profile', True) and dot_matrix is not None and x_km is not None:
+                try:
+                    img = export_dot_profile_along_gate(dot_matrix, x_km, gate_name, dataset, start_year, end_year, dpi)
+                    all_files[f"dot_analysis/{gate_name_safe}_dot_profile.png"] = img
+                except Exception as e:
+                    logger.warning(f"Failed DOT profile for {gate_name}: {e}")
     
     timestamp = datetime.now().strftime("%Y-%m-%d")
     n_gates = len(gates_data)
