@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "nico-gate": {
+      "command": "python",
+      "args": ["-m", "nico_mcp.server"],
+      "cwd": ".",
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}
