@@ -47,7 +47,7 @@ def run_app():
     
     # Header
     st.markdown(
-        '<div class="main-header">🛰️ SLCCI Satellite Altimetry Analysis</div>',
+        '<div class="main-header">🛰️ ARCFRESH Project</div>',
         unsafe_allow_html=True,
     )
     
@@ -157,7 +157,7 @@ def render_welcome_message():
     """Show welcome message when no data is loaded."""
     st.markdown("""
     <div class="info-box">
-    <h3>👋 Welcome to the SLCCI Satellite Altimetry Analysis Dashboard!</h3>
+    <h3>👋 Welcome to ARCFRESH Project!</h3>
     <p>To get started:</p>
     <ul>
         <li>📂 Use <b>Local Files</b> to load NetCDF files from your workspace</li>

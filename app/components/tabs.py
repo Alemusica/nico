@@ -607,7 +607,7 @@ def _render_empty_tabs(config: AppConfig):
 
 def _render_welcome_landing(config: AppConfig):
     """Render the welcome/landing page content."""
-    st.markdown("## 🛰️ NICO Dashboard")
+    st.markdown("## 🛰️ ARCFRESH Project")
     st.markdown("*Satellite Altimetry Analysis for Arctic Ocean*")
     
     st.info("""
@@ -4307,14 +4307,15 @@ def _render_multi_export(loaded_datasets: dict, config: AppConfig):
 
 def _render_cmems_l4_tabs(cmems_l4_data, config: AppConfig):
     """Render tabs for CMEMS L4 gridded data."""
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📈 Slope Timeline",
         "📊 DOT Profile",
         "🗺️ Spatial Map",
         "📅 Monthly Analysis",
         "🌊 Geostrophic Velocity",
-        "� Volume Transport",
-        "�📥 Export"
+        "🚢 Volume Transport",
+        "🧂 Salt Flux",
+        "📥 Export"
     ])
     
     with tab1:
@@ -4330,7 +4331,9 @@ def _render_cmems_l4_tabs(cmems_l4_data, config: AppConfig):
     with tab6:
         _render_volume_transport_tab_cmems_l4(cmems_l4_data, config)
     with tab7:
-        _render_dtu_export_tab(cmems_l4_data, config)
+        _render_salt_flux_tab_cmems_l4(cmems_l4_data, config)
+    with tab8:
+        _render_cmems_l4_export_tab(cmems_l4_data, config)  # NEW: Advanced export
 
 
 def _render_cmems_l4_spatial(cmems_l4_data, config: AppConfig):
@@ -4458,16 +4461,21 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
     # =========================================================================
     # COMPUTE DATA
     # =========================================================================
-    if st.button("🧮 Compute Velocities", type="primary", width='stretch', key=f"{key_prefix}_compute"):
+    if st.button("🧮 Compute Velocities", type="primary", use_container_width=True, key=f"{key_prefix}_compute"):
         with st.spinner("Computing perpendicular velocity..."):
             try:
                 from src.services.transport_service import (
                     compute_perpendicular_velocity,
-                    compute_monthly_along_gate_profile
+                    compute_monthly_along_gate_profile,
+                    compute_normal_direction
                 )
                 
-                # 1. Compute v_perp from ugos/vgos
-                v_perp = compute_perpendicular_velocity(ugos_matrix, vgos_matrix, gate_lon, gate_lat)
+                # 1. Compute v_perp from ugos/vgos (with direction info)
+                v_perp, v_info = compute_perpendicular_velocity(
+                    ugos_matrix, vgos_matrix, gate_lon, gate_lat,
+                    gate_name=strait_name,
+                    return_info=True
+                )
                 
                 # 2. Monthly along-gate profiles for v_perp
                 monthly_v_perp = compute_monthly_along_gate_profile(
@@ -4494,8 +4502,9 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
                 st.session_state[f'{key_prefix}_gate_lon'] = gate_lon
                 st.session_state[f'{key_prefix}_time_array'] = time_array
                 st.session_state[f'{key_prefix}_bin'] = bin_size_km
+                st.session_state[f'{key_prefix}_v_info'] = v_info
                 
-                st.success("✅ Velocities computed!")
+                st.success(f"✅ Velocities computed! Normal points **{v_info['normal_direction']}**")
                 st.rerun()
                 
             except Exception as e:
@@ -4519,6 +4528,29 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
     stored_gate_lon = st.session_state[f'{key_prefix}_gate_lon']
     stored_time_array = st.session_state.get(f'{key_prefix}_time_array', time_array)  # FIX: retrieve time_array
     v_geo_ts = st.session_state.get(f'{key_prefix}_v_geo_ts', None)
+    v_info = st.session_state.get(f'{key_prefix}_v_info', {})
+    
+    # Show direction convention
+    if v_info:
+        normal_dir = v_info.get('normal_direction', '?')
+        mean_v = v_info.get('mean_v_perp', 0)
+        
+        direction_map = {
+            'N': ('🔼 Northward', 'into Arctic', 'out of Arctic'),
+            'S': ('🔽 Southward', 'out of Arctic', 'into Arctic'),
+            'E': ('➡️ Eastward', 'into basin', 'out of basin'),
+            'W': ('⬅️ Westward', 'into basin', 'out of basin'),
+        }
+        
+        dir_emoji, pos_meaning, neg_meaning = direction_map.get(normal_dir, ('❓', 'positive', 'negative'))
+        
+        st.info(f"""
+        **📐 Sign Convention for this gate:**
+        - Gate normal points **{dir_emoji}** ({normal_dir})
+        - **Positive v_perp** = Flow {pos_meaning}
+        - **Negative v_perp** = Flow {neg_meaning}
+        - Mean v_perp = **{mean_v*100:.2f} cm/s** ({pos_meaning if mean_v > 0 else neg_meaning})
+        """)
     
     # Recompute if bin size changed
     stored_bin = st.session_state.get(f'{key_prefix}_bin', 5)
@@ -5211,6 +5243,488 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
             "Download Time Series (CSV)",
             data=csv_data,
             file_name=f"volume_transport_{strait_name.lower().replace(' ', '_')}.csv",
+            mime="text/csv"
+        )
+
+
+# ==============================================================================
+# CMEMS L4 TAB: SALT FLUX
+# ==============================================================================
+
+def _render_salt_flux_tab_cmems_l4(cmems_l4_data, config: AppConfig):
+    """
+    Render Salt Flux tab for CMEMS L4.
+    
+    Combines:
+    - CMEMS L4 velocity (ugos/vgos) 
+    - SSS data (salinity, density) from CMEMS SSS dataset
+    - GEBCO bathymetry (capped at depth_cap)
+    
+    Formula: F_salt = Σ ρ(s,t) × S(s,t)/1000 × u_normal(s,t) × H_eff(s) × ds
+    """
+    st.subheader("🧂 Salt Flux Calculation")
+    
+    strait_name = getattr(cmems_l4_data, 'strait_name', 'Unknown')
+    ugos_matrix = getattr(cmems_l4_data, 'ugos_matrix', None)
+    vgos_matrix = getattr(cmems_l4_data, 'vgos_matrix', None)
+    gate_lon = getattr(cmems_l4_data, 'gate_lon_pts', None)
+    gate_lat = getattr(cmems_l4_data, 'gate_lat_pts', None)
+    x_km = getattr(cmems_l4_data, 'x_km', None)
+    time_array = getattr(cmems_l4_data, 'time_array', None)
+    
+    # Check velocity data
+    if ugos_matrix is None or vgos_matrix is None:
+        st.warning("⚠️ Velocity data (ugos/vgos) not available.")
+        st.info("""
+        **To enable Salt Flux:**
+        1. Go to sidebar → CMEMS L4 Variables
+        2. Select **ugos** and **vgos** 
+        3. Reload the data
+        """)
+        return
+    
+    st.success(f"✅ Velocity data loaded: {ugos_matrix.shape[0]} gate points × {ugos_matrix.shape[1]} time steps")
+    
+    # =========================================================================
+    # CONTROLS
+    # =========================================================================
+    st.markdown("### ⚙️ Settings")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        depth_cap = st.number_input(
+            "Depth Cap (m)",
+            min_value=50,
+            max_value=1000,
+            value=250,
+            step=50,
+            key="salt_flux_depth_cap",
+            help="Maximum depth for flux calculation (salinity assumed constant below this)"
+        )
+    
+    with col2:
+        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        selected_month = st.selectbox(
+            "Month to display",
+            options=list(range(1, 13)),
+            format_func=lambda m: month_names[m-1],
+            index=0,
+            key="salt_flux_month_select"
+        )
+    
+    # =========================================================================
+    # COMPUTE BUTTON
+    # =========================================================================
+    if st.button("🧮 Compute Salt Flux", type="primary", use_container_width=True):
+        with st.spinner("Loading SSS data and computing salt flux..."):
+            try:
+                # Get gate path from session state (saved when CMEMS L4 was loaded)
+                from app.components.sidebar import _get_gate_shapefile, _get_parent_gate_id
+                
+                selected_gate = st.session_state.get("selected_gate")
+                if not selected_gate:
+                    st.error("❌ No gate selected. Please load CMEMS L4 data first.")
+                    return
+                
+                gate_path = _get_gate_shapefile(selected_gate)
+                if not gate_path:
+                    st.error(f"❌ Could not find shapefile for gate: {selected_gate}")
+                    return
+                
+                # 1. Load SSS data
+                from src.services.sss_service import SSSService, SSSConfig
+                
+                time_pd = pd.to_datetime(time_array)
+                start_date = str(time_pd.min().date())
+                end_date = str(time_pd.max().date())
+                
+                sss_config = SSSConfig(
+                    gate_path=gate_path,
+                    time_start=start_date,
+                    time_end=end_date
+                )
+                
+                sss_service = SSSService()
+                
+                progress_bar = st.progress(0, text="Loading SSS data...")
+                
+                def sss_progress(pct, msg):
+                    progress_bar.progress(int(pct * 50), text=msg)
+                
+                sss_data = sss_service.load_gate_data(
+                    config=sss_config,
+                    progress_callback=sss_progress
+                )
+                
+                if sss_data is None:
+                    st.error("❌ Failed to load SSS data")
+                    return
+                
+                progress_bar.progress(50, text="SSS loaded, computing flux...")
+                
+                # 2. Load bathymetry
+                from src.services.gebco_service import get_bathymetry_cache
+                
+                cache = get_bathymetry_cache()
+                depth_profile = cache.get_or_compute(
+                    gate_name=strait_name,
+                    gate_lons=gate_lon,
+                    gate_lats=gate_lat,
+                    gebco_path=config.gebco_nc_path,
+                    depth_cap=None  # Get full depth, cap inside salt flux
+                )
+                
+                # 3. Compute salt flux
+                from src.services.salt_flux_service import SaltFluxService
+                
+                flux_service = SaltFluxService()
+                salt_flux_data = flux_service.compute_salt_flux(
+                    cmems_data=cmems_l4_data,
+                    sss_data=sss_data,
+                    depth_array=depth_profile,
+                    depth_cap=float(depth_cap)
+                )
+                
+                progress_bar.progress(100, text="Done!")
+                
+                # Store in session state
+                st.session_state['sf_sss_data'] = sss_data
+                st.session_state['sf_flux_data'] = salt_flux_data
+                st.session_state['sf_depth_profile'] = depth_profile
+                st.session_state['sf_depth_cap'] = depth_cap
+                st.session_state['sf_strait_name'] = strait_name
+                
+                st.success("✅ Salt flux computed!")
+                
+            except Exception as e:
+                st.error(f"Error: {e}")
+                import traceback
+                with st.expander("Traceback"):
+                    st.code(traceback.format_exc())
+                return
+    
+    # =========================================================================
+    # CHECK IF DATA COMPUTED
+    # =========================================================================
+    if 'sf_flux_data' not in st.session_state:
+        st.info("👆 Click 'Compute Salt Flux' to start")
+        return
+    
+    # Retrieve from session state
+    sss_data = st.session_state['sf_sss_data']
+    salt_flux_data = st.session_state['sf_flux_data']
+    depth_profile = st.session_state['sf_depth_profile']
+    stored_depth_cap = st.session_state['sf_depth_cap']
+    
+    # =========================================================================
+    # 1. SALINITY & DENSITY PROFILES
+    # =========================================================================
+    st.markdown("### 🌡️ Salinity & Density Along Gate")
+    st.caption("Mean values across the time period")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Salinity profile
+        sos_mean = np.nanmean(sss_data.sos_matrix, axis=1)
+        sos_std = np.nanstd(sss_data.sos_matrix, axis=1)
+        
+        fig_sal = go.Figure()
+        fig_sal.add_trace(go.Scatter(
+            x=x_km,
+            y=sos_mean,
+            mode='lines',
+            name='Salinity',
+            line=dict(color='#3498DB', width=2),
+            hovertemplate='%{x:.1f} km<br>S: %{y:.2f} PSU<extra></extra>'
+        ))
+        fig_sal.add_trace(go.Scatter(
+            x=np.concatenate([x_km, x_km[::-1]]),
+            y=np.concatenate([sos_mean + sos_std, (sos_mean - sos_std)[::-1]]),
+            fill='toself',
+            fillcolor='rgba(52, 152, 219, 0.2)',
+            line=dict(color='rgba(52, 152, 219, 0)'),
+            name='±1σ',
+            hoverinfo='skip'
+        ))
+        fig_sal.update_layout(
+            title="Salinity Profile",
+            xaxis_title="Distance (km)",
+            yaxis_title="Salinity (PSU)",
+            height=300,
+            plot_bgcolor='white',
+            margin=dict(l=50, r=20, t=40, b=40)
+        )
+        st.plotly_chart(fig_sal, use_container_width=True)
+    
+    with col2:
+        # Density profile
+        dos_mean = np.nanmean(sss_data.dos_matrix, axis=1)
+        dos_std = np.nanstd(sss_data.dos_matrix, axis=1)
+        
+        fig_den = go.Figure()
+        fig_den.add_trace(go.Scatter(
+            x=x_km,
+            y=dos_mean,
+            mode='lines',
+            name='Density',
+            line=dict(color='#E74C3C', width=2),
+            hovertemplate='%{x:.1f} km<br>ρ: %{y:.2f} kg/m³<extra></extra>'
+        ))
+        fig_den.add_trace(go.Scatter(
+            x=np.concatenate([x_km, x_km[::-1]]),
+            y=np.concatenate([dos_mean + dos_std, (dos_mean - dos_std)[::-1]]),
+            fill='toself',
+            fillcolor='rgba(231, 76, 60, 0.2)',
+            line=dict(color='rgba(231, 76, 60, 0)'),
+            name='±1σ',
+            hoverinfo='skip'
+        ))
+        fig_den.update_layout(
+            title="Density Profile",
+            xaxis_title="Distance (km)",
+            yaxis_title="Density (kg/m³)",
+            height=300,
+            plot_bgcolor='white',
+            margin=dict(l=50, r=20, t=40, b=40)
+        )
+        st.plotly_chart(fig_den, use_container_width=True)
+    
+    # =========================================================================
+    # 2. SALT FLUX TIME SERIES
+    # =========================================================================
+    st.markdown("### 📈 Salt Flux Time Series")
+    
+    time_pd = pd.to_datetime(time_array)
+    flux_series = salt_flux_data.flux_series
+    
+    # Convert to more readable units (10^7 kg/s)
+    flux_scaled = flux_series / 1e7
+    
+    fig_ts = go.Figure()
+    fig_ts.add_trace(go.Scatter(
+        x=time_pd,
+        y=flux_scaled,
+        mode='lines',
+        name='Salt Flux',
+        line=dict(color='#9B59B6', width=2),
+        hovertemplate='%{x|%Y-%m-%d}<br>Flux: %{y:.2f} ×10⁷ kg/s<extra></extra>'
+    ))
+    
+    mean_flux = np.nanmean(flux_scaled)
+    fig_ts.add_hline(y=0, line_dash="dash", line_color="#7F8C8D", line_width=1)
+    fig_ts.add_hline(y=mean_flux, line_dash="dot", line_color="#E74C3C", line_width=1.5,
+                     annotation_text=f"Mean: {mean_flux:.2f}")
+    
+    fig_ts.update_layout(
+        title=dict(text=f"{strait_name} — Salt Flux Time Series", font=dict(size=16)),
+        xaxis_title="Time",
+        yaxis_title="Salt Flux (×10⁷ kg/s)",
+        height=420,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Inter, sans-serif", size=12),
+        xaxis=dict(gridcolor='#E8E8E8'),
+        yaxis=dict(gridcolor='#E8E8E8'),
+        margin=dict(l=60, r=40, t=60, b=50),
+    )
+    
+    st.plotly_chart(fig_ts, use_container_width=True)
+    
+    # =========================================================================
+    # 3. STATISTICS
+    # =========================================================================
+    st.markdown("### 📊 Statistics")
+    
+    # Calculate equivalent Sverdrup (for comparison with volume transport)
+    mean_salinity = np.nanmean(sss_data.sos_matrix)
+    mean_density = np.nanmean(sss_data.dos_matrix)
+    sv_equivalent = np.nanmean(flux_series) / (mean_density * mean_salinity / 1000) / 1e6
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Mean Flux", f"{np.nanmean(flux_series):.2e} kg/s")
+    with col2:
+        st.metric("Std Dev", f"{np.nanstd(flux_series):.2e} kg/s")
+    with col3:
+        st.metric("~Sv Equivalent", f"{sv_equivalent:.2f} Sv")
+    with col4:
+        ice_mean = np.nanmean(sss_data.ice_matrix) if sss_data.ice_matrix is not None else 0
+        st.metric("Mean Ice Fraction", f"{ice_mean:.1%}")
+    
+    # Salinity/density stats
+    st.markdown("---")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Mean Salinity", f"{mean_salinity:.2f} PSU")
+    with col2:
+        st.metric("Mean Density", f"{mean_density:.1f} kg/m³")
+    with col3:
+        st.metric("Depth Cap", f"{stored_depth_cap} m")
+    with col4:
+        mean_vel = np.nanmean(salt_flux_data.velocity_mean) * 100  # cm/s
+        st.metric("Mean Velocity", f"{mean_vel:.1f} cm/s")
+    
+    # =========================================================================
+    # 4. MONTHLY CLIMATOLOGY
+    # =========================================================================
+    st.markdown("### 📅 Monthly Salt Flux Climatology")
+    
+    # Group by month
+    months = time_pd.month
+    monthly_flux = []
+    for m in range(1, 13):
+        mask = months == m
+        if mask.sum() > 0:
+            monthly_flux.append(np.nanmean(flux_scaled[mask]))
+        else:
+            monthly_flux.append(np.nan)
+    
+    fig_clim = go.Figure()
+    fig_clim.add_trace(go.Bar(
+        x=month_names,
+        y=monthly_flux,
+        marker_color=['#9B59B6' if v >= 0 else '#E74C3C' for v in monthly_flux],
+        name='Monthly Mean',
+        hovertemplate='%{x}<br>Flux: %{y:.2f} ×10⁷ kg/s<extra></extra>'
+    ))
+    fig_clim.add_hline(y=0, line_color="#7F8C8D", line_width=1)
+    
+    fig_clim.update_layout(
+        title=dict(text="Monthly Mean Salt Flux", font=dict(size=16)),
+        xaxis_title="Month",
+        yaxis_title="Salt Flux (×10⁷ kg/s)",
+        height=380,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Inter, sans-serif", size=12),
+        xaxis=dict(gridcolor='#E8E8E8'),
+        yaxis=dict(gridcolor='#E8E8E8'),
+        bargap=0.2,
+    )
+    
+    st.plotly_chart(fig_clim, use_container_width=True)
+    
+    # =========================================================================
+    # 5. SALT FLUX ALONG GATE (Monthly Profile)
+    # =========================================================================
+    st.markdown("### 🗺️ Salt Flux Along Gate")
+    st.caption(f"Monthly mean salt flux profile for **{month_names[selected_month-1]}** (averaged over all years)")
+    
+    try:
+        from src.services.transport_service import (
+            compute_perpendicular_velocity,
+            compute_monthly_salt_flux_profile,
+            bin_along_gate
+        )
+        
+        # Compute v_perp if not already
+        v_perp = compute_perpendicular_velocity(
+            ugos_matrix, vgos_matrix, gate_lon, gate_lat
+        )
+        
+        # Get depth profile capped
+        depth_capped = np.minimum(depth_profile, stored_depth_cap)
+        
+        # Use mean salinity/density from SSS data
+        mean_sal = np.nanmean(sss_data.sos_matrix)
+        mean_den = np.nanmean(sss_data.dos_matrix)
+        
+        # Compute monthly profiles with bin_size slider
+        bin_size_km = st.slider(
+            "Spatial averaging (km)",
+            min_value=1,
+            max_value=50,
+            value=10,
+            step=1,
+            key="sf_along_gate_bin"
+        )
+        
+        monthly_flux_profile = compute_monthly_salt_flux_profile(
+            x_km=x_km,
+            v_perp=v_perp,
+            depth_profile=depth_capped,
+            time_array=time_array,
+            salinity=mean_sal,
+            density=mean_den,
+            bin_size_km=bin_size_km
+        )
+        
+        # Get selected month data
+        bin_centers, bin_means, bin_stds = monthly_flux_profile[selected_month]
+        
+        if len(bin_centers) > 0:
+            # Scale for readability (10^4 kg/(m·s))
+            bin_means_scaled = bin_means / 1e4
+            bin_stds_scaled = bin_stds / 1e4
+            
+            # Create bar chart like Volume Transport
+            colors = ['#9B59B6' if v >= 0 else '#E74C3C' for v in bin_means_scaled]
+            
+            fig_along = go.Figure()
+            fig_along.add_trace(go.Bar(
+                x=bin_centers,
+                y=bin_means_scaled,
+                marker_color=colors,
+                name='Salt Flux',
+                error_y=dict(
+                    type='data',
+                    array=bin_stds_scaled,
+                    visible=True,
+                    color='gray',
+                    thickness=1,
+                    width=2
+                ),
+                hovertemplate='%{x:.1f} km<br>Flux: %{y:.3f} ×10⁴ kg/(m·s)<extra></extra>'
+            ))
+            
+            fig_along.add_hline(y=0, line_color='gray', line_width=1)
+            
+            fig_along.update_layout(
+                title=dict(
+                    text=f"Salt Flux Along Gate — {month_names[selected_month-1]}",
+                    font=dict(size=16)
+                ),
+                xaxis_title="Distance along gate (km)",
+                yaxis_title="Salt Flux (×10⁴ kg/(m·s))",
+                height=420,
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                font=dict(family="Inter, sans-serif", size=12),
+                xaxis=dict(gridcolor='#E8E8E8'),
+                yaxis=dict(gridcolor='#E8E8E8'),
+                bargap=0.15,
+            )
+            
+            st.plotly_chart(fig_along, use_container_width=True)
+            
+            # Show total monthly flux
+            total_flux = np.nansum(bin_means) * bin_size_km * 1000  # integrate over width
+            st.info(f"**Total flux in {month_names[selected_month-1]}:** {total_flux:.2e} kg/s "
+                    f"(≈ {total_flux/1e7:.2f} ×10⁷ kg/s)")
+        else:
+            st.warning(f"No data available for {month_names[selected_month-1]}")
+            
+    except Exception as e:
+        st.warning(f"Could not compute along-gate profile: {e}")
+    
+    # =========================================================================
+    # 6. EXPORT
+    # =========================================================================
+    with st.expander("📥 Export Salt Flux Data"):
+        export_df = pd.DataFrame({
+            'time': time_pd,
+            'salt_flux_kg_s': flux_series,
+            'salt_flux_1e7_kg_s': flux_scaled,
+        })
+        
+        csv_data = export_df.to_csv(index=False)
+        st.download_button(
+            "Download Time Series (CSV)",
+            data=csv_data,
+            file_name=f"salt_flux_{strait_name.lower().replace(' ', '_')}.csv",
             mime="text/csv"
         )
 
@@ -6000,6 +6514,333 @@ def _render_dtu_geostrophic_velocity(dtu_data, config: AppConfig):
         - Positive values → flow in one direction
         - Negative values → flow in opposite direction
         """)
+
+
+# ==============================================================================
+# CMEMS L4 ADVANCED EXPORT TAB
+# ==============================================================================
+
+def _render_cmems_l4_export_tab(cmems_l4_data, config: AppConfig):
+    """
+    Advanced export tab for CMEMS L4 data.
+    
+    Features:
+    - ZIP archive with organized folders
+    - CSV exports: Volume Transport (raw, climatology, annual), Salt Flux
+    - PNG images: All visualizations at 300 DPI
+    - Multi-gate support
+    - 3x4 grid for monthly profiles with slope & R²
+    """
+    st.subheader("📤 Advanced Data Export")
+    
+    strait_name = getattr(cmems_l4_data, 'strait_name', 'Unknown')
+    time_array = getattr(cmems_l4_data, 'time_array', None)
+    
+    if time_array is None or len(time_array) == 0:
+        st.error("❌ No time data available for export")
+        return
+    
+    time_pd = pd.to_datetime(time_array)
+    start_year = time_pd.min().year
+    end_year = time_pd.max().year
+    n_obs = len(time_array)
+    
+    # Info banner
+    st.info(f"""
+    🟣 **{strait_name}** | Period: {start_year}-{end_year} | Observations: {n_obs:,}
+    
+    Export includes:
+    - **CSV files** with full dataset citations
+    - **PNG images** at 300 DPI with detailed titles
+    - **Organized ZIP** archive by data type
+    """)
+    
+    # =========================================================================
+    # EXPORT OPTIONS
+    # =========================================================================
+    st.markdown("### 📋 Export Options")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**📸 Images (PNG 300 DPI)**")
+        export_velocity_hov = st.checkbox("Velocity Hovmöller", value=True, key="exp_vel_hov")
+        export_vt_timeseries = st.checkbox("Volume Transport Time Series", value=True, key="exp_vt_ts")
+        export_vt_statistics = st.checkbox("Volume Transport Statistics", value=True, key="exp_vt_stats")
+        export_vt_monthly = st.checkbox("Volume Transport Monthly Profiles (3×4 grid)", value=True, key="exp_vt_monthly")
+        export_bathymetry = st.checkbox("Bathymetry Profile", value=True, key="exp_bathy")
+        export_sf_timeseries = st.checkbox("Salt Flux Time Series", value=False, key="exp_sf_ts")
+        export_sf_monthly = st.checkbox("Salt Flux Monthly Profiles (3×4 grid)", value=False, key="exp_sf_monthly")
+    
+    with col2:
+        st.markdown("**📊 CSV Data**")
+        export_vt_raw_csv = st.checkbox("Volume Transport Raw Monthly", value=True, key="exp_csv_vt_raw")
+        export_vt_clim_csv = st.checkbox("Volume Transport Climatology", value=True, key="exp_csv_vt_clim")
+        export_vt_annual_csv = st.checkbox("Volume Transport Annual Stats", value=True, key="exp_csv_vt_annual")
+        export_sf_csv = st.checkbox("Salt Flux Raw Monthly", value=False, key="exp_csv_sf")
+        
+        st.markdown("---")
+        st.markdown("**⚙️ Settings**")
+        export_dpi = st.selectbox("Image DPI", [150, 300, 600], index=1, key="exp_dpi")
+    
+    # =========================================================================
+    # CHECK DATA AVAILABILITY
+    # =========================================================================
+    ugos_matrix = getattr(cmems_l4_data, 'ugos_matrix', None)
+    vgos_matrix = getattr(cmems_l4_data, 'vgos_matrix', None)
+    gate_lon = getattr(cmems_l4_data, 'gate_lon_pts', None)
+    gate_lat = getattr(cmems_l4_data, 'gate_lat_pts', None)
+    x_km = getattr(cmems_l4_data, 'x_km', None)
+    
+    has_velocity = ugos_matrix is not None and vgos_matrix is not None
+    
+    # Check session state for computed data
+    transport_sv = st.session_state.get('vt_transport_total_sv')  # Total transport time series
+    depth_profile = st.session_state.get('vt_depth_capped')  # Capped depth for calculations
+    depth_profile_full = st.session_state.get('vt_depth_full')  # Full depth for display
+    v_perp = st.session_state.get('vt_v_perp')  # Perpendicular velocity
+    monthly_v_perp = st.session_state.get('vt_monthly_profiles')  # Monthly transport profiles
+    
+    # Salt flux from session state
+    salt_flux_data = st.session_state.get('sf_flux_data')
+    sf_depth_profile = st.session_state.get('sf_depth_profile')
+    
+    # Status
+    st.markdown("### 📊 Data Availability")
+    
+    status_col1, status_col2, status_col3 = st.columns(3)
+    with status_col1:
+        if has_velocity:
+            st.success("✅ Velocity (ugos/vgos)")
+        else:
+            st.warning("⚠️ No velocity data")
+    
+    with status_col2:
+        if transport_sv is not None:
+            st.success(f"✅ Volume Transport ({len(transport_sv)} values)")
+        else:
+            st.warning("⚠️ Compute Volume Transport first")
+    
+    with status_col3:
+        if salt_flux_data is not None:
+            st.success("✅ Salt Flux computed")
+        else:
+            st.info("ℹ️ Salt Flux not computed")
+    
+    # =========================================================================
+    # GENERATE EXPORT
+    # =========================================================================
+    st.markdown("---")
+    
+    if st.button("📥 Generate Export ZIP", type="primary", use_container_width=True):
+        
+        if not has_velocity:
+            st.error("❌ Cannot export without velocity data. Load ugos/vgos first.")
+            return
+        
+        with st.spinner("Generating export files..."):
+            try:
+                # Import export service
+                from src.services.export_service import (
+                    generate_volume_transport_raw_csv,
+                    generate_volume_transport_climatology_csv,
+                    generate_volume_transport_annual_csv,
+                    generate_salt_flux_raw_csv,
+                    export_volume_transport_timeseries,
+                    export_volume_transport_statistics,
+                    export_monthly_profiles_grid,
+                    export_velocity_hovmoller,
+                    export_bathymetry_profile,
+                    export_salt_flux_timeseries,
+                    create_export_zip,
+                    DATASET_FULL_NAMES
+                )
+                from src.services.transport_service import (
+                    compute_perpendicular_velocity,
+                    compute_monthly_along_gate_profile,
+                    compute_segment_widths,
+                    SVERDRUP
+                )
+                from src.services.gebco_service import get_bathymetry_cache
+                
+                files = {}
+                progress = st.progress(0, text="Starting export...")
+                total_steps = 10
+                step = 0
+                
+                # Get or compute v_perp
+                if v_perp is None and has_velocity:
+                    progress.progress(step/total_steps, text="Computing perpendicular velocity...")
+                    v_perp = compute_perpendicular_velocity(ugos_matrix, vgos_matrix, gate_lon, gate_lat)
+                    step += 1
+                
+                # Get or compute depth profile
+                if depth_profile is None:
+                    progress.progress(step/total_steps, text="Loading bathymetry...")
+                    try:
+                        cache = get_bathymetry_cache()
+                        depth_profile = cache.get_or_compute(
+                            gate_name=strait_name,
+                            gate_lons=gate_lon,
+                            gate_lats=gate_lat,
+                            gebco_path=config.gebco_nc_path,
+                            depth_cap=None
+                        )
+                    except Exception as e:
+                        st.warning(f"Could not load bathymetry: {e}")
+                        depth_profile = np.full(len(gate_lon), 200.0)  # Default depth
+                step += 1
+                
+                # Compute transport if not available
+                if transport_sv is None and v_perp is not None and depth_profile is not None:
+                    progress.progress(step/total_steps, text="Computing volume transport...")
+                    widths = compute_segment_widths(gate_lon, gate_lat, x_km)
+                    n_time = v_perp.shape[1]
+                    transport_m3s = np.zeros(n_time)
+                    for t in range(n_time):
+                        v_t = v_perp[:, t]
+                        valid = ~np.isnan(v_t) & ~np.isnan(depth_profile)
+                        if np.any(valid):
+                            transport_m3s[t] = np.sum(v_t[valid] * depth_profile[valid] * widths[valid])
+                    transport_sv = transport_m3s / SVERDRUP
+                step += 1
+                
+                # Compute monthly v_perp profiles if not available
+                if monthly_v_perp is None and v_perp is not None:
+                    progress.progress(step/total_steps, text="Computing monthly profiles...")
+                    monthly_v_perp = compute_monthly_along_gate_profile(x_km, v_perp, time_array, bin_size_km=5.0)
+                step += 1
+                
+                gate_name_safe = strait_name.lower().replace(' ', '_').replace('-', '_')
+                
+                # =========================================================
+                # CSV FILES
+                # =========================================================
+                if export_vt_raw_csv and transport_sv is not None:
+                    progress.progress(step/total_steps, text="Generating Volume Transport raw CSV...")
+                    df = generate_volume_transport_raw_csv(
+                        transport_sv, time_array, strait_name, "cmems_l4", "gebco",
+                        gate_coords={
+                            'start_lon': gate_lon[0], 'start_lat': gate_lat[0],
+                            'end_lon': gate_lon[-1], 'end_lat': gate_lat[-1],
+                            'length_km': x_km.max()
+                        }
+                    )
+                    files[f"csv/{gate_name_safe}_volume_transport_raw.csv"] = df.to_csv(index=False)
+                step += 1
+                
+                if export_vt_clim_csv and transport_sv is not None:
+                    df = generate_volume_transport_climatology_csv(transport_sv, time_array, strait_name)
+                    files[f"csv/{gate_name_safe}_volume_transport_climatology.csv"] = df.to_csv(index=False)
+                
+                if export_vt_annual_csv and transport_sv is not None:
+                    df = generate_volume_transport_annual_csv(transport_sv, time_array, strait_name)
+                    files[f"csv/{gate_name_safe}_volume_transport_annual.csv"] = df.to_csv(index=False)
+                
+                if export_sf_csv and salt_flux_data is not None:
+                    salt_flux_ts = getattr(salt_flux_data, 'total_salt_flux_kg_s', None)
+                    if salt_flux_ts is not None:
+                        df = generate_salt_flux_raw_csv(salt_flux_ts, time_array, strait_name)
+                        files[f"csv/{gate_name_safe}_salt_flux_raw.csv"] = df.to_csv(index=False)
+                step += 1
+                
+                # =========================================================
+                # IMAGE FILES
+                # =========================================================
+                progress.progress(step/total_steps, text="Generating images...")
+                
+                if export_velocity_hov and v_perp is not None:
+                    img = export_velocity_hovmoller(v_perp, x_km, time_array, strait_name, "cmems_l4", export_dpi)
+                    files[f"velocity/{gate_name_safe}_hovmoller.png"] = img
+                step += 1
+                
+                if export_vt_timeseries and transport_sv is not None:
+                    img = export_volume_transport_timeseries(transport_sv, time_array, strait_name, "cmems_l4", export_dpi)
+                    files[f"volume_transport/{gate_name_safe}_timeseries.png"] = img
+                
+                if export_vt_statistics and transport_sv is not None:
+                    img = export_volume_transport_statistics(transport_sv, time_array, strait_name, "cmems_l4", export_dpi)
+                    files[f"volume_transport/{gate_name_safe}_statistics.png"] = img
+                step += 1
+                
+                if export_vt_monthly and monthly_v_perp is not None:
+                    progress.progress(step/total_steps, text="Generating monthly profiles grid...")
+                    img = export_monthly_profiles_grid(
+                        monthly_v_perp, strait_name, "Volume Transport",
+                        "cmems_l4", start_year, end_year, n_obs,
+                        y_label="Velocity (cm/s)", y_scale=100.0,
+                        show_regression=True, dpi=export_dpi
+                    )
+                    files[f"volume_transport/{gate_name_safe}_monthly_profiles_grid.png"] = img
+                step += 1
+                
+                if export_bathymetry and depth_profile is not None:
+                    img = export_bathymetry_profile(depth_profile, x_km, strait_name, gate_lon, gate_lat, export_dpi)
+                    files[f"bathymetry/{gate_name_safe}_depth_profile.png"] = img
+                
+                if export_sf_timeseries and salt_flux_data is not None:
+                    salt_flux_ts = getattr(salt_flux_data, 'total_salt_flux_kg_s', None)
+                    if salt_flux_ts is not None:
+                        img = export_salt_flux_timeseries(salt_flux_ts, time_array, strait_name, "cmems_l4", export_dpi)
+                        files[f"salt_flux/{gate_name_safe}_timeseries.png"] = img
+                
+                if export_sf_monthly and salt_flux_data is not None:
+                    from src.services.transport_service import compute_monthly_salt_flux_profile
+                    if v_perp is not None and sf_depth_profile is not None:
+                        monthly_sf = compute_monthly_salt_flux_profile(
+                            x_km, v_perp, sf_depth_profile, time_array, bin_size_km=5.0
+                        )
+                        img = export_monthly_profiles_grid(
+                            monthly_sf, strait_name, "Salt Flux Along Gate",
+                            "cmems_l4", start_year, end_year, n_obs,
+                            y_label="Salt Flux (kg/m·s)", y_scale=1.0,
+                            show_regression=True, dpi=export_dpi
+                        )
+                        files[f"salt_flux/{gate_name_safe}_along_gate_grid.png"] = img
+                
+                progress.progress(95, text="Creating ZIP archive...")
+                
+                # Create ZIP
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%Y-%m-%d")
+                base_folder = f"export_{gate_name_safe}_{start_year}-{end_year}_{timestamp}"
+                
+                zip_bytes = create_export_zip(files, base_folder)
+                
+                progress.progress(100, text="Done!")
+                
+                # Summary
+                n_csv = len([f for f in files if f.endswith('.csv')])
+                n_png = len([f for f in files if f.endswith('.png')])
+                
+                st.success(f"""
+                ✅ **Export ready!**
+                
+                📁 **{base_folder}.zip**
+                - 📊 {n_csv} CSV files
+                - 📸 {n_png} PNG images ({export_dpi} DPI)
+                """)
+                
+                # Download button
+                st.download_button(
+                    label="📥 Download ZIP Archive",
+                    data=zip_bytes,
+                    file_name=f"{base_folder}.zip",
+                    mime="application/zip",
+                    type="primary",
+                    use_container_width=True
+                )
+                
+                # Show file list
+                with st.expander("📂 Files in archive"):
+                    for f in sorted(files.keys()):
+                        size = len(files[f]) if isinstance(files[f], (bytes, str)) else 0
+                        st.text(f"  {f} ({size/1024:.1f} KB)")
+                
+            except Exception as e:
+                st.error(f"❌ Export failed: {e}")
+                import traceback
+                st.code(traceback.format_exc())
 
 
 # ==============================================================================

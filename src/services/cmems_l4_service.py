@@ -370,6 +370,7 @@ class CMEMSL4Service:
         progress_callback: Optional[callable] = None,
         force_reload: bool = False,
         use_cache: bool = True,
+        filter_ice: bool = False,
     ) -> Optional[CMEMSL4PassData]:
         """
         Load CMEMS L4 gridded data for a gate via API.
@@ -389,6 +390,8 @@ class CMEMSL4Service:
             If True, bypass cache and reload from API
         use_cache : bool
             If False, bypass cache entirely (sidebar manages its own cache)
+        filter_ice : bool
+            If True, mask out ice-covered observations using flag_ice variable
         
         Returns
         -------
@@ -405,9 +408,11 @@ class CMEMSL4Service:
         
         # Extract gate name for cache key
         strait_name = _extract_strait_name(config.gate_path)
-        cache_key = f"{strait_name}_{config.time_start}_{config.time_end}"
+        # Include ice filter in cache key to differentiate filtered vs unfiltered data
+        ice_suffix = "_noice" if filter_ice else ""
+        cache_key = f"{strait_name}_{config.time_start}_{config.time_end}{ice_suffix}"
         
-        logger.info(f"Loading CMEMS L4 data for {strait_name}")
+        logger.info(f"Loading CMEMS L4 data for {strait_name} (filter_ice={filter_ice})")
         
         # Skip cache if use_cache=False (sidebar manages its own cache)
         skip_cache = not use_cache or force_reload
@@ -575,6 +580,43 @@ class CMEMSL4Service:
             else:
                 logger.warning(f"{vel_name} not found in dataset")
         
+        # --- APPLY ICE FILTER (if enabled) ---
+        ice_mask_applied = False
+        n_ice_masked = 0
+        
+        if filter_ice and "flag_ice" in ds.data_vars:
+            if progress_callback:
+                progress_callback(0.78, "Applying ice mask...")
+            
+            flag_ice_var = ds["flag_ice"]
+            flag_ice_data = flag_ice_var.values
+            
+            # Extract flag_ice along gate (same as other variables)
+            ice_matrix = np.zeros((n_pts, n_time))
+            if flag_ice_var.dims == ("time", "latitude", "longitude") or flag_ice_var.dims == ("time", "lat", "lon"):
+                for it in range(n_time):
+                    ice_matrix[:, it] = flag_ice_data[it, lat_idx, lon_idx]
+            elif flag_ice_var.dims == ("latitude", "longitude", "time") or flag_ice_var.dims == ("lat", "lon", "time"):
+                for it in range(n_time):
+                    ice_matrix[:, it] = flag_ice_data[lat_idx, lon_idx, it]
+            
+            # Apply mask: flag_ice == 1 means ice covered, set to NaN
+            # Note: CMEMS flag_ice is typically 0=open water, 1=ice
+            ice_mask = ice_matrix == 1
+            n_ice_masked = np.sum(ice_mask)
+            
+            if n_ice_masked > 0:
+                dot_matrix[ice_mask] = np.nan
+                if ugos_matrix is not None:
+                    ugos_matrix[ice_mask] = np.nan
+                if vgos_matrix is not None:
+                    vgos_matrix[ice_mask] = np.nan
+                
+                ice_mask_applied = True
+                logger.info(f"🧊 Ice filter applied: {n_ice_masked} observations masked ({n_ice_masked / dot_matrix.size * 100:.1f}%)")
+        elif filter_ice and "flag_ice" not in ds.data_vars:
+            logger.warning("Ice filter requested but flag_ice not in dataset variables")
+        
         if progress_callback:
             progress_callback(0.8, "Computing slope time series...")
         
@@ -588,8 +630,11 @@ class CMEMSL4Service:
         mean_lat = np.mean(gate_lat_pts)
         v_geo_series, coriolis_f = _compute_geostrophic_velocity(slope_series, mean_lat)
         
-        # Count valid observations
+        # Count valid observations (after ice masking)
         n_obs = np.sum(np.isfinite(dot_matrix))
+        
+        if ice_mask_applied:
+            logger.info(f"Valid observations after ice filter: {n_obs}")
         
         if progress_callback:
             progress_callback(1.0, "Done!")

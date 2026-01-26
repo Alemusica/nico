@@ -16,6 +16,16 @@ Where:
 - v_N = vgos (northward velocity)
 - v_E = ugos (eastward velocity)
 - θ = angle of gate normal with respect to North
+
+SIGN CONVENTION:
+    - Gates are ordered WEST to EAST (or SOUTH to NORTH for meridional gates)
+    - Normal vector points "to the left" when walking along the gate
+    - For Arctic gates: positive v_perp = flow NORTHWARD (into Arctic)
+    - For Bering Strait: positive v_perp = flow NORTHWARD (into Arctic)
+    - For Fram/Davis: positive v_perp = flow SOUTHWARD (out of Arctic)
+    
+    The sign can be flipped per-gate using the `invert_sign` parameter
+    to ensure positive = inflow to Arctic.
 """
 
 import numpy as np
@@ -27,6 +37,72 @@ logger = logging.getLogger(__name__)
 
 # Constants
 SVERDRUP = 1e6  # 1 Sv = 10^6 m³/s
+
+# Sign convention for each gate (True = flip sign so positive = Arctic inflow)
+# Fram Strait, Davis Strait: outflow is southward, so DON'T flip
+# Bering Strait: inflow is northward, so DON'T flip
+GATE_SIGN_CONVENTION = {
+    "fram_strait": False,  # positive = southward (out of Arctic) - DON'T flip
+    "davis_strait": False,  # positive = southward (out of Arctic) - DON'T flip  
+    "bering_strait": True,  # positive = northward (into Arctic) - already correct
+    "denmark_strait": False,  # positive = southward
+    "barents_sea_opening": True,  # positive = northward (into Barents)
+    # Add more as needed...
+}
+
+
+def get_velocity_sign_convention(gate_name: str) -> Tuple[int, str]:
+    """
+    Get the sign convention for a gate.
+    
+    Args:
+        gate_name: Name of the gate (e.g., "fram_strait", "bering_strait")
+        
+    Returns:
+        sign: 1 or -1 to multiply v_perp
+        direction_label: String describing positive direction (e.g., "Northward (into Arctic)")
+    """
+    # Normalize gate name
+    gate_key = gate_name.lower().replace(" ", "_").replace("-", "_")
+    
+    # Check for partial matches
+    for key in GATE_SIGN_CONVENTION:
+        if key in gate_key:
+            should_flip = GATE_SIGN_CONVENTION[key]
+            if should_flip:
+                return 1, "Northward (into Arctic)"
+            else:
+                return 1, "Southward (out of Arctic)"
+    
+    # Default: assume positive = northward component dominates
+    logger.warning(f"No sign convention defined for gate '{gate_name}', using default (positive=northward)")
+    return 1, "Northward"
+
+
+def compute_normal_direction(gate_lon: np.ndarray, gate_lat: np.ndarray) -> str:
+    """
+    Determine the dominant direction of the gate normal.
+    
+    Returns:
+        "N", "S", "E", or "W" for the direction the normal points
+    """
+    # Compute mean normal angle
+    theta = compute_gate_angles(gate_lon, gate_lat)
+    mean_theta = np.mean(theta)
+    
+    # Convert to compass direction
+    # theta is angle from North, clockwise
+    # 0° = N, 90° = E, 180° = S, 270° = W
+    angle_deg = np.rad2deg(mean_theta) % 360
+    
+    if 315 <= angle_deg or angle_deg < 45:
+        return "N"
+    elif 45 <= angle_deg < 135:
+        return "E"
+    elif 135 <= angle_deg < 225:
+        return "S"
+    else:
+        return "W"
 
 
 @dataclass
@@ -111,7 +187,9 @@ def compute_perpendicular_velocity(
     ugos: np.ndarray,
     vgos: np.ndarray,
     gate_lon: np.ndarray,
-    gate_lat: np.ndarray
+    gate_lat: np.ndarray,
+    gate_name: Optional[str] = None,
+    return_info: bool = False
 ) -> np.ndarray:
     """
     Compute velocity component perpendicular to the gate.
@@ -128,10 +206,18 @@ def compute_perpendicular_velocity(
         vgos: Northward velocity (m/s), shape (n_pts, n_time) or (n_pts,)
         gate_lon: Longitude of gate points
         gate_lat: Latitude of gate points
+        gate_name: Optional gate name for logging direction convention
+        return_info: If True, also return direction info dict
         
     Returns:
         v_perp: Perpendicular velocity (m/s), same shape as ugos
-        Positive = flow to the "right" of the gate direction
+        
+    Sign Convention:
+        The normal is computed as 90° counterclockwise from gate direction.
+        For a gate going West→East: normal points NORTH
+        For a gate going South→North: normal points WEST
+        
+        Positive v_perp = flow in the direction of the normal
     """
     # Compute gate normal angles
     theta = compute_gate_angles(gate_lon, gate_lat)
@@ -147,6 +233,20 @@ def compute_perpendicular_velocity(
         cos_theta = cos_theta[:, np.newaxis]
         sin_theta = sin_theta[:, np.newaxis]
         v_perp = vgos * cos_theta + ugos * sin_theta
+    
+    # Log direction info
+    if gate_name:
+        normal_dir = compute_normal_direction(gate_lon, gate_lat)
+        logger.info(f"Gate '{gate_name}': normal points {normal_dir}, positive v_perp = flow {normal_dir}")
+    
+    if return_info:
+        normal_dir = compute_normal_direction(gate_lon, gate_lat)
+        info = {
+            "normal_direction": normal_dir,
+            "positive_means": f"Flow toward {normal_dir}",
+            "mean_v_perp": float(np.nanmean(v_perp)),
+        }
+        return v_perp, info
     
     return v_perp
 
@@ -286,6 +386,65 @@ def compute_monthly_along_gate_profile(
         
         # Bin spatially
         bin_centers, bin_means, bin_stds = bin_along_gate(x_km, values_mean, bin_size_km)
+        result[month] = (bin_centers, bin_means, bin_stds)
+    
+    return result
+
+
+def compute_monthly_salt_flux_profile(
+    x_km: np.ndarray,
+    v_perp: np.ndarray,
+    depth_profile: np.ndarray,
+    time_array: np.ndarray,
+    salinity: float = 34.8,
+    density: float = 1027.0,
+    bin_size_km: float = 5.0
+) -> Dict[int, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """
+    Compute monthly climatology of salt flux along-gate profiles.
+    
+    Salt flux per unit width: f(x,t) = ρ × (S/1000) × v_perp(x,t) × H(x)
+    
+    Units: kg/(m·s) - salt flux per meter width of gate
+    
+    Args:
+        x_km: Distance along gate (km)
+        v_perp: Perpendicular velocity (m/s), shape (n_pts, n_time)
+        depth_profile: Water depth (m), shape (n_pts,)
+        time_array: Time values
+        salinity: Salinity in PSU (default 34.8)
+        density: Water density in kg/m³ (default 1027)
+        bin_size_km: Spatial bin size
+        
+    Returns:
+        Dict mapping month (1-12) to (bin_centers, bin_means, bin_stds)
+        Values are in kg/(m·s) - salt flux per meter width
+    """
+    import pandas as pd
+    
+    # Compute local salt flux density: ρ × S/1000 × v × H
+    # Shape: (n_pts, n_time)
+    S_frac = salinity / 1000.0  # PSU to kg/kg
+    salt_flux_local = density * S_frac * v_perp * depth_profile[:, np.newaxis]
+    
+    # Now compute monthly profiles
+    time_pd = pd.to_datetime(time_array)
+    months = time_pd.month
+    
+    result = {}
+    
+    for month in range(1, 13):
+        month_mask = months == month
+        if not np.any(month_mask):
+            result[month] = (np.array([]), np.array([]), np.array([]))
+            continue
+        
+        # Average over all time steps in this month (across years)
+        flux_month = salt_flux_local[:, month_mask]  # (n_pts, n_time_month)
+        flux_mean = np.nanmean(flux_month, axis=1)  # (n_pts,)
+        
+        # Bin spatially
+        bin_centers, bin_means, bin_stds = bin_along_gate(x_km, flux_mean, bin_size_km)
         result[month] = (bin_centers, bin_means, bin_stds)
     
     return result

@@ -715,51 +715,42 @@ def export_salt_flux_timeseries(
     return buf.getvalue()
 
 
-
-
 # ==============================================================================
-# NEW EXPORT FUNCTIONS (2026-01-26)
+# NEW EXPORT FUNCTIONS (7 nuove funzioni richieste)
 # ==============================================================================
 
 def export_mean_dot_profile(
-    profile_mean: np.ndarray,
+    dot_mean: np.ndarray,
     x_km: np.ndarray,
     gate_name: str,
     dataset: str = "cmems_l4",
-    profile_std: Optional[np.ndarray] = None,
-    start_year: Optional[int] = None,
-    end_year: Optional[int] = None,
-    n_obs: Optional[int] = None,
+    dot_std: np.ndarray = None,
+    start_year: int = None,
+    end_year: int = None,
+    n_obs: int = None,
     dpi: int = 300
 ) -> bytes:
-    """Generate Mean DOT Profile plot as PNG bytes."""
-    fig, ax = plt.subplots(figsize=(12, 6), dpi=dpi)
-    y_cm = profile_mean * 100  # Convert m to cm
-    ax.plot(x_km, y_cm, color='#9B59B6', linewidth=2, label='Mean DOT')
-    if profile_std is not None:
-        std_cm = profile_std * 100
-        ax.fill_between(x_km, y_cm - std_cm, y_cm + std_cm,
-                        color='#9B59B6', alpha=0.2, label='±1 Std Dev')
-    ax.axhline(y=0, color='gray', linestyle='--', linewidth=1)
-    valid = np.isfinite(y_cm)
-    if np.any(valid):
-        y_range = np.nanmax(y_cm[valid]) - np.nanmin(y_cm[valid])
-        y_text = np.nanmax(y_cm[valid]) - 0.05 * y_range
-        ax.text(x_km[valid].min() + 5, y_text, "WEST", fontsize=12, fontweight='bold', ha='left')
-        ax.text(x_km[valid].max() - 5, y_text, "EAST", fontsize=12, fontweight='bold', ha='right')
-    title = f"{gate_name} - Mean DOT Profile\nDataset: {DATASET_FULL_NAMES.get(dataset, dataset)}"
-    if start_year and end_year:
-        title += f"\nPeriod: {start_year}-{end_year}"
-    if n_obs:
-        title += f" | Observations: {n_obs:,}"
+    """Generate Mean DOT Profile with ±std shading."""
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=dpi)
+    
+    ax.plot(x_km, dot_mean, 'b-', linewidth=2, label='Mean DOT')
+    
+    if dot_std is not None:
+        ax.fill_between(x_km, dot_mean - dot_std, dot_mean + dot_std,
+                       alpha=0.3, color='blue', label='±1 std')
+    
+    title = create_figure_title(gate_name, "Mean DOT Profile", dataset,
+                                start_year, end_year, n_obs)
     ax.set_title(title, fontsize=11, fontweight='bold')
     ax.set_xlabel('Distance along gate (km)', fontsize=10)
-    ax.set_ylabel('DOT (cm)', fontsize=10)
-    ax.legend(loc='upper right')
+    ax.set_ylabel('DOT (m)', fontsize=10)
+    ax.legend(loc='best')
     ax.grid(True, alpha=0.3)
+    
     plt.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white', edgecolor='none')
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
@@ -771,28 +762,65 @@ def export_gate_spatial_map(
     gate_name: str,
     dpi: int = 300
 ) -> bytes:
-    """Generate spatial map with gate location."""
-    fig, ax = plt.subplots(figsize=(10, 8), dpi=dpi)
-    ax.plot(gate_lon, gate_lat, 'r-', linewidth=3, marker='o', markersize=4, 
-            label='Gate transect', zorder=5)
-    ax.plot(gate_lon[0], gate_lat[0], 'go', markersize=12, label='Start (West)', zorder=6)
-    ax.plot(gate_lon[-1], gate_lat[-1], 'bs', markersize=12, label='End (East)', zorder=6)
-    lon_buffer = (gate_lon.max() - gate_lon.min()) * 0.3 + 2
-    lat_buffer = (gate_lat.max() - gate_lat.min()) * 0.3 + 1
-    ax.set_xlim(gate_lon.min() - lon_buffer, gate_lon.max() + lon_buffer)
-    ax.set_ylim(gate_lat.min() - lat_buffer, gate_lat.max() + lat_buffer)
-    ax.set_xlabel('Longitude (°E)', fontsize=10)
-    ax.set_ylabel('Latitude (°N)', fontsize=10)
-    ax.set_title(f"{gate_name} - Gate Location\n"
-                 f"Start: ({gate_lon[0]:.2f}°E, {gate_lat[0]:.2f}°N) → "
-                 f"End: ({gate_lon[-1]:.2f}°E, {gate_lat[-1]:.2f}°N)",
-                 fontsize=12, fontweight='bold')
-    ax.legend(loc='lower right')
-    ax.grid(True, alpha=0.3)
-    ax.set_aspect('equal', adjustable='box')
+    """Generate Gate Spatial Map with coastlines using cartopy."""
+    try:
+        import cartopy.crs as ccrs
+        import cartopy.feature as cfeature
+        
+        # Calculate map bounds with padding
+        lon_min, lon_max = gate_lon.min() - 5, gate_lon.max() + 5
+        lat_min, lat_max = gate_lat.min() - 3, gate_lat.max() + 3
+        
+        # Use NorthPolarStereo for Arctic gates
+        if lat_min > 60:
+            proj = ccrs.NorthPolarStereo()
+            extent_proj = ccrs.PlateCarree()
+        else:
+            proj = ccrs.PlateCarree()
+            extent_proj = ccrs.PlateCarree()
+        
+        fig, ax = plt.subplots(figsize=(10, 8), dpi=dpi, subplot_kw={'projection': proj})
+        
+        # Set extent
+        if lat_min > 60:
+            ax.set_extent([-180, 180, max(60, lat_min - 5), 90], crs=extent_proj)
+        else:
+            ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=extent_proj)
+        
+        # Add features
+        ax.add_feature(cfeature.LAND, facecolor='lightgray')
+        ax.add_feature(cfeature.OCEAN, facecolor='lightblue', alpha=0.5)
+        ax.add_feature(cfeature.COASTLINE, linewidth=0.5)
+        ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.3)
+        ax.gridlines(draw_labels=True, alpha=0.3)
+        
+        # Plot gate
+        ax.plot(gate_lon, gate_lat, 'r-', linewidth=3, transform=ccrs.PlateCarree(),
+               label=f'{gate_name} Gate', zorder=10)
+        ax.scatter(gate_lon[0], gate_lat[0], c='green', s=100, marker='o',
+                  transform=ccrs.PlateCarree(), label='Start', zorder=11)
+        ax.scatter(gate_lon[-1], gate_lat[-1], c='red', s=100, marker='s',
+                  transform=ccrs.PlateCarree(), label='End', zorder=11)
+        
+        ax.set_title(f'{gate_name} - Gate Location', fontsize=12, fontweight='bold')
+        ax.legend(loc='lower left')
+        
+    except ImportError:
+        # Fallback without cartopy
+        fig, ax = plt.subplots(figsize=(10, 8), dpi=dpi)
+        ax.plot(gate_lon, gate_lat, 'r-', linewidth=2, label=f'{gate_name} Gate')
+        ax.scatter(gate_lon[0], gate_lat[0], c='green', s=100, marker='o', label='Start')
+        ax.scatter(gate_lon[-1], gate_lat[-1], c='red', s=100, marker='s', label='End')
+        ax.set_xlabel('Longitude')
+        ax.set_ylabel('Latitude')
+        ax.set_title(f'{gate_name} - Gate Location', fontsize=12, fontweight='bold')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+    
     plt.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white', edgecolor='none')
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
@@ -802,39 +830,36 @@ def export_velocity_comparison_timeseries(
     v_perp_mean_ts: np.ndarray,
     time_array: np.ndarray,
     gate_name: str,
-    v_geo_ts: Optional[np.ndarray] = None,
+    v_geo_mean_ts: np.ndarray = None,
     dataset: str = "cmems_l4",
     dpi: int = 300
 ) -> bytes:
-    """Generate v_perp vs v_geo comparison plot."""
+    """Generate v_perp vs v_geo comparison time series."""
     time_pd = pd.to_datetime(time_array)
-    start_year = time_pd.min().year
-    end_year = time_pd.max().year
-    n_obs = len(time_array)
-    fig, ax = plt.subplots(figsize=(14, 6), dpi=dpi)
-    ax.plot(time_pd, v_perp_mean_ts, color='#1E3A5F', linewidth=1.5, 
-            alpha=0.8, label='v_perp (from ugos/vgos)')
-    if v_geo_ts is not None:
-        v_geo_cm = v_geo_ts * 100 if np.nanmax(np.abs(v_geo_ts)) < 1 else v_geo_ts
-        ax.plot(time_pd, v_geo_cm, color='#E07B53', linewidth=1.5, 
-                alpha=0.8, label='v_geo (from DOT slope)')
+    
+    fig, ax = plt.subplots(figsize=(12, 6), dpi=dpi)
+    
+    ax.plot(time_pd, v_perp_mean_ts, 'b-', linewidth=1, alpha=0.7, label='v_perp (cm/s)')
+    
+    if v_geo_mean_ts is not None:
+        ax.plot(time_pd, v_geo_mean_ts, 'r-', linewidth=1, alpha=0.7, label='v_geo (cm/s)')
+    
     ax.axhline(y=0, color='gray', linestyle='--', linewidth=1)
-    title_str = "v_perp vs v_geo Comparison" if v_geo_ts is not None else "v_perp Time Series"
-    title = f"{gate_name} - {title_str}\nDataset: {DATASET_FULL_NAMES.get(dataset, dataset)}"
-    title += f"\nPeriod: {start_year}-{end_year} | Observations: {n_obs:,}"
+    
+    title = f"{gate_name} - Mean Cross-Gate Velocity [{dataset.upper()}]"
     ax.set_title(title, fontsize=11, fontweight='bold')
     ax.set_xlabel('Time', fontsize=10)
     ax.set_ylabel('Velocity (cm/s)', fontsize=10)
-    ax.legend(loc='upper right')
+    ax.legend(loc='best')
     ax.grid(True, alpha=0.3)
+    
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
-    ax.xaxis.set_major_locator(mdates.YearLocator(2))
-    stats_text = f"v_perp: mean={np.nanmean(v_perp_mean_ts):.2f}, std={np.nanstd(v_perp_mean_ts):.2f} cm/s"
-    ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, fontsize=9, 
-            verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    ax.xaxis.set_major_locator(mdates.YearLocator())
+    
     plt.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white', edgecolor='none')
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
@@ -848,79 +873,50 @@ def export_monthly_velocity_grid(
     dataset: str = "cmems_l4",
     dpi: int = 300
 ) -> bytes:
-    """Generate 3x4 grid of monthly mean velocity profiles."""
+    """Generate 3x4 Monthly Velocity Grid with slope and R²."""
+    from scipy import stats
+    
     time_pd = pd.to_datetime(time_array)
-    start_year = time_pd.min().year
-    end_year = time_pd.max().year
-    n_obs = v_perp.shape[1] if len(v_perp.shape) > 1 else len(time_array)
-    months = time_pd.month
+    months_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    
     fig, axes = plt.subplots(3, 4, figsize=(16, 12), dpi=dpi)
     axes = axes.flatten()
-    all_y = []
-    for month in range(1, 13):
-        month_mask = months == month
-        if np.any(month_mask):
-            v_month = v_perp[:, month_mask] if len(v_perp.shape) > 1 else v_perp[month_mask]
-            v_mean = np.nanmean(v_month, axis=1 if len(v_month.shape) > 1 else 0) * 100
-            valid = np.isfinite(v_mean)
-            if np.any(valid):
-                if hasattr(v_mean, '__iter__'):
-                    all_y.extend(v_mean[valid])
-                else:
-                    all_y.append(v_mean)
-    if all_y:
-        y_min = min(np.percentile(all_y, 2) * 1.2, -5)
-        y_max = max(np.percentile(all_y, 98) * 1.2, 5)
-    else:
-        y_min, y_max = -20, 20
-    for month in range(1, 13):
-        ax = axes[month - 1]
-        month_mask = months == month
-        if not np.any(month_mask):
-            ax.set_title(MONTH_ABBREV[month-1], fontsize=10, fontweight='bold')
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
-            ax.set_xlim(x_km.min(), x_km.max())
-            ax.set_ylim(y_min, y_max)
-            continue
-        v_month = v_perp[:, month_mask] if len(v_perp.shape) > 1 else v_perp[month_mask]
-        v_mean = np.nanmean(v_month, axis=1 if len(v_month.shape) > 1 else 0) * 100
-        v_std = np.nanstd(v_month, axis=1 if len(v_month.shape) > 1 else 0) * 100
-        valid = np.isfinite(v_mean) if hasattr(v_mean, '__iter__') else True
-        if not np.any(valid):
-            ax.set_title(MONTH_ABBREV[month-1], fontsize=10, fontweight='bold')
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
-            continue
-        x_valid = x_km[valid] if hasattr(v_mean, '__iter__') else x_km
-        v_valid = v_mean[valid] if hasattr(v_mean, '__iter__') else [v_mean]
-        colors = ['#5B8DBE' if v >= 0 else '#CD6155' for v in v_valid]
-        bar_width = (x_km[1] - x_km[0]) * 0.8 if len(x_km) > 1 else 5
-        ax.bar(x_valid, v_valid, width=bar_width, color=colors, alpha=0.7, edgecolor='black', linewidth=0.3)
-        if hasattr(v_std, '__iter__'):
-            v_std_valid = v_std[valid]
-            ax.errorbar(x_valid, v_valid, yerr=v_std_valid, fmt='none', color='black', capsize=2, alpha=0.5)
-        ax.axhline(y=0, color='gray', linestyle='--', linewidth=1)
-        if hasattr(v_mean, '__iter__') and np.sum(valid) > 2:
-            slope, intercept, r_value, _, _ = stats.linregress(x_valid, v_valid)
-            x_fit = np.array([x_valid.min(), x_valid.max()])
-            y_fit = slope * x_fit + intercept
-            ax.plot(x_fit, y_fit, 'k--', linewidth=1.5, alpha=0.8)
-            ax.text(0.05, 0.95, f"slope={slope:.2e}\nR²={r_value**2:.3f}",
-                    transform=ax.transAxes, fontsize=8, verticalalignment='top',
-                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-        ax.set_title(MONTH_ABBREV[month-1], fontsize=10, fontweight='bold')
-        ax.set_ylim(y_min, y_max)
+    
+    for month_idx in range(12):
+        ax = axes[month_idx]
+        month_mask = time_pd.month == (month_idx + 1)
+        
+        if month_mask.sum() > 0:
+            v_month = v_perp[:, month_mask]
+            v_mean = np.nanmean(v_month, axis=1) * 100  # cm/s
+            v_std = np.nanstd(v_month, axis=1) * 100
+            
+            ax.plot(x_km, v_mean, 'b-', linewidth=1.5)
+            ax.fill_between(x_km, v_mean - v_std, v_mean + v_std, alpha=0.3, color='blue')
+            
+            # Linear regression for slope and R²
+            valid = ~np.isnan(v_mean)
+            if valid.sum() > 2:
+                slope, intercept, r_value, p_val, std_err = stats.linregress(x_km[valid], v_mean[valid])
+                ax.plot(x_km, slope * x_km + intercept, 'r--', linewidth=1, alpha=0.7)
+                ax.text(0.05, 0.95, f'slope={slope:.3f}\nR²={r_value**2:.3f}',
+                       transform=ax.transAxes, fontsize=8, verticalalignment='top',
+                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+        ax.set_title(months_names[month_idx], fontsize=10, fontweight='bold')
+        ax.set_xlabel('Distance (km)' if month_idx >= 8 else '', fontsize=8)
+        ax.set_ylabel('Velocity (cm/s)' if month_idx % 4 == 0 else '', fontsize=8)
         ax.grid(True, alpha=0.3)
-        if month > 8:
-            ax.set_xlabel('Distance (km)', fontsize=9)
-        if month in [1, 5, 9]:
-            ax.set_ylabel('Velocity (cm/s)', fontsize=9)
-    fig.suptitle(f"{gate_name} - Monthly Mean Velocity Profiles\n"
-                 f"Dataset: {DATASET_FULL_NAMES.get(dataset, dataset)}\n"
-                 f"Period: {start_year}-{end_year} | Observations: {n_obs:,}",
-                 fontsize=12, fontweight='bold', y=1.02)
+    
+    fig.suptitle(f'{gate_name} - Monthly Velocity Profiles [{dataset.upper()}]',
+                fontsize=14, fontweight='bold', y=1.02)
     plt.tight_layout()
+    
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white', edgecolor='none')
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
@@ -934,112 +930,72 @@ def export_monthly_dot_analysis(
     dataset: str = "cmems_l4",
     dpi: int = 300
 ) -> bytes:
-    """Generate 3x4 grid of monthly DOT analysis (scatter + regression)."""
+    """Generate 3x4 Monthly DOT Analysis grid."""
     time_pd = pd.to_datetime(time_array)
-    start_year = time_pd.min().year
-    end_year = time_pd.max().year
-    n_obs = dot_matrix.shape[1] if len(dot_matrix.shape) > 1 else len(time_array)
-    months = time_pd.month
+    months_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    
     fig, axes = plt.subplots(3, 4, figsize=(16, 12), dpi=dpi)
     axes = axes.flatten()
-    all_y = []
-    for month in range(1, 13):
-        month_mask = months == month
-        if np.any(month_mask):
-            dot_month = dot_matrix[:, month_mask] if len(dot_matrix.shape) > 1 else dot_matrix
-            dot_mean = np.nanmean(dot_month, axis=1 if len(dot_month.shape) > 1 else 0) * 100
-            valid = np.isfinite(dot_mean)
-            if np.any(valid):
-                if hasattr(dot_mean, '__iter__'):
-                    all_y.extend(dot_mean[valid])
-                else:
-                    all_y.append(dot_mean)
-    if all_y:
-        y_min = np.percentile(all_y, 2) * 1.1
-        y_max = np.percentile(all_y, 98) * 1.1
-    else:
-        y_min, y_max = -20, 20
-    for month in range(1, 13):
-        ax = axes[month - 1]
-        month_mask = months == month
-        if not np.any(month_mask):
-            ax.set_title(MONTH_ABBREV[month-1], fontsize=10, fontweight='bold')
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
-            continue
-        dot_month = dot_matrix[:, month_mask] if len(dot_matrix.shape) > 1 else dot_matrix
-        dot_mean = np.nanmean(dot_month, axis=1 if len(dot_month.shape) > 1 else 0) * 100
-        valid = np.isfinite(dot_mean) & np.isfinite(x_km)
-        if np.sum(valid) < 2:
-            ax.set_title(MONTH_ABBREV[month-1], fontsize=10, fontweight='bold')
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
-            continue
-        ax.scatter(x_km[valid], dot_mean[valid], s=15, color='#9B59B6', alpha=0.6)
-        slope, intercept, r_value, _, _ = stats.linregress(x_km[valid], dot_mean[valid])
-        r_squared = r_value ** 2
-        x_line = np.linspace(x_km[valid].min(), x_km[valid].max(), 50)
-        y_line = slope * x_line + intercept
-        ax.plot(x_line, y_line, 'r-', linewidth=2)
-        slope_m_100km = slope / 100
-        ax.text(0.95, 0.95, f"R²={r_squared:.3f}\nslope={slope_m_100km:.4f} m/100km",
-                transform=ax.transAxes, fontsize=8, verticalalignment='top', ha='right',
-                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-        ax.set_title(MONTH_ABBREV[month-1], fontsize=10, fontweight='bold')
-        ax.set_ylim(y_min, y_max)
+    
+    for month_idx in range(12):
+        ax = axes[month_idx]
+        month_mask = time_pd.month == (month_idx + 1)
+        
+        if month_mask.sum() > 0:
+            dot_month = dot_matrix[:, month_mask]
+            dot_mean = np.nanmean(dot_month, axis=1)
+            dot_std = np.nanstd(dot_month, axis=1)
+            
+            ax.plot(x_km, dot_mean, 'darkblue', linewidth=1.5)
+            ax.fill_between(x_km, dot_mean - dot_std, dot_mean + dot_std,
+                           alpha=0.3, color='blue')
+        
+        ax.set_title(months_names[month_idx], fontsize=10, fontweight='bold')
+        ax.set_xlabel('Distance (km)' if month_idx >= 8 else '', fontsize=8)
+        ax.set_ylabel('DOT (m)' if month_idx % 4 == 0 else '', fontsize=8)
         ax.grid(True, alpha=0.3)
-        if month > 8:
-            ax.set_xlabel('Distance (km)', fontsize=9)
-        if month in [1, 5, 9]:
-            ax.set_ylabel('DOT (cm)', fontsize=9)
-    fig.suptitle(f"{gate_name} - Monthly DOT Analysis (DOT vs Distance)\n"
-                 f"Dataset: {DATASET_FULL_NAMES.get(dataset, dataset)}\n"
-                 f"Period: {start_year}-{end_year} | Observations: {n_obs:,}",
-                 fontsize=12, fontweight='bold', y=1.02)
+    
+    fig.suptitle(f'{gate_name} - Monthly DOT Analysis [{dataset.upper()}]',
+                fontsize=14, fontweight='bold', y=1.02)
     plt.tight_layout()
+    
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white', edgecolor='none')
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
 
 
 def export_salinity_density_profile(
-    sos_matrix: np.ndarray,
-    dos_matrix: np.ndarray,
+    salinity_profile: np.ndarray,
+    density_profile: np.ndarray,
     x_km: np.ndarray,
     gate_name: str,
-    time_array: Optional[np.ndarray] = None,
     dpi: int = 300
 ) -> bytes:
-    """Generate Salinity & Density profiles along gate (side by side)."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5), dpi=dpi)
-    sos_mean = np.nanmean(sos_matrix, axis=1) if len(sos_matrix.shape) > 1 else sos_matrix
-    sos_std = np.nanstd(sos_matrix, axis=1) if len(sos_matrix.shape) > 1 else np.zeros_like(sos_mean)
-    ax1.plot(x_km, sos_mean, color='#3498DB', linewidth=2, label='Mean Salinity')
-    ax1.fill_between(x_km, sos_mean - sos_std, sos_mean + sos_std, color='#3498DB', alpha=0.2, label='±1 Std')
+    """Generate Salinity & Density profiles plot."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), dpi=dpi)
+    
+    # Salinity
+    ax1.plot(x_km, salinity_profile, 'g-', linewidth=2)
     ax1.set_xlabel('Distance along gate (km)', fontsize=10)
     ax1.set_ylabel('Salinity (PSU)', fontsize=10)
-    ax1.set_title('Salinity Profile', fontsize=11, fontweight='bold')
-    ax1.legend(loc='upper right')
+    ax1.set_title(f'{gate_name} - Salinity Profile', fontsize=11, fontweight='bold')
     ax1.grid(True, alpha=0.3)
-    dos_mean = np.nanmean(dos_matrix, axis=1) if len(dos_matrix.shape) > 1 else dos_matrix
-    dos_std = np.nanstd(dos_matrix, axis=1) if len(dos_matrix.shape) > 1 else np.zeros_like(dos_mean)
-    ax2.plot(x_km, dos_mean, color='#E74C3C', linewidth=2, label='Mean Density')
-    ax2.fill_between(x_km, dos_mean - dos_std, dos_mean + dos_std, color='#E74C3C', alpha=0.2, label='±1 Std')
+    
+    # Density
+    ax2.plot(x_km, density_profile, 'purple', linewidth=2)
     ax2.set_xlabel('Distance along gate (km)', fontsize=10)
     ax2.set_ylabel('Density (kg/m³)', fontsize=10)
-    ax2.set_title('Density Profile', fontsize=11, fontweight='bold')
-    ax2.legend(loc='upper right')
+    ax2.set_title(f'{gate_name} - Density Profile', fontsize=11, fontweight='bold')
     ax2.grid(True, alpha=0.3)
-    period_str = ""
-    if time_array is not None:
-        time_pd = pd.to_datetime(time_array)
-        period_str = f" | Period: {time_pd.min().year}-{time_pd.max().year}"
-    fig.suptitle(f"{gate_name} - Salinity & Density Along Gate\n"
-                 f"Dataset: CMEMS SSS (MULTIOBS_GLO_PHY_S_SURFACE_MYNRT_015_013){period_str}",
-                 fontsize=12, fontweight='bold', y=1.02)
+    
     plt.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white', edgecolor='none')
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
@@ -1049,30 +1005,40 @@ def export_bathymetry_profile_fixed(
     depth_profile: np.ndarray,
     x_km: np.ndarray,
     gate_name: str,
-    gate_lon: Optional[np.ndarray] = None,
-    gate_lat: Optional[np.ndarray] = None,
+    gate_lon: np.ndarray = None,
+    gate_lat: np.ndarray = None,
     dpi: int = 300
 ) -> bytes:
-    """Generate bathymetry profile with Y-axis 0 at top (depth increases downward)."""
-    fig, ax = plt.subplots(figsize=(12, 4), dpi=dpi)
-    depth_positive = np.abs(depth_profile)
-    ax.plot(x_km, depth_positive, color='#2C3E50', linewidth=2)
-    max_depth = np.nanmax(depth_positive)
-    ax.fill_between(x_km, depth_positive, max_depth * 1.1, color='#AED6F1', alpha=0.3)
-    ax.set_ylim(max_depth * 1.1, 0)  # max at bottom, 0 at top
+    """Generate Bathymetry profile with fixed Y-axis (no brown fill)."""
+    fig, ax = plt.subplots(figsize=(12, 5), dpi=dpi)
+    
+    # Plot depth as line only (no fill)
+    ax.plot(x_km, -np.abs(depth_profile), 'navy', linewidth=2, label='Seafloor')
+    
+    # Y-axis: fixed range based on max depth
+    max_depth = np.nanmax(np.abs(depth_profile))
+    ax.set_ylim(-max_depth * 1.1, 50)
+    
+    ax.axhline(y=0, color='lightblue', linewidth=2, label='Sea Level')
+    
     ax.set_xlabel('Distance along gate (km)', fontsize=10)
     ax.set_ylabel('Depth (m)', fontsize=10)
-    title = f"{gate_name} - Bathymetry Profile (GEBCO 2023)"
-    if gate_lon is not None and gate_lat is not None:
-        title += f"\n({gate_lon[0]:.2f}°E, {gate_lat[0]:.2f}°N) → ({gate_lon[-1]:.2f}°E, {gate_lat[-1]:.2f}°N)"
-    ax.set_title(title, fontsize=11, fontweight='bold')
-    stats_text = f"Max depth: {max_depth:.0f} m | Mean: {np.nanmean(depth_positive):.0f} m"
-    ax.text(0.02, 0.02, stats_text, transform=ax.transAxes, fontsize=9,
-            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    ax.set_title(f'{gate_name} - Bathymetry Profile', fontsize=12, fontweight='bold')
+    ax.legend(loc='lower right')
     ax.grid(True, alpha=0.3)
+    
+    # Add coordinate labels if available
+    if gate_lon is not None and gate_lat is not None:
+        ax.text(0.02, 0.02, f'Start: ({gate_lon[0]:.2f}°, {gate_lat[0]:.2f}°)',
+               transform=ax.transAxes, fontsize=8, verticalalignment='bottom')
+        ax.text(0.98, 0.02, f'End: ({gate_lon[-1]:.2f}°, {gate_lat[-1]:.2f}°)',
+               transform=ax.transAxes, fontsize=8, verticalalignment='bottom',
+               horizontalalignment='right')
+    
     plt.tight_layout()
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor='white', edgecolor='none')
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
@@ -1257,6 +1223,66 @@ def generate_full_export(
                 show_regression=True, dpi=dpi
             )
             files[f"salt_flux/{gate_name_safe}_along_gate_grid.png"] = img
+        
+        # =====================================================================
+        # NEW EXPORTS (7 nuove funzioni)
+        # =====================================================================
+        
+        # 1. Mean DOT Profile
+        dot_matrix = gate_data.get('dot_matrix')
+        if dot_matrix is not None and x_km is not None:
+            dot_mean = np.nanmean(dot_matrix, axis=1)
+            dot_std = np.nanstd(dot_matrix, axis=1)
+            img = export_mean_dot_profile(
+                dot_mean, x_km, gate_name, dataset, dot_std,
+                start_year, end_year, n_obs, dpi
+            )
+            files[f"dot_profile/{gate_name_safe}_mean_dot_profile.png"] = img
+        
+        # 2. Gate Spatial Map (with coastlines)
+        if gate_lon is not None and gate_lat is not None:
+            img = export_gate_spatial_map(gate_lon, gate_lat, gate_name, dpi)
+            files[f"spatial/{gate_name_safe}_gate_map.png"] = img
+        
+        # 3. Velocity Comparison (v_perp vs v_geo)
+        if v_perp is not None:
+            v_perp_mean_ts = np.nanmean(v_perp, axis=0) * 100  # cm/s
+            v_geo = gate_data.get('v_geo')
+            v_geo_mean_ts = np.nanmean(v_geo, axis=0) * 100 if v_geo is not None else None
+            img = export_velocity_comparison_timeseries(
+                v_perp_mean_ts, time_array, gate_name, v_geo_mean_ts, dataset, dpi
+            )
+            files[f"velocity/{gate_name_safe}_velocity_comparison.png"] = img
+        
+        # 4. Monthly Velocity Grid (3x4 with slope and R²)
+        if v_perp is not None and x_km is not None:
+            img = export_monthly_velocity_grid(
+                v_perp, x_km, time_array, gate_name, dataset, dpi
+            )
+            files[f"velocity/{gate_name_safe}_monthly_velocity_grid.png"] = img
+        
+        # 5. Monthly DOT Analysis (3x4)
+        if dot_matrix is not None and x_km is not None:
+            img = export_monthly_dot_analysis(
+                dot_matrix, x_km, time_array, gate_name, dataset, dpi
+            )
+            files[f"monthly_analysis/{gate_name_safe}_monthly_dot.png"] = img
+        
+        # 6. Salinity & Density Profile
+        salinity_profile = gate_data.get('salinity_profile')
+        density_profile = gate_data.get('density_profile')
+        if salinity_profile is not None and density_profile is not None and x_km is not None:
+            img = export_salinity_density_profile(
+                salinity_profile, density_profile, x_km, gate_name, dpi
+            )
+            files[f"salt_flux/{gate_name_safe}_salinity_density.png"] = img
+        
+        # 7. Bathymetry Profile Fixed (no brown fill)
+        if depth_profile is not None and x_km is not None:
+            img = export_bathymetry_profile_fixed(
+                depth_profile, x_km, gate_name, gate_lon, gate_lat, dpi
+            )
+            files[f"bathymetry/{gate_name_safe}_depth_profile_fixed.png"] = img
     
     # Create timestamp for folder name
     timestamp = datetime.now().strftime("%Y-%m-%d")
@@ -1358,42 +1384,6 @@ def generate_multi_gate_export(
                     start_year, end_year, n_obs, "Salt Flux (kg/m·s)", 1.0, True, dpi
                 )
                 all_files[f"salt_flux/{gate_name_safe}_along_gate_grid.png"] = img
-            
-            # NEW EXPORTS (2026-01-26)
-            dot_matrix = gate_data.get('dot_matrix')
-            if dot_matrix is not None and x_km is not None:
-                dot_mean = np.nanmean(dot_matrix, axis=1) if len(dot_matrix.shape) > 1 else dot_matrix
-                dot_std = np.nanstd(dot_matrix, axis=1) if len(dot_matrix.shape) > 1 else None
-                img = export_mean_dot_profile(dot_mean, x_km, gate_name, dataset, dot_std, start_year, end_year, n_obs, dpi)
-                all_files[f"dot_profile/{gate_name_safe}_mean_dot_profile.png"] = img
-            
-            if gate_lon is not None and gate_lat is not None:
-                img = export_gate_spatial_map(gate_lon, gate_lat, gate_name, dpi)
-                all_files[f"spatial/{gate_name_safe}_gate_map.png"] = img
-            
-            v_perp_mean_ts = gate_data.get('v_perp_mean_ts')
-            v_geo_ts = gate_data.get('v_geo_ts')
-            if v_perp_mean_ts is not None:
-                img = export_velocity_comparison_timeseries(v_perp_mean_ts, time_array, gate_name, v_geo_ts, dataset, dpi)
-                all_files[f"velocity/{gate_name_safe}_v_perp_vs_v_geo.png"] = img
-            
-            if v_perp is not None and x_km is not None:
-                img = export_monthly_velocity_grid(v_perp, x_km, time_array, gate_name, dataset, dpi)
-                all_files[f"velocity/{gate_name_safe}_monthly_velocity_grid.png"] = img
-            
-            if dot_matrix is not None and x_km is not None:
-                img = export_monthly_dot_analysis(dot_matrix, x_km, time_array, gate_name, dataset, dpi)
-                all_files[f"monthly_analysis/{gate_name_safe}_monthly_dot_analysis.png"] = img
-            
-            sos_matrix = gate_data.get('sos_matrix')
-            dos_matrix = gate_data.get('dos_matrix')
-            if sos_matrix is not None and dos_matrix is not None and x_km is not None:
-                img = export_salinity_density_profile(sos_matrix, dos_matrix, x_km, gate_name, time_array, dpi)
-                all_files[f"salt_flux/{gate_name_safe}_salinity_density.png"] = img
-            
-            if depth_profile is not None and x_km is not None:
-                img = export_bathymetry_profile_fixed(depth_profile, x_km, gate_name, gate_lon, gate_lat, dpi)
-                all_files[f"bathymetry/{gate_name_safe}_depth_profile_v2.png"] = img
     
     timestamp = datetime.now().strftime("%Y-%m-%d")
     n_gates = len(gates_data)

@@ -75,6 +75,7 @@ class AppConfig:
     cmems_l4_buffer: float = 2.0  # Buffer around gate (degrees)
     cmems_l4_start: Any = None  # datetime.date
     cmems_l4_end: Any = None  # datetime.date
+    cmems_l4_filter_ice: bool = False  # Filter out ice-covered observations using flag_ice
     
     # === BATHYMETRY / VOLUME TRANSPORT SETTINGS ===
     depth_method: str = "fixed"  # "fixed" or "gebco"

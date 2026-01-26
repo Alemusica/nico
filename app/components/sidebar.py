@@ -1533,10 +1533,18 @@ def _render_cmems_l4_config(config: AppConfig) -> AppConfig:
     # Variables to download
     config.cmems_l4_variables = st.sidebar.multiselect(
         "Variables",
-        ["adt", "sla", "ugos", "vgos", "ugosa", "vgosa"],
+        ["adt", "sla", "ugos", "vgos", "ugosa", "vgosa", "flag_ice"],
         default=["adt", "sla", "ugos", "vgos"],
         key="sidebar_cmems_l4_vars",
-        help="ADT=Absolute Dynamic Topography, SLA=Sea Level Anomaly, ugos/vgos=geostrophic velocities"
+        help="ADT=Absolute Dynamic Topography, SLA=Sea Level Anomaly, ugos/vgos=geostrophic velocities, flag_ice=ice mask"
+    )
+    
+    # Ice filter checkbox
+    config.cmems_l4_filter_ice = st.sidebar.checkbox(
+        "🧊 Filter Ice-Covered Data",
+        value=config.cmems_l4_filter_ice,
+        key="sidebar_cmems_l4_filter_ice",
+        help="Use flag_ice to mask out ice-covered observations. Automatically adds flag_ice to variables if not selected."
     )
     
     # Buffer around gate
@@ -1631,6 +1639,11 @@ def _load_cmems_l4_data(config: AppConfig):
         st.sidebar.error("❌ Invalid time range")
         return
     
+    # Prepare variables - auto-add flag_ice if filter is enabled
+    variables = list(config.cmems_l4_variables)
+    if config.cmems_l4_filter_ice and "flag_ice" not in variables:
+        variables.append("flag_ice")
+    
     try:
         from src.services.cmems_l4_service import CMEMSL4Service, CMEMSL4Config
         
@@ -1641,15 +1654,18 @@ def _load_cmems_l4_data(config: AppConfig):
         cache_gate = _get_parent_gate_id(config.selected_gate)
         gate_name = cache_gate.replace(" ", "_").lower()
         
-        # Extract years for cache key
-        start_year = config.cmems_l4_start.year
-        end_year = config.cmems_l4_end.year
-        time_range = (start_year, end_year)
+        # Build cache key matching CMEMSL4Service format: "{strait}_{time_start}_{time_end}"
+        # Include ice filter in cache key
+        time_start = str(config.cmems_l4_start)
+        time_end = str(config.cmems_l4_end)
+        ice_suffix = "_noice" if config.cmems_l4_filter_ice else ""
+        cache_key = f"{gate_name}_{time_start}_{time_end}{ice_suffix}"
         
-        cached_data = _cache.load("cmems_l4", gate_name, time_range=time_range)
+        # Try to get from service-level cache (L2 processed)
+        cached_data = _cache.get_processed("cmems_l4", cache_key, n_gate_pts=400)
         
         if cached_data is not None:
-            st.sidebar.success(f"📦 Loaded from cache! ({start_year}-{end_year})")
+            st.sidebar.success(f"📦 Loaded from cache! ({time_start} to {time_end})")
             pass_data = cached_data
         else:
             # Create config and load from API
@@ -1658,7 +1674,7 @@ def _load_cmems_l4_data(config: AppConfig):
                 time_start=str(config.cmems_l4_start),
                 time_end=str(config.cmems_l4_end),
                 buffer_deg=config.cmems_l4_buffer,
-                variables=config.cmems_l4_variables,
+                variables=variables,
             )
             
             with st.sidebar.status("🌐 Downloading CMEMS L4 data...", expanded=True) as status:
@@ -1669,13 +1685,16 @@ def _load_cmems_l4_data(config: AppConfig):
                 
                 st.write(f"🚪 Gate: {config.selected_gate}")
                 st.write(f"📅 Period: {config.cmems_l4_start} to {config.cmems_l4_end}")
-                st.write(f"📊 Variables: {', '.join(config.cmems_l4_variables)}")
+                st.write(f"📊 Variables: {', '.join(variables)}")
+                if config.cmems_l4_filter_ice:
+                    st.write("🧊 Ice filter: ENABLED")
                 
-                # Disable service-level cache - sidebar handles caching
+                # Use service-level cache (IntelligentCache with disk persistence)
                 pass_data = service.load_gate_data(
                     config=l4_config,
                     progress_callback=progress_callback,
-                    use_cache=False  # Sidebar manages cache
+                    use_cache=True,  # Let service handle cache
+                    filter_ice=config.cmems_l4_filter_ice  # Pass ice filter flag
                 )
                 
                 status.update(label="✅ CMEMS L4 downloaded!", state="complete", expanded=False)
@@ -1683,9 +1702,6 @@ def _load_cmems_l4_data(config: AppConfig):
             if pass_data is None:
                 st.sidebar.error("❌ No data returned from API")
                 return
-            
-            # Save to cache with time range
-            _cache.save("cmems_l4", gate_name, pass_data, time_range=time_range)
         
         # Apply longitude filter for divided gates (Fram West/East, Davis West/East)
         lon_min, lon_max = _get_lon_filter_for_gate(config.selected_gate)
@@ -1708,8 +1724,11 @@ def _load_cmems_l4_data(config: AppConfig):
         n_valid_slopes = sum(~np.isnan(pass_data.slope_series))
         gate_length = pass_data.x_km[-1] if len(pass_data.x_km) > 0 else 0
         
+        # Build filter info string
+        ice_info = " 🧊" if config.cmems_l4_filter_ice else ""
+        
         st.sidebar.success(f"""
-        ✅ CMEMS L4 Data Loaded!{filter_info}
+        ✅ CMEMS L4 Data Loaded!{filter_info}{ice_info}
         - Gate: {pass_data.strait_name}
         - Source: {pass_data.data_source}
         - Period: {pass_data.time_range[0][:10]} to {pass_data.time_range[1][:10]}
@@ -1717,6 +1736,7 @@ def _load_cmems_l4_data(config: AppConfig):
         - Valid slopes: {n_valid_slopes}/{n_time}
         - Gate length: {gate_length:.1f} km
         - Observations: {pass_data.n_observations:,}
+        - Ice filter: {'✅ Enabled' if config.cmems_l4_filter_ice else '❌ Disabled'}
         """)
         
         # Rerun to display tabs

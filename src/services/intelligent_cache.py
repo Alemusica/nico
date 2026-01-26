@@ -58,11 +58,10 @@ DEFAULT_CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "cache" / "in
 class CacheConfig:
     """Configuration for intelligent caching."""
     enabled: bool = True
-    ttl_days: int = 14  # Time-to-live in days
-    max_entries: int = 50  # Max cached entries per level
+    max_entries: int = 100  # Max cached entries per level (increased from 50)
     persist_to_disk: bool = True  # Enable disk persistence
     cache_dir: Optional[Path] = None  # Custom cache directory (default: data/cache/intelligent)
-    auto_save_interval: int = 10  # Auto-save after N set operations
+    auto_save_interval: int = 5  # Auto-save after N set operations (reduced for safety)
 
 
 class IntelligentCache:
@@ -133,13 +132,8 @@ class IntelligentCache:
         return f"proc_{service}_{entity_key}_{params_hash}"
     
     # =========================================================================
-    # TTL and Eviction
+    # Eviction (LRU when max entries exceeded)
     # =========================================================================
-    
-    def _is_expired(self, timestamp: float) -> bool:
-        """Check if cache entry is expired."""
-        age_days = (time.time() - timestamp) / (24 * 3600)
-        return age_days > self.config.ttl_days
     
     def _enforce_max_entries(self, cache: dict):
         """Remove oldest entries if cache exceeds max size (LRU eviction)."""
@@ -173,7 +167,7 @@ class IntelligentCache:
         Returns
         -------
         data or None
-            Cached data or None if not found/expired
+            Cached data or None if not found
         """
         if not self.config.enabled:
             return None
@@ -182,13 +176,9 @@ class IntelligentCache:
         
         if key in self._raw_cache:
             data, timestamp = self._raw_cache[key]
-            if not self._is_expired(timestamp):
-                self._stats["hits"] += 1
-                logger.debug(f"Cache HIT (L1 raw): {key}")
-                return data
-            else:
-                del self._raw_cache[key]
-                logger.debug(f"Cache EXPIRED (L1 raw): {key}")
+            self._stats["hits"] += 1
+            logger.debug(f"Cache HIT (L1 raw): {key}")
+            return data
         
         self._stats["misses"] += 1
         return None
@@ -235,7 +225,7 @@ class IntelligentCache:
         Returns
         -------
         data or None
-            Cached data or None if not found/expired
+            Cached data or None if not found
         """
         if not self.config.enabled:
             return None
@@ -244,13 +234,9 @@ class IntelligentCache:
         
         if key in self._processed_cache:
             data, timestamp = self._processed_cache[key]
-            if not self._is_expired(timestamp):
-                self._stats["hits"] += 1
-                logger.debug(f"Cache HIT (L2 processed): {key}")
-                return data
-            else:
-                del self._processed_cache[key]
-                logger.debug(f"Cache EXPIRED (L2 processed): {key}")
+            self._stats["hits"] += 1
+            logger.debug(f"Cache HIT (L2 processed): {key}")
+            return data
         
         self._stats["misses"] += 1
         return None
@@ -405,24 +391,26 @@ class IntelligentCache:
         Load cache from disk.
         
         Called automatically on init if persist_to_disk=True.
-        Removes expired entries after loading.
+        Data persists indefinitely (no TTL expiration).
         """
         try:
             # Load L1 (raw) cache
             raw_file = self._get_raw_cache_file()
-            if raw_file.exists():
+            if raw_file.exists() and raw_file.stat().st_size > 0:
                 with open(raw_file, 'rb') as f:
                     self._raw_cache = pickle.load(f)
-                # Remove expired entries
-                self._clean_expired_entries(self._raw_cache, "L1")
+                logger.info(f"L1 cache loaded: {len(self._raw_cache)} entries")
+            else:
+                logger.debug("L1 cache file empty or missing, starting fresh")
             
             # Load L2 (processed) cache
             proc_file = self._get_processed_cache_file()
-            if proc_file.exists():
+            if proc_file.exists() and proc_file.stat().st_size > 0:
                 with open(proc_file, 'rb') as f:
                     self._processed_cache = pickle.load(f)
-                # Remove expired entries
-                self._clean_expired_entries(self._processed_cache, "L2")
+                logger.info(f"L2 cache loaded: {len(self._processed_cache)} entries")
+            else:
+                logger.debug("L2 cache file empty or missing, starting fresh")
             
             logger.info(
                 f"Cache loaded from disk: L1={len(self._raw_cache)} entries, "
@@ -430,21 +418,11 @@ class IntelligentCache:
             )
         except Exception as e:
             logger.warning(f"Failed to load cache from disk: {e}")
-            # Start fresh
-            self._raw_cache = {}
-            self._processed_cache = {}
-    
-    def _clean_expired_entries(self, cache: dict, level: str):
-        """Remove expired entries from a cache dict."""
-        expired_keys = [
-            k for k, (_, ts) in cache.items() 
-            if self._is_expired(ts)
-        ]
-        for key in expired_keys:
-            del cache[key]
-        
-        if expired_keys:
-            logger.debug(f"Cleaned {len(expired_keys)} expired entries from {level} cache")
+            # Start fresh but don't overwrite what we loaded
+            if not self._raw_cache:
+                self._raw_cache = {}
+            if not self._processed_cache:
+                self._processed_cache = {}
     
     def _clear_disk_cache(self):
         """Remove cache files from disk."""

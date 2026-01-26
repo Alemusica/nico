@@ -29,7 +29,7 @@ def render_globe_landing(on_gate_select: Optional[callable] = None):
     Args:
         on_gate_select: Callback when a gate is clicked (receives gate_name)
     """
-    st.markdown("## 🌍 NICO - Arctic Ocean Analysis")
+    st.markdown("## 🌍 ARCFRESH Project")
     st.markdown("*Navigate the Arctic: Select a gate to begin your analysis*")
     
     # Dataset preview selector
@@ -509,7 +509,7 @@ def _render_selected_gate_info(gate_name: str):
     
     # Try to load gate coordinates
     try:
-        gate_path = gate_info.get("path") or _gate_service.get_gate_path(gate_name)
+        gate_path = getattr(gate_info, "path", None) or _gate_service.get_gate_path(gate_name)
         if gate_path:
             import geopandas as gpd
             import os
@@ -560,7 +560,7 @@ def _render_selected_gate_info(gate_name: str):
     
     with col1:
         st.markdown("**Gate Info:**")
-        st.markdown(f"- Region: `{gate_info.get('region', 'Unknown')}`")
+        st.markdown(f"- Region: `{getattr(gate_info, 'region', 'Unknown')}`")
         
         # Show coordinates if available
         if gate_lons is not None and gate_lats is not None:
@@ -569,7 +569,7 @@ def _render_selected_gate_info(gate_name: str):
         else:
             # Try to get from bounds
             try:
-                gate_path = gate_info.get("path") or _gate_service.get_gate_path(gate_name)
+                gate_path = getattr(gate_info, "path", None) or _gate_service.get_gate_path(gate_name)
                 if gate_path:
                     import geopandas as gpd
                     import os
