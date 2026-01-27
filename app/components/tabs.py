@@ -6560,26 +6560,41 @@ def _render_cmems_l4_export_tab(cmems_l4_data, config: AppConfig):
     # =========================================================================
     st.markdown("### 📋 Export Options")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.markdown("**📸 Images (PNG 300 DPI)**")
-        export_velocity_hov = st.checkbox("Velocity Hovmöller", value=True, key="exp_vel_hov")
-        export_vt_timeseries = st.checkbox("Volume Transport Time Series", value=True, key="exp_vt_ts")
-        export_vt_statistics = st.checkbox("Volume Transport Statistics", value=True, key="exp_vt_stats")
-        export_vt_monthly = st.checkbox("Volume Transport Monthly Profiles (3×4 grid)", value=True, key="exp_vt_monthly")
-        export_bathymetry = st.checkbox("Bathymetry Profile", value=True, key="exp_bathy")
-        export_sf_timeseries = st.checkbox("Salt Flux Time Series", value=False, key="exp_sf_ts")
-        export_sf_monthly = st.checkbox("Salt Flux Monthly Profiles (3×4 grid)", value=False, key="exp_sf_monthly")
+        st.markdown("**📸 Core Images**")
+        export_spatial_map = st.checkbox("🗺️ Geographic Map", value=True, key="exp_spatial")
+        export_bathymetry = st.checkbox("🏔️ Bathymetry Profile", value=True, key="exp_bathy")
+        export_total_transport = st.checkbox("📈 Transport Time Series", value=True, key="exp_total_ts")
+        export_vt_statistics = st.checkbox("📊 Transport Statistics", value=True, key="exp_vt_stats")
     
     with col2:
+        st.markdown("**📊 Monthly Grids (3×4)**")
+        export_monthly_velocity = st.checkbox("📊 Monthly Velocity Grid", value=True, key="exp_monthly_vel")
+        export_monthly_dot = st.checkbox("📊 Monthly DOT Grid", value=True, key="exp_monthly_dot")
+        export_monthly_transport = st.checkbox("📊 Monthly Transport Grid", value=True, key="exp_monthly_trans")
+        export_sf_monthly = st.checkbox("📊 Salt Flux Monthly", value=False, key="exp_sf_monthly")
+    
+    with col3:
+        st.markdown("**📈 Single Plots**")
+        export_velocity_comparison = st.checkbox("📈 v_perp vs v_geo", value=True, key="exp_vel_comp")
+        export_slope_timeline = st.checkbox("📈 DOT Slope Timeline", value=False, key="exp_slope")
+        export_dot_profile = st.checkbox("📊 DOT Profile Along Gate", value=False, key="exp_dot_prof")
+        export_salinity_density = st.checkbox("🌡️ Salinity & Density", value=False, key="exp_sal_dens")
+        export_individual_months = st.checkbox("📊 Individual Month Plots (12 each)", value=False, key="exp_indiv_months")
+    
+    st.markdown("---")
+    col_csv, col_settings = st.columns(2)
+    
+    with col_csv:
         st.markdown("**📊 CSV Data**")
         export_vt_raw_csv = st.checkbox("Volume Transport Raw Monthly", value=True, key="exp_csv_vt_raw")
         export_vt_clim_csv = st.checkbox("Volume Transport Climatology", value=True, key="exp_csv_vt_clim")
         export_vt_annual_csv = st.checkbox("Volume Transport Annual Stats", value=True, key="exp_csv_vt_annual")
         export_sf_csv = st.checkbox("Salt Flux Raw Monthly", value=False, key="exp_csv_sf")
-        
-        st.markdown("---")
+    
+    with col_settings:
         st.markdown("**⚙️ Settings**")
         export_dpi = st.selectbox("Image DPI", [150, 300, 600], index=1, key="exp_dpi")
     
@@ -6640,20 +6655,31 @@ def _render_cmems_l4_export_tab(cmems_l4_data, config: AppConfig):
         
         with st.spinner("Generating export files..."):
             try:
-                # Import export service
+                # Import NEW export functions
                 from src.services.export_service import (
+                    # CSV generators
                     generate_volume_transport_raw_csv,
                     generate_volume_transport_climatology_csv,
                     generate_volume_transport_annual_csv,
                     generate_salt_flux_raw_csv,
-                    export_volume_transport_timeseries,
+                    # NEW image export functions
+                    export_spatial_map,
+                    export_bathymetry_profile_clean,
+                    export_total_transport_timeseries,
                     export_volume_transport_statistics,
+                    export_monthly_velocity_profiles_grid,
+                    export_monthly_dot_profiles_grid,
+                    export_monthly_transport_profiles_grid,
+                    export_single_velocity_profile,
+                    export_single_transport_profile,
+                    export_velocity_comparison_timeseries,
+                    export_slope_timeline,
+                    export_dot_profile_along_gate,
+                    export_salinity_density_along_gate,
                     export_monthly_profiles_grid,
-                    export_velocity_hovmoller,
-                    export_bathymetry_profile,
-                    export_salt_flux_timeseries,
                     create_export_zip,
-                    DATASET_FULL_NAMES
+                    DATASET_FULL_NAMES,
+                    MONTH_NAMES
                 )
                 from src.services.transport_service import (
                     compute_perpendicular_velocity,
@@ -6665,7 +6691,7 @@ def _render_cmems_l4_export_tab(cmems_l4_data, config: AppConfig):
                 
                 files = {}
                 progress = st.progress(0, text="Starting export...")
-                total_steps = 10
+                total_steps = 16  # Increased for new exports
                 step = 0
                 
                 # Get or compute v_perp
@@ -6748,57 +6774,274 @@ def _render_cmems_l4_export_tab(cmems_l4_data, config: AppConfig):
                 # IMAGE FILES
                 # =========================================================
                 progress.progress(step/total_steps, text="Generating images...")
-                
-                if export_velocity_hov and v_perp is not None:
-                    img = export_velocity_hovmoller(v_perp, x_km, time_array, strait_name, "cmems_l4", export_dpi)
-                    files[f"velocity/{gate_name_safe}_hovmoller.png"] = img
                 step += 1
                 
-                if export_vt_timeseries and transport_sv is not None:
-                    img = export_volume_transport_timeseries(transport_sv, time_array, strait_name, "cmems_l4", export_dpi)
-                    files[f"volume_transport/{gate_name_safe}_timeseries.png"] = img
-                
-                if export_vt_statistics and transport_sv is not None:
-                    img = export_volume_transport_statistics(transport_sv, time_array, strait_name, "cmems_l4", export_dpi)
-                    files[f"volume_transport/{gate_name_safe}_statistics.png"] = img
+                # Get DOT matrix from cmems_l4_data if available
+                adt_matrix = getattr(cmems_l4_data, 'adt_matrix', None)
+                sla_matrix = getattr(cmems_l4_data, 'sla_matrix', None)
+                dot_matrix = adt_matrix if adt_matrix is not None else sla_matrix
+
+                # =========================================================
+                # 🗺️ SPATIAL MAP (Geographic with coastlines, borders, grid)
+                # =========================================================
+                if export_spatial_map and gate_lon is not None and gate_lat is not None:
+                    try:
+                        gate_length = x_km.max() if x_km is not None else None
+                        img = export_spatial_map(gate_lon, gate_lat, strait_name, gate_length, export_dpi)
+                        files[f"spatial/{gate_name_safe}_geographic_map.png"] = img
+                    except Exception as e:
+                        st.warning(f"⚠️ Spatial map failed: {e}")
                 step += 1
                 
-                if export_vt_monthly and monthly_v_perp is not None:
-                    progress.progress(step/total_steps, text="Generating monthly profiles grid...")
-                    img = export_monthly_profiles_grid(
-                        monthly_v_perp, strait_name, "Volume Transport",
-                        "cmems_l4", start_year, end_year, n_obs,
-                        y_label="Velocity (cm/s)", y_scale=100.0,
-                        show_regression=True, dpi=export_dpi
-                    )
-                    files[f"volume_transport/{gate_name_safe}_monthly_profiles_grid.png"] = img
-                step += 1
-                
+                # =========================================================
+                # 🏔️ BATHYMETRY PROFILE (Clean, zero at top, no brown)
+                # =========================================================
                 if export_bathymetry and depth_profile is not None:
-                    img = export_bathymetry_profile(depth_profile, x_km, strait_name, gate_lon, gate_lat, export_dpi)
-                    files[f"bathymetry/{gate_name_safe}_depth_profile.png"] = img
+                    try:
+                        img = export_bathymetry_profile_clean(
+                            depth_profile, x_km, strait_name, gate_lon, gate_lat, export_dpi
+                        )
+                        files[f"bathymetry/{gate_name_safe}_bathymetry.png"] = img
+                    except Exception as e:
+                        st.warning(f"⚠️ Bathymetry export failed: {e}")
+                step += 1
                 
-                if export_sf_timeseries and salt_flux_data is not None:
-                    salt_flux_ts = getattr(salt_flux_data, 'total_salt_flux_kg_s', None)
-                    if salt_flux_ts is not None:
-                        img = export_salt_flux_timeseries(salt_flux_ts, time_array, strait_name, "cmems_l4", export_dpi)
-                        files[f"salt_flux/{gate_name_safe}_timeseries.png"] = img
+                # =========================================================
+                # 📈 TOTAL TRANSPORT TIME SERIES (clean, NO fill, NO rolling mean)
+                # =========================================================
+                if export_total_transport and transport_sv is not None:
+                    try:
+                        gate_length = x_km.max() if x_km is not None else None
+                        img = export_total_transport_timeseries(
+                            transport_sv, time_array, strait_name, "cmems_l4",
+                            gate_lon=gate_lon, gate_lat=gate_lat, gate_length_km=gate_length,
+                            dpi=export_dpi
+                        )
+                        files[f"volume_transport/{gate_name_safe}_total_transport_timeseries.png"] = img
+                    except Exception as e:
+                        st.warning(f"⚠️ Transport timeseries failed: {e}")
                 
+                # =========================================================
+                # 📊 VOLUME TRANSPORT STATISTICS (monthly boxplot)
+                # =========================================================
+                if export_vt_statistics and transport_sv is not None:
+                    try:
+                        img = export_volume_transport_statistics(
+                            transport_sv, time_array, strait_name, "cmems_l4", export_dpi
+                        )
+                        files[f"volume_transport/{gate_name_safe}_monthly_statistics.png"] = img
+                    except Exception as e:
+                        st.warning(f"⚠️ Transport statistics failed: {e}")
+                step += 1
+                
+                # =========================================================
+                # 📊 MONTHLY VELOCITY PROFILES (3×4 grid with slope, R²)
+                # =========================================================
+                if export_monthly_velocity and v_perp is not None and x_km is not None:
+                    progress.progress(step/total_steps, text="Generating monthly velocity grid...")
+                    try:
+                        img = export_monthly_velocity_profiles_grid(
+                            v_perp, x_km, time_array, strait_name, "cmems_l4", export_dpi
+                        )
+                        files[f"velocity/{gate_name_safe}_monthly_velocity_grid.png"] = img
+                    except Exception as e:
+                        st.warning(f"⚠️ Monthly velocity grid failed: {e}")
+                step += 1
+                
+                # =========================================================
+                # 📊 MONTHLY DOT PROFILES (3×4 grid with slope mm/km, R²)
+                # =========================================================
+                if export_monthly_dot and dot_matrix is not None and x_km is not None:
+                    progress.progress(step/total_steps, text="Generating monthly DOT grid...")
+                    try:
+                        img = export_monthly_dot_profiles_grid(
+                            dot_matrix, x_km, time_array, strait_name, "cmems_l4", export_dpi
+                        )
+                        files[f"dot_analysis/{gate_name_safe}_monthly_dot_grid.png"] = img
+                    except Exception as e:
+                        st.warning(f"⚠️ Monthly DOT grid failed: {e}")
+                step += 1
+                
+                # =========================================================
+                # � MONTHLY TRANSPORT PROFILES (3×4 grid with bars)
+                # =========================================================
+                if export_monthly_transport and monthly_v_perp is not None and x_km is not None:
+                    progress.progress(step/total_steps, text="Generating monthly transport grid...")
+                    try:
+                        # Compute transport profiles from velocity
+                        from src.services.transport_service import compute_segment_widths
+                        widths = compute_segment_widths(gate_lon, gate_lat, x_km)
+                        monthly_transport = {}
+                        for month, (bc, bm, bs) in monthly_v_perp.items():
+                            # Transport = velocity * depth * width (convert to ×10⁶ m³/s)
+                            transport_means = bm * np.interp(bc, x_km, depth_profile) * np.interp(bc, x_km, widths) / 1e6
+                            transport_stds = bs * np.interp(bc, x_km, depth_profile) * np.interp(bc, x_km, widths) / 1e6
+                            monthly_transport[month] = (bc, transport_means, transport_stds)
+                        
+                        img = export_monthly_transport_profiles_grid(
+                            monthly_transport, x_km, gate_lon, strait_name, "cmems_l4", export_dpi
+                        )
+                        files[f"volume_transport/{gate_name_safe}_monthly_transport_grid.png"] = img
+                    except Exception as e:
+                        st.warning(f"⚠️ Monthly transport grid failed: {e}")
+                step += 1
+                
+                # =========================================================
+                # 📈 VELOCITY COMPARISON (v_perp vs v_geo in same plot)
+                # =========================================================
+                if export_velocity_comparison and v_perp is not None:
+                    try:
+                        # Compute v_geo from DOT slope (matching tab calculation)
+                        v_geo = None
+                        if dot_matrix is not None:
+                            from scipy import stats as scipy_stats
+                            g = 9.81
+                            OMEGA = 7.2921e-5
+                            mean_lat = np.mean(gate_lat)
+                            f = 2 * OMEGA * np.sin(np.deg2rad(mean_lat))
+                            
+                            n_time = dot_matrix.shape[1]
+                            v_geo = np.zeros(n_time)
+                            for t in range(n_time):
+                                dot_t = dot_matrix[:, t]
+                                valid = ~np.isnan(dot_t)
+                                if valid.sum() > 2:
+                                    slope, _, _, _, _ = scipy_stats.linregress(x_km[valid], dot_t[valid])
+                                    # slope is m/km, convert to m/m then compute v_geo
+                                    slope_m_m = slope / 1000.0
+                                    v_geo[t] = g / f * slope_m_m
+                                else:
+                                    v_geo[t] = np.nan
+                        
+                        img = export_velocity_comparison_timeseries(
+                            v_perp, v_geo, time_array, strait_name, "cmems_l4", export_dpi
+                        )
+                        files[f"velocity/{gate_name_safe}_velocity_comparison.png"] = img
+                    except Exception as e:
+                        st.warning(f"⚠️ Velocity comparison failed: {e}")
+                
+                # =========================================================
+                # 📈 SLOPE TIMELINE (DOT slope over time)
+                # =========================================================
+                if export_slope_timeline and dot_matrix is not None:
+                    try:
+                        # Compute slope for each timestep
+                        from scipy import stats as scipy_stats
+                        n_time = dot_matrix.shape[1]
+                        slope_values = np.zeros(n_time)
+                        for t in range(n_time):
+                            dot_t = dot_matrix[:, t]
+                            valid = ~np.isnan(dot_t)
+                            if valid.sum() > 2:
+                                slope, _, _, _, _ = scipy_stats.linregress(x_km[valid], dot_t[valid])
+                                slope_values[t] = slope  # m/km
+                            else:
+                                slope_values[t] = np.nan
+                        
+                        img = export_slope_timeline(
+                            slope_values, time_array, strait_name, "cmems_l4", export_dpi
+                        )
+                        files[f"dot_analysis/{gate_name_safe}_slope_timeline.png"] = img
+                    except Exception as e:
+                        st.warning(f"⚠️ Slope timeline failed: {e}")
+                
+                # =========================================================
+                # 📊 DOT PROFILE ALONG GATE (mean with ±std and regression)
+                # =========================================================
+                if export_dot_profile and dot_matrix is not None and x_km is not None:
+                    try:
+                        img = export_dot_profile_along_gate(
+                            dot_matrix, x_km, strait_name, "cmems_l4", 
+                            start_year, end_year, export_dpi
+                        )
+                        files[f"dot_analysis/{gate_name_safe}_dot_profile.png"] = img
+                    except Exception as e:
+                        st.warning(f"⚠️ DOT profile failed: {e}")
+                
+                # =========================================================
+                # 🌡️ SALINITY & DENSITY ALONG GATE
+                # =========================================================
+                if export_salinity_density:
+                    # Check if salinity/density data is available in session state
+                    salinity_profile = st.session_state.get('sf_salinity_profile')
+                    density_profile = st.session_state.get('sf_density_profile')
+                    
+                    if salinity_profile is not None and density_profile is not None and x_km is not None:
+                        try:
+                            img = export_salinity_density_along_gate(
+                                salinity_profile, density_profile, x_km, strait_name, export_dpi
+                            )
+                            files[f"salt_flux/{gate_name_safe}_salinity_density.png"] = img
+                        except Exception as e:
+                            st.warning(f"⚠️ Salinity/density export failed: {e}")
+                    else:
+                        st.info("ℹ️ Salinity/density data not available")
+                
+                # =========================================================
+                # 📊 SALT FLUX MONTHLY (3×4 grid)
+                # =========================================================
                 if export_sf_monthly and salt_flux_data is not None:
                     from src.services.transport_service import compute_monthly_salt_flux_profile
                     if v_perp is not None and sf_depth_profile is not None:
-                        monthly_sf = compute_monthly_salt_flux_profile(
-                            x_km, v_perp, sf_depth_profile, time_array, bin_size_km=5.0
-                        )
-                        img = export_monthly_profiles_grid(
-                            monthly_sf, strait_name, "Salt Flux Along Gate",
-                            "cmems_l4", start_year, end_year, n_obs,
-                            y_label="Salt Flux (kg/m·s)", y_scale=1.0,
-                            show_regression=True, dpi=export_dpi
-                        )
-                        files[f"salt_flux/{gate_name_safe}_along_gate_grid.png"] = img
+                        try:
+                            monthly_sf = compute_monthly_salt_flux_profile(
+                                x_km, v_perp, sf_depth_profile, time_array, bin_size_km=5.0
+                            )
+                            img = export_monthly_profiles_grid(
+                                monthly_sf, strait_name, "Salt Flux Along Gate",
+                                "cmems_l4", start_year, end_year, n_obs,
+                                y_label="Salt Flux (kg/m·s)", y_scale=1.0,
+                                show_regression=True, dpi=export_dpi
+                            )
+                            files[f"salt_flux/{gate_name_safe}_monthly_salt_flux_grid.png"] = img
+                        except Exception as e:
+                            st.warning(f"⚠️ Salt flux monthly grid failed: {e}")
+                step += 1
                 
-                progress.progress(95, text="Creating ZIP archive...")
+                # =========================================================
+                # 📊 INDIVIDUAL MONTH PLOTS (12 velocity + 12 transport)
+                # =========================================================
+                if export_individual_months and monthly_v_perp is not None and x_km is not None:
+                    progress.progress(min(step/total_steps, 0.94), text="Generating individual month plots...")
+                    try:
+                        from src.services.transport_service import compute_segment_widths
+                        widths = compute_segment_widths(gate_lon, gate_lat, x_km)
+                        
+                        for month_idx in range(12):
+                            month = month_idx + 1
+                            month_name = MONTH_NAMES[month_idx]
+                            
+                            if month in monthly_v_perp:
+                                bc, bm, bs = monthly_v_perp[month]
+                                
+                                # Export velocity profile for this month
+                                try:
+                                    img_vel = export_single_velocity_profile(
+                                        bc, bm, bs, x_km, gate_lon, strait_name, 
+                                        month_name, "cmems_l4", export_dpi
+                                    )
+                                    files[f"velocity_monthly/{gate_name_safe}_velocity_{month:02d}_{month_name.lower()}.png"] = img_vel
+                                except Exception as e:
+                                    st.warning(f"⚠️ {month_name} velocity failed: {e}")
+                                
+                                # Export transport profile for this month
+                                try:
+                                    # Transport = velocity * depth * width (convert to ×10⁶ m³/s)
+                                    transport_means = bm * np.interp(bc, x_km, depth_profile) * np.interp(bc, x_km, widths) / 1e6
+                                    transport_stds = bs * np.interp(bc, x_km, depth_profile) * np.interp(bc, x_km, widths) / 1e6
+                                    
+                                    img_trans = export_single_transport_profile(
+                                        bc, transport_means, transport_stds, x_km, gate_lon, strait_name,
+                                        month_name, "cmems_l4", export_dpi
+                                    )
+                                    files[f"transport_monthly/{gate_name_safe}_transport_{month:02d}_{month_name.lower()}.png"] = img_trans
+                                except Exception as e:
+                                    st.warning(f"⚠️ {month_name} transport failed: {e}")
+                    except Exception as e:
+                        st.warning(f"⚠️ Individual months export failed: {e}")
+                step += 1
+                
+                progress.progress(0.95, text="Creating ZIP archive...")
                 
                 # Create ZIP
                 from datetime import datetime
@@ -6807,7 +7050,7 @@ def _render_cmems_l4_export_tab(cmems_l4_data, config: AppConfig):
                 
                 zip_bytes = create_export_zip(files, base_folder)
                 
-                progress.progress(100, text="Done!")
+                progress.progress(1.0, text="Done!")
                 
                 # Summary
                 n_csv = len([f for f in files if f.endswith('.csv')])
