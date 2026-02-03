@@ -4435,14 +4435,25 @@ def _render_geostrophic_velocity_tab_cmems_l4(cmems_l4_data, config: AppConfig):
     col1, col2, col3 = st.columns(3)
     
     with col1:
+        # Get native resolution from data
+        native_res_km = getattr(cmems_l4_data, 'native_resolution_km', 3.0)
+        effective_spacing_km = getattr(cmems_l4_data, 'effective_spacing_km', 3.0)
+        
+        # Round up to nearest km for slider
+        min_bin_km = max(1, int(np.ceil(native_res_km)))
+        
         bin_size_km = st.slider(
             "Spatial averaging (km)",
-            min_value=1,
+            min_value=min_bin_km,
             max_value=50,
-            value=st.session_state.get(f'{key_prefix}_bin', 5),
+            value=max(min_bin_km, st.session_state.get(f'{key_prefix}_bin', min_bin_km)),
             step=1,
-            key=f"{key_prefix}_bin_slider"
+            key=f"{key_prefix}_bin_slider",
+            help=f"Native CMEMS resolution: {native_res_km:.1f} km at {strait_name} latitude"
         )
+        
+        # Show resolution info
+        st.caption(f"🔬 Native res: {native_res_km:.1f} km | Effective spacing: {effective_spacing_km:.1f} km")
     
     with col2:
         month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -4845,15 +4856,21 @@ def _render_volume_transport_tab_cmems_l4(cmems_l4_data, config: AppConfig):
         )
     
     with col2:
+        # Adaptive minimum based on CMEMS native resolution
+        native_res_km = getattr(cmems_l4_data, 'native_resolution_km', 3.0)
+        effective_spacing_km = getattr(cmems_l4_data, 'effective_spacing_km', native_res_km)
+        min_bin_km = max(1, int(np.ceil(native_res_km)))
+        
         bin_size_km = st.slider(
             "Spatial averaging (km)",
-            min_value=1,
+            min_value=min_bin_km,
             max_value=50,
-            value=5,
+            value=max(5, min_bin_km),
             step=1,
             key="transport_bin_size",
             help="Average transport over bins of this width"
         )
+        st.caption(f"🔬 Native res: {native_res_km:.1f} km | Effective: {effective_spacing_km:.1f} km")
     
     with col3:
         month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -6798,8 +6815,11 @@ def _render_cmems_l4_export_tab(cmems_l4_data, config: AppConfig):
                 # =========================================================
                 if export_bathymetry and depth_profile is not None:
                     try:
+                        # Get depth_cap from session state (user input from Volume Transport tab)
+                        depth_cap_value = st.session_state.get('vt_depth_cap', 250.0)
                         img = export_bathymetry_profile_clean(
-                            depth_profile, x_km, strait_name, gate_lon, gate_lat, export_dpi
+                            depth_profile, x_km, strait_name, gate_lon, gate_lat, 
+                            depth_cap_value, export_dpi
                         )
                         files[f"bathymetry/{gate_name_safe}_bathymetry.png"] = img
                     except Exception as e:
@@ -6840,8 +6860,34 @@ def _render_cmems_l4_export_tab(cmems_l4_data, config: AppConfig):
                 if export_monthly_velocity and v_perp is not None and x_km is not None:
                     progress.progress(step/total_steps, text="Generating monthly velocity grid...")
                     try:
+                        # Compute v_geo matrix (spatial profiles for each time)
+                        v_geo_matrix = None
+                        if dot_matrix is not None:
+                            from scipy import stats as scipy_stats
+                            g = 9.81
+                            OMEGA = 7.2921e-5
+                            mean_lat = np.mean(gate_lat)
+                            f = 2 * OMEGA * np.sin(np.deg2rad(mean_lat))
+                            
+                            n_points = dot_matrix.shape[0]
+                            n_time = dot_matrix.shape[1]
+                            v_geo_matrix = np.zeros((n_points, n_time))
+                            
+                            for t in range(n_time):
+                                dot_t = dot_matrix[:, t]
+                                valid = ~np.isnan(dot_t)
+                                if valid.sum() > 2:
+                                    slope, _, _, _, _ = scipy_stats.linregress(x_km[valid], dot_t[valid])
+                                    slope_m_m = slope / 1000.0  # m/km → m/m
+                                    # Geostrophic velocity formula: v_geo = -(g/f) × ∂η/∂n
+                                    v_geo_t = -(g / f) * slope_m_m  # ✅ Segno negativo corretto
+                                    v_geo_matrix[:, t] = v_geo_t  # Same value for all points
+                                else:
+                                    v_geo_matrix[:, t] = np.nan
+                        
                         img = export_monthly_velocity_profiles_grid(
-                            v_perp, x_km, time_array, strait_name, "cmems_l4", export_dpi
+                            v_perp, x_km, time_array, strait_name, "cmems_l4",
+                            gate_lon, gate_lat, v_geo_matrix, export_dpi
                         )
                         files[f"velocity/{gate_name_safe}_monthly_velocity_grid.png"] = img
                     except Exception as e:
@@ -6855,7 +6901,8 @@ def _render_cmems_l4_export_tab(cmems_l4_data, config: AppConfig):
                     progress.progress(step/total_steps, text="Generating monthly DOT grid...")
                     try:
                         img = export_monthly_dot_profiles_grid(
-                            dot_matrix, x_km, time_array, strait_name, "cmems_l4", export_dpi
+                            dot_matrix, x_km, time_array, strait_name, "cmems_l4",
+                            gate_lon, gate_lat, export_dpi
                         )
                         files[f"dot_analysis/{gate_name_safe}_monthly_dot_grid.png"] = img
                     except Exception as e:
@@ -6863,7 +6910,7 @@ def _render_cmems_l4_export_tab(cmems_l4_data, config: AppConfig):
                 step += 1
                 
                 # =========================================================
-                # � MONTHLY TRANSPORT PROFILES (3×4 grid with bars)
+                # 📊 MONTHLY TRANSPORT PROFILES (3×4 grid with bars)
                 # =========================================================
                 if export_monthly_transport and monthly_v_perp is not None and x_km is not None:
                     progress.progress(step/total_steps, text="Generating monthly transport grid...")
@@ -6879,7 +6926,8 @@ def _render_cmems_l4_export_tab(cmems_l4_data, config: AppConfig):
                             monthly_transport[month] = (bc, transport_means, transport_stds)
                         
                         img = export_monthly_transport_profiles_grid(
-                            monthly_transport, x_km, gate_lon, strait_name, "cmems_l4", export_dpi
+                            monthly_transport, x_km, gate_lon, gate_lat, strait_name, "cmems_l4",
+                            time_array, export_dpi
                         )
                         files[f"volume_transport/{gate_name_safe}_monthly_transport_grid.png"] = img
                     except Exception as e:
@@ -6907,14 +6955,15 @@ def _render_cmems_l4_export_tab(cmems_l4_data, config: AppConfig):
                                 valid = ~np.isnan(dot_t)
                                 if valid.sum() > 2:
                                     slope, _, _, _, _ = scipy_stats.linregress(x_km[valid], dot_t[valid])
-                                    # slope is m/km, convert to m/m then compute v_geo
-                                    slope_m_m = slope / 1000.0
-                                    v_geo[t] = g / f * slope_m_m
+                                    # Geostrophic velocity formula: v_geo = -(g/f) × ∂η/∂n
+                                    slope_m_m = slope / 1000.0  # m/km → m/m
+                                    v_geo[t] = -(g / f) * slope_m_m  # ✅ Segno negativo corretto
                                 else:
                                     v_geo[t] = np.nan
                         
                         img = export_velocity_comparison_timeseries(
-                            v_perp, v_geo, time_array, strait_name, "cmems_l4", export_dpi
+                            v_perp, v_geo, time_array, strait_name, "cmems_l4",
+                            gate_lon, gate_lat, export_dpi
                         )
                         files[f"velocity/{gate_name_safe}_velocity_comparison.png"] = img
                     except Exception as e:

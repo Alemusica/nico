@@ -9,7 +9,11 @@ Dataset Info:
     - DOI: https://doi.org/10.48670/moi-00148
     - Web: https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_MY_008_047/description
     - Type: GRIDDED (lat × lon × time)
-    - Resolution: 0.125° (~14km) daily
+    - Resolution: 0.125° (latitude-dependent in km)
+      * At equator: ~13.9 km × ~13.9 km
+      * At 45°N: ~13.9 km × ~9.8 km
+      * At 60°N: ~13.9 km × ~6.9 km
+      * At 76°N (Nares): ~13.9 km × ~3.4 km
     - Variables: adt, sla, ugos, vgos, ugosa, vgosa, err_sla, flag_ice
 
 Description:
@@ -27,8 +31,12 @@ Features:
 Data Flow:
     UI → CMEMSL4Service → copernicusmarine.subset() → API download
                         → xr.open_dataset → NetCDF in memory
-                        → KD-tree gate matching → DOT along gate
+                        → Adaptive gate sampling (match native resolution)
+                        → KD-tree/Interpolation gate matching → DOT along gate
                         → slope computation → time series
+
+Gate sampling is now ADAPTIVE to match native resolution at gate latitude,
+preventing artificial oversampling artifacts.
 
 Key Differences from Along-Track (SLCCI, CMEMS L3):
     - GRIDDED data (not along-track)
@@ -168,6 +176,10 @@ class CMEMSL4PassData:
     mean_latitude: float = 70.0  # For Coriolis calculation
     coriolis_f: float = 1.38e-4  # s⁻¹ at ~70°N
     
+    # Resolution metadata (NEW)
+    native_resolution_km: float = 3.0  # CMEMS L4 native at gate latitude
+    effective_spacing_km: float = 3.0  # Actual point spacing along gate
+    
     # Fields with defaults (must come after required fields)
     data_source: str = "CMEMS L4"
     dataset_name: str = "CMEMS L4"  # For tabs.py compatibility
@@ -217,9 +229,71 @@ def _extract_strait_name(gate_path: str) -> str:
     return name
 
 
-def _build_gate_points(gate_gdf: gpd.GeoDataFrame, n_pts: int = 400) -> Tuple[np.ndarray, np.ndarray]:
-    """Sample N points along gate geometry."""
+def _compute_cmems_native_resolution_km(latitude: float) -> float:
+    """
+    Compute CMEMS L4 native grid resolution in km at given latitude.
+    
+    CMEMS L4 grid: 0.125° × 0.125°
+    - Latitude: always ~13.9 km (111 km/deg ÷ 8)
+    - Longitude: varies with cos(lat)
+    
+    Args:
+        latitude: Latitude in degrees
+    
+    Returns:
+        Minimum spacing (along longitude at high latitudes) in km
+    
+    Examples:
+        >>> _compute_cmems_native_resolution_km(0)    # Equator
+        13.875
+        >>> _compute_cmems_native_resolution_km(45)   # Mid-latitudes
+        9.81
+        >>> _compute_cmems_native_resolution_km(60)   # Arctic
+        6.94
+        >>> _compute_cmems_native_resolution_km(76)   # Nares Strait
+        3.36
+    """
+    KM_PER_DEG_LAT = 111.0
+    lat_spacing_km = 0.125 * KM_PER_DEG_LAT  # ~13.9 km
+    lon_spacing_km = 0.125 * KM_PER_DEG_LAT * np.cos(np.radians(latitude))
+    
+    # Return minimum (most restrictive)
+    return min(lat_spacing_km, lon_spacing_km)
+
+
+def _build_gate_points(
+    gate_gdf: gpd.GeoDataFrame, 
+    n_pts: Optional[int] = None,
+    min_spacing_km: Optional[float] = None
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Sample points along gate geometry.
+    
+    Args:
+        gate_gdf: Gate shapefile
+        n_pts: Fixed number of points (legacy mode)
+        min_spacing_km: Minimum spacing in km (adaptive mode)
+        
+    If min_spacing_km provided, compute n_pts from gate length.
+    
+    Returns:
+        gate_lon: Longitude of gate points
+        gate_lat: Latitude of gate points
+    """
     gate_geom = gate_gdf.geometry.unary_union
+    gate_length_deg = gate_geom.length  # degrees
+    
+    # Estimate gate length in km (rough approximation)
+    bounds = gate_gdf.total_bounds
+    mean_lat = (bounds[1] + bounds[3]) / 2
+    gate_length_km = gate_length_deg * 111.0 * np.cos(np.radians(mean_lat))
+    
+    if min_spacing_km is not None:
+        # Adaptive: match CMEMS resolution
+        n_pts = max(10, int(np.ceil(gate_length_km / min_spacing_km)))
+        logger.info(f"Adaptive sampling: {n_pts} points for {gate_length_km:.1f} km gate (spacing ~{min_spacing_km:.1f} km)")
+    elif n_pts is None:
+        n_pts = 400  # fallback
     
     gate_points = np.array([
         gate_geom.interpolate(t, normalized=True).coords[0]
@@ -490,8 +564,16 @@ class CMEMSL4Service:
         # Load gate
         gate_gdf = _load_gate_gdf(config.gate_path)
         
-        # Build gate points
-        gate_lon_pts, gate_lat_pts = _build_gate_points(gate_gdf, config.n_gate_pts)
+        # Build gate points - ADAPTIVE to CMEMS resolution
+        bounds = gate_gdf.total_bounds
+        mean_lat = (bounds[1] + bounds[3]) / 2
+        cmems_res_km = _compute_cmems_native_resolution_km(mean_lat)
+        
+        gate_lon_pts, gate_lat_pts = _build_gate_points(
+            gate_gdf, 
+            n_pts=None,  # Let function compute from spacing
+            min_spacing_km=cmems_res_km
+        )
         x_km = _compute_x_km(gate_lon_pts, gate_lat_pts)
         
         # Get grid coordinates
@@ -641,6 +723,9 @@ class CMEMSL4Service:
         
         logger.info(f"Loaded CMEMS L4: {n_obs} observations, {n_time} time steps")
         
+        # Calculate effective spacing
+        effective_spacing_km = np.mean(np.diff(x_km)) if len(x_km) > 1 else cmems_res_km
+        
         pass_data = CMEMSL4PassData(
             strait_name=strait_name,
             data_source="CMEMS L4 (Gridded)",
@@ -656,6 +741,9 @@ class CMEMSL4Service:
             v_geostrophic_series=v_geo_series,
             mean_latitude=mean_lat,
             coriolis_f=coriolis_f,
+            # Resolution metadata
+            native_resolution_km=cmems_res_km,
+            effective_spacing_km=effective_spacing_km,
             ds=ds,
             n_observations=int(n_obs),
             time_range=(str(time_vals.min()), str(time_vals.max())),
